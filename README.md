@@ -51,6 +51,9 @@ print(state["messages"])
 
 1 pyproject.toml 和 uv.lock 务必主要是否存在
 
+1.1 将.env.sample 换成.env，并写上自己的环境变量 API_KEY
+1.2 将 config.yaml 中的 LLM里面的模型换成自己的模型
+
 2 拿到项目后，进入项目目录le_agent, 执行环境同步(若没有uv命令，则安装pip install uv)
 ```shell
 uv sync 
