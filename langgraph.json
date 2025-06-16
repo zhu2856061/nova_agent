@@ -1,0 +1,9 @@
+{
+  "dependencies": [
+    "."
+  ],
+  "graphs": {
+    "agent": "./nova/graph/builder.py:app"
+  },
+  "env": ".env"
+}
