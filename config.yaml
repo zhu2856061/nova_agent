@@ -1,0 +1,33 @@
+SYSTEM:
+  env_path: "./env"
+  task_dir: "./tasks"
+  cache_dir: "./cache"
+
+LLM:
+  - model_name: "basic"
+    litellm_params:
+      model: "openai/Qwen3-235B-A22B-agent"
+      api_base: "https://quarkml.oa.fenqile.com/v1"
+      api_key: "lx-ai-1234"
+      cache: true
+      verbose: true
+      streaming: false
+      request_timeout: 60
+      temperature: 0.2
+      top_p: 0.2
+      max_tokens: 20960
+      max_retries: 2
+  - model_name: "reasoning"
+    litellm_params:
+      model: "openai/Qwen3-235B-A22B-agent"
+      api_base: "https://quarkml.oa.fenqile.com/v1"
+      api_key: "lx-ai-1234"
+      cache: true
+      verbose: true
+      streaming: false
+      request_timeout: 60
+      temperature: 0.2
+      top_p: 0.2
+      top_k: 10
+      max_tokens: 20960
+      max_retries: 2
