@@ -6,6 +6,7 @@ readme = "README.md"
 requires-python = "==3.12.2"
 dependencies = [
     "colorlog>=6.9.0",
+    "crawl4ai>=0.7.3",
     "dill>=0.4.0",
     "fastapi>=0.116.1",
     "json-repair>=0.48.0",
@@ -14,7 +15,11 @@ dependencies = [
     "langchain-deepseek>=0.1.4",
     "langchain-google-genai>=2.1.9",
     "langchain-litellm>=0.2.2",
+    "langgraph>=0.6.4",
+    "langsmith>=0.4.10",
     "litellm>=1.74.12",
+    "markdownify>=1.2.0",
+    "readabilipy>=0.3.0",
     "uvicorn>=0.35.0",
 ]
 

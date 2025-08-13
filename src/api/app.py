@@ -12,10 +12,8 @@ from api.llm_router import llm_router
 
 logger = logging.getLogger(__name__)
 
+
 # --- FastAPI App Initialization ---
-# Define constants for better readability and easier modification
-
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """定义 FastAPI 生命周期事件"""
@@ -42,14 +40,15 @@ app.add_middleware(
     allow_headers=["*"],  # Allows all headers
 )
 
-# init
-# Include the LLM router
-app.include_router(llm_router)
-
 
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+
+# init
+# Include the LLM router
+app.include_router(llm_router)
 
 
 # if __name__ == "__main__":

@@ -25,13 +25,12 @@ from core.llms.fix_llm_cache import SQLiteCacheFixed
 
 # ######################################################################################
 # 配置
-
+LLM_CONFIG = CONF["LLM"]
+SYSTEM_CONFIG = CONF["SYSTEM"]
 
 # ######################################################################################
 # 全局变量
-LLM_CONFIG = CONF["LLM"]
-SYSTEM_CONFIG = CONF["SYSTEM"]
-os.makedirs(SYSTEM_CONFIG["cache_dir"], exist_ok=True)
+
 
 # ######################################################################################
 # 本地变量
@@ -42,6 +41,7 @@ _litellm_router = Router(model_list=LLM_CONFIG)
 # ######################################################################################
 # 其他
 # 设置 SQLite 缓存，指定数据库文件名
+os.makedirs(SYSTEM_CONFIG["cache_dir"], exist_ok=True)
 set_llm_cache(
     SQLiteCacheFixed(
         database_path=os.path.join(SYSTEM_CONFIG["cache_dir"], "llm_cache.db")

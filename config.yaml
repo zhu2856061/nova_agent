@@ -12,10 +12,10 @@ LLM:
       cache: true
       verbose: true
       streaming: false
-      request_timeout: 60
+      request_timeout: 1800
       temperature: 0.2
       top_p: 0.2
-      max_tokens: 20960
+      
       max_retries: 2
   - model_name: "reasoning"
     litellm_params:
@@ -25,9 +25,11 @@ LLM:
       cache: true
       verbose: true
       streaming: false
-      request_timeout: 60
+      request_timeout: 1800
       temperature: 0.2
       top_p: 0.2
       top_k: 10
-      max_tokens: 20960
       max_retries: 2
+
+PROMPT:
+  DIR:  "./prompts"
