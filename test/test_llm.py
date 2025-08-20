@@ -11,43 +11,56 @@ import os
 os.environ["CONFIG_PATH"] = "../config.yaml"
 
 # 设置环境变量
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from core.llms import get_llm_by_type, with_structured_output
+from core.utils import repair_json_output
+
+
+class Summary(BaseModel):
+    summary: str = Field(description="A summary of the webpage content.")
+    key_excerpts: str = Field(
+        description="A list of key excerpts from the webpage content."
+    )
 
 
 class AnswerWithJustification(BaseModel):
     """An answer to the user question along with justification for the answer."""
 
-    answer: str
-    justification: str
+    answer: str = Field(description="An answer to the user question.")
+    justification: str = Field(
+        description="A justification for the answer to the user question."
+    )
 
 
-llm_instance = get_llm_by_type("basic")
-llm_instance = with_structured_output(llm_instance, AnswerWithJustification)
+class ClarifyWithUser(BaseModel):
+    need_clarification: bool = Field(
+        description="Whether the user needs to be asked a clarifying question.",
+    )
+    question: str = Field(
+        description="A question to ask the user to clarify the report scope",
+    )
+    verification: str = Field(
+        description="Verify message that we will start research after the user has provided the necessary information.",
+    )
+
+
+llm_instance = get_llm_by_type("reasoning").with_structured_output(
+    AnswerWithJustification
+)
+# llm_instance = get_llm_by_type("reasoning")
+
+question = """请查询网络上的信息，深圳的天气"""
 
 
 async def async_generate_response():
-    tmp = await llm_instance.ainvoke("what color is the sky?")
+    tmp = await llm_instance.ainvoke(question)
     print(tmp)
+    # print(repair_json_output(tmp.content))
 
-    async for chunk in llm_instance.astream("what color is the sky?"):
-        # print(chunk.response_metadata)
-        print(chunk.content, end="|", flush=True)
+    # async for chunk in llm_instance.astream(question):
+    #     # print(chunk.response_metadata)
+    #     print(chunk.content, end="|", flush=True)
 
 
 asyncio.run(async_generate_response())
-
-
-# try:
-#     llm_instance = with_structured_output(llm_instance, AnswerWithJustification)
-#     start = time.time()
-#     for chunk in llm_instance.stream(
-#         "What weighs more a pound of bricks or a pound of feathers"
-#     ):
-#         print(chunk.content, end="|", flush=True)
-#     end = time.time()
-#     print(end - start)
-#     # print(res)
-# except Exception as e:
-#     print("An error occurred:", e)

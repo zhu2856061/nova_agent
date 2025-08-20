@@ -5,7 +5,7 @@ import os
 
 os.environ["CONFIG_PATH"] = "../config.yaml"
 
-from src.core.tools.crawl import serp_tool
+from core.tools.search_engine import serp_tool
 
 # 同步调用
 result = serp_tool.invoke(

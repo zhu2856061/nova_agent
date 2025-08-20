@@ -6,30 +6,42 @@ SYSTEM:
 LLM:
   - model_name: "basic"
     litellm_params:
-      model: "openai/Qwen3-235B-A22B-agent"
+      model: "openai/Qwen3-235B-A22B"
       api_base: "https://quarkml.oa.fenqile.com/v1"
       api_key: "lx-ai-1234"
       cache: true
       verbose: true
-      streaming: false
-      request_timeout: 1800
+      request_timeout: 600
       temperature: 0.2
       top_p: 0.2
-      
       max_retries: 2
+
   - model_name: "reasoning"
     litellm_params:
-      model: "openai/Qwen3-235B-A22B-agent"
+      model: "openai/Qwen3-235B-A22B"
       api_base: "https://quarkml.oa.fenqile.com/v1"
       api_key: "lx-ai-1234"
       cache: true
       verbose: true
-      streaming: false
-      request_timeout: 1800
+      request_timeout: 600
       temperature: 0.2
       top_p: 0.2
       top_k: 10
       max_retries: 2
 
-PROMPT:
-  DIR:  "./prompts"
+  - model_name: "basic_no_thinking"
+    litellm_params:
+      model: "openai/Qwen3-235B-A22B"
+      api_base: "https://quarkml.oa.fenqile.com/v1"
+      api_key: "lx-ai-1234"
+      cache: true
+      verbose: true
+      request_timeout: 600
+      temperature: 0.2
+      top_p: 0.2
+      top_k: 10
+      max_retries: 2
+      chat_template_kwargs:
+         enable_thinking: false # 关闭思考模式
+
+

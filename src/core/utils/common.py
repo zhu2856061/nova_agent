@@ -1,5 +1,6 @@
 import logging
 import time
+from datetime import datetime
 from functools import wraps
 
 logger = logging.getLogger(__name__)
@@ -32,3 +33,8 @@ def set_color(log, color, highlight=True):
         prev_log += "0;3"
     prev_log += str(index) + "m"
     return prev_log + log + "\033[0m"
+
+
+def get_today_str() -> str:
+    """Get current date in a human-readable format."""
+    return datetime.now().strftime("%a %b %-d, %Y")

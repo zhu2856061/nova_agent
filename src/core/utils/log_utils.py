@@ -3,9 +3,10 @@
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
 import logging
-import sys
 import os
+import sys
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 import colorlog
@@ -13,8 +14,13 @@ import colorlog
 # 全局标志，防止重复初始化日志
 _LOG_INITIALIZED = False
 
-def set_log():
-    """设置日志配置，防止重复初始化（支持多进程）"""
+
+def set_log(log_dir="./logs"):
+    """设置日志配置，防止重复初始化（支持多进程）
+
+    Args:
+        log_dir (str, optional): 日志保存目录，如果为None则使用默认路径
+    """
     global _LOG_INITIALIZED
 
     # 如果已经初始化过，直接返回
@@ -39,9 +45,18 @@ def set_log():
             lock_file.touch()  # 创建锁文件
             return
 
-        # 配置基本日志 (可以先不包含 format，或者包含你想要的默认 format)
-        # logging.basicConfig(level=logging.INFO)
-        formatter = colorlog.ColoredFormatter(
+        # 配置日志文件保存路径
+        log_dir = Path(log_dir)
+
+        # 创建日志目录（如果不存在）
+        log_dir.mkdir(parents=True, exist_ok=True)
+
+        # 生成日志文件名（包含当前日期）
+        current_date = datetime.now().strftime("%Y%m%d")
+        log_file = log_dir / f"app_{current_date}.log"
+
+        # 配置格式化器
+        console_formatter = colorlog.ColoredFormatter(
             "%(log_color)s%(asctime)s - %(name)s - [%(levelname)s] - %(module)s.%(funcName)s:%(lineno)d :: %(message)s",
             log_colors={
                 "INFO": "green",
@@ -50,15 +65,25 @@ def set_log():
                 "CRITICAL": "bold_red",
             },
         )
-        # 创建一个处理其他目录下日志的 handler
-        info_handler = colorlog.StreamHandler(stream=sys.stdout)
-        info_handler.setFormatter(formatter)
-        info_handler.setLevel(logging.INFO)
-        info_filter = logging.Filter()  # 默认处理所有 logger
-        info_handler.addFilter(info_filter)
 
-        # 获取 root logger 并添加 handler
-        root_logger.addHandler(info_handler)
+        # 文件日志不使用颜色
+        file_formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - [%(levelname)s] - %(module)s.%(funcName)s:%(lineno)d :: %(message)s"
+        )
+
+        # 创建控制台处理器
+        console_handler = colorlog.StreamHandler(stream=sys.stdout)
+        console_handler.setFormatter(console_formatter)
+        console_handler.setLevel(logging.INFO)
+
+        # 创建文件处理器
+        file_handler = logging.FileHandler(log_file, encoding="utf-8")
+        file_handler.setFormatter(file_formatter)
+        file_handler.setLevel(logging.INFO)
+
+        # 获取 root logger 并添加处理器
+        root_logger.addHandler(console_handler)
+        root_logger.addHandler(file_handler)
         root_logger.setLevel(logging.INFO)
 
         # 设置 litellm 的日志级别为 WARNING，并阻止消息向上冒泡
@@ -77,6 +102,7 @@ def set_log():
 
         logger = logging.getLogger(__name__)
         logger.info(f"日志已经配置成功 (PID: {pid})")
+        logger.info(f"日志文件将保存至: {log_file}")
 
     except Exception as e:
         # 如果初始化失败，至少确保有基本的日志输出
