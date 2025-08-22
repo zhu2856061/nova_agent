@@ -3,12 +3,12 @@
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, Optional
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from core.task.deep_researcher import graph
+from nova.core.task.deep_researcher import graph
 
 logger = logging.getLogger(__name__)
 

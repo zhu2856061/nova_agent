@@ -19,10 +19,10 @@ from langgraph.runtime import Runtime
 from langgraph.types import Command
 from typing_extensions import TypedDict
 
-from core.llms import get_llm_by_type
-from core.prompts.deep_researcher import apply_system_prompt_template
-from core.tools import deep_researcher_tool
-from core.utils import (
+from nova.core.llms import get_llm_by_type
+from nova.core.prompts.deep_researcher import apply_system_prompt_template
+from nova.core.tools import deep_researcher_tool
+from nova.core.utils import (
     get_today_str,
     override_reducer,
     remove_up_to_last_ai_message,

@@ -1,4 +1,8 @@
 SYSTEM:
+  IP_PORT: "0.0.0.0:11021"
+  WORKERS: 2
+  TIMEOUT: 1800
+
   env_path: "./env"
   task_dir: "./tasks"
   cache_dir: "./cache"

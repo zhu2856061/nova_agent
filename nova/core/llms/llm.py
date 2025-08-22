@@ -20,8 +20,8 @@ from langchain_core.utils.pydantic import TypeBaseModel, is_basemodel_subclass
 from langchain_litellm import ChatLiteLLM, ChatLiteLLMRouter
 from litellm import Router  # type: ignore
 
-from core import CONF
-from core.llms.fix_llm_cache import SQLiteCacheFixed
+from nova.core import CONF
+from nova.core.llms.fix_llm_cache import SQLiteCacheFixed
 
 # ######################################################################################
 # 配置

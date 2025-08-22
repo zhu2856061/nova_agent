@@ -29,9 +29,9 @@ from playwright.async_api import async_playwright
 from pydantic import BaseModel, Field
 
 # from readabilipy import simple_json_from_html_string
-from core.llms import get_llm_by_type
-from core.prompts.deep_researcher import apply_system_prompt_template
-from core.utils import get_today_str
+from nova.core.llms import get_llm_by_type
+from nova.core.prompts.deep_researcher import apply_system_prompt_template
+from nova.core.utils import get_today_str
 
 logger = logging.getLogger(__name__)
 

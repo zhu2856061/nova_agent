@@ -8,8 +8,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.llm_router import llm_router
-from api.task_router import task_router
+from nova.api.front_router import create_frontend_router
+from nova.api.llm_router import llm_router
+from nova.api.task_router import task_router
 
 logger = logging.getLogger(__name__)
 
@@ -52,13 +53,25 @@ async def health_check():
 app.include_router(llm_router)
 app.include_router(task_router)
 
-# if __name__ == "__main__":
-#     import uvicorn
-#     logger.info("Starting Nova Agent API Server")
-#     uvicorn.run(
-#         "app:app",
-#         host="0.0.0.0",
-#         port=2021,
-#         reload=False,
-#         log_level="info",
-#     )
+# Mount the frontend under /app to not conflict with the LangGraph API routes
+app.mount(
+    "/app",
+    create_frontend_router(),
+    name="frontend",
+)
+
+
+if __name__ == "__main__":
+    import os
+
+    import uvicorn
+
+    os.environ["CONFIG_PATH"] = "config.yaml"
+    logger.info("🚀Starting Nova Agent API Server🚀")
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=2021,
+        reload=False,
+        log_level="info",
+    )

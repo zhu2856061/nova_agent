@@ -1,0 +1,66 @@
+# --- Stage 1: Base Image (通常使用一个轻量级的 Python 镜像) ---
+FROM ubuntu:24.04 AS base
+
+# 设置环境变量，推荐编译字节码以加速启动
+ENV UV_COMPILE_BYTECODE=1 \
+    # 如果你的应用不需要构建隔离，可以考虑禁用，但通常建议开启
+    # UV_BUILD_ISOLATION=0 \
+    # 确保uv使用复制模式，避免软链接问题
+    UV_LINK_MODE=copy
+
+# --- Stage 2: Builder Stage (安装 uv 和项目依赖) ---
+FROM base AS builder
+
+# 安装 uv。建议固定 uv 的版本以确保可重现性。
+# 你可以从 ghcr.io/astral-sh/uv 获取最新版本或指定版本。
+COPY --from=ghcr.io/astral-sh/uv:0.7.3 /uv /uvx /bin/
+
+# 设置工作目录
+WORKDIR /app
+
+# 复制 pyproject.toml 和 uv.lock 文件。
+# 这些文件通常不经常变动，将其放在前面可以利用 Docker 层缓存。
+# COPY build/pyproject.toml build/uv.lock ./
+COPY build/pyproject.toml ./
+# 使用 uv 同步依赖。
+# --locked: 确保使用 uv.lock 文件中的精确版本。
+# --no-dev: 不安装开发依赖。
+# --no-install-project: 暂时不安装项目本身，只安装依赖。
+# --mount=type=cache,target=/root/.cache/uv: 利用 Docker 构建缓存来缓存 uv 的下载。
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --no-dev --no-install-project --index-strategy unsafe-best-match && \
+    rm -rf pyproject.toml uv.lock
+
+# 复制项目代码。这通常是变化最频繁的部分。
+COPY entrypoint.sh build/server.tar.gz ./
+COPY build/model_store ./model_store
+
+# --- Stage 3: Runtime Stage (最终运行镜像) ---
+FROM base AS runtime
+
+# 将 builder 阶段构建好的虚拟环境复制到 runtime 阶段
+COPY --from=builder /app /app
+COPY --from=builder /root/.local/share/uv/python /root/.local/share/uv/python
+# 设置 PATH 环境变量，以便可以直接运行虚拟环境中的可执行文件
+ENV PATH="/app/.venv/bin:$PATH"
+
+# 设置时区为 Asia/Shanghai
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends tzdata curl && \
+    ln -snf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
+    echo "Asia/Shanghai" > /etc/timezone && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
+
+# 设置工作目录
+WORKDIR /app
+
+# 暴露应用端口 (如果需要)
+EXPOSE 11021
+
+# Run the FastAPI application by default
+CMD ./entrypoint.sh
+# CMD ["/bin/bash", "-c", "sleep infinity"]
+
+# docker build -f dockerfile -t mlmodel.oa.fenqile.com/mlapp/paytype:2.3 .
+# docker push mlmodel.oa.fenqile.com/mlapp/paytype:2.3
