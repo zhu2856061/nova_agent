@@ -1,7 +1,14 @@
 import logging
+import operator
 import time
 from datetime import datetime
 from functools import wraps
+
+from langchain_core.messages import (
+    AIMessage,
+    MessageLikeRepresentation,
+    filter_messages,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,6 +42,32 @@ def set_color(log, color, highlight=True):
     return prev_log + log + "\033[0m"
 
 
+# 获得当前日期
 def get_today_str() -> str:
     """Get current date in a human-readable format."""
     return datetime.now().strftime("%a %b %-d, %Y")
+
+
+# 删除最近一个AI消息
+def remove_up_to_last_ai_message(
+    messages: list[MessageLikeRepresentation],
+) -> list[MessageLikeRepresentation]:
+    for i in range(len(messages) - 1, -1, -1):
+        if isinstance(messages[i], AIMessage):
+            return messages[:i]
+    return messages
+
+
+# 获取笔记
+def get_notes_from_tool_calls(messages: list[MessageLikeRepresentation]):
+    return [
+        tool_msg.content for tool_msg in filter_messages(messages, include_types="tool")
+    ]
+
+
+# 筛选消息
+def override_reducer(current_value, new_value):
+    if isinstance(new_value, dict) and new_value.get("type") == "override":
+        return new_value.get("value", new_value)
+    else:
+        return operator.add(current_value, new_value)

@@ -50,7 +50,7 @@ async def llm_server(request: LLMRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@llm_router.post("/stream_llm", response_model=StreamingResponse)
+@llm_router.post("/stream_llm")
 async def stream_llm_server(request: LLMRequest):
     """LLM Server"""
     if not request:

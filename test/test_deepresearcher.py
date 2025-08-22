@@ -9,32 +9,30 @@ sys.path.append("../src")
 import os
 
 os.environ["CONFIG_PATH"] = "../config.yaml"
-from core.task.deep_researcher import AgentState, Context, graph
+from core.task.deep_researcher import graph
 
-inputs = AgentState(
-    messages=[
+inputs = {
+    "messages": [
         {
-            "role": "user",
+            "role": "system",
             "content": "请查询网络上的信息，深圳的最近一周内的经济新闻",
         }
-    ]
-)  # type: ignore
+    ],
+}
 
-context = Context(
-    trace_id="1",
-    task_dir="./",
-    clarify_model="reasoning",
-    research_brief_model="reasoning",
-    supervisor_model="reasoning",
-    researcher_model="reasoning",
-    summarize_model="reasoning",
-    compress_research_model="reasoning",
-    report_model="reasoning",
-    number_of_initial_queries=1,
-    max_research_loops=1,
-    max_concurrent_research_units=2,
-    max_react_tool_calls=2,
-)
+context = {
+    "trace_id": "1",
+    "task_dir": "./",
+    "clarify_model": "reasoning",
+    "research_brief_model": "reasoning",
+    "supervisor_model": "reasoning",
+    "researcher_model": "reasoning",
+    "summarize_model": "reasoning",
+    "compress_research_model": "reasoning",
+    "report_model": "reasoning",
+    "max_concurrent_research_units": 1,
+    "max_react_tool_calls": 1,
+}
 
 
 async def async_generate_response():

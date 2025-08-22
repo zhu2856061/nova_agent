@@ -392,7 +392,9 @@ async def summarize_webpage(model: BaseChatModel, content: str):
             return f"""<summary>\n{summary}\n</summary>\n\n<key_excerpts>\n{key_excerpts}\n</key_excerpts>"""  # type: ignore
         except Exception:
             token_limit = int(len(webpage_content) * 0.8)
-            logger.warning(f"summarize reducing the chars to: {token_limit}")
+            logger.warning(
+                f"current_retry: {current_retry}, summarize reducing the chars to: {token_limit}"
+            )
             webpage_content = webpage_content[:token_limit]
             current_retry += 1
 
@@ -406,6 +408,24 @@ class DeepResearcherTool(BaseTool):
         "Useful for when you need to answer questions about current events."
     )
     args_schema: Type[BaseModel] = DeepResearcherToolInput
+
+    def clean_markdown_links(self, text):
+        # 移除各种类型的链接
+        patterns = [
+            # Markdown链接 [text](url)
+            (r"\[([^\]]+)\]\([^)]+\)", r"\1"),
+            # HTML链接
+            (r'<a\s+[^>]*href="[^"]*"[^>]*>(.*?)</a>', r"\1"),
+            # 纯URL链接
+            (r"https?://\S+", ""),
+            # 带括号的URL
+            (r"\(https?://[^)]+\)", ""),
+        ]
+
+        for pattern, replacement in patterns:
+            text = re.sub(pattern, replacement, text)  # type: ignore
+
+        return text.strip()  # type: ignore
 
     async def _arun(
         self,
@@ -448,7 +468,7 @@ class DeepResearcherTool(BaseTool):
                     text += (
                         " ".join(
                             [
-                                tx["text"]
+                                self.clean_markdown_links(tx["text"])
                                 for tx in tmp["content"]
                                 if tx["type"] == "text"
                             ]

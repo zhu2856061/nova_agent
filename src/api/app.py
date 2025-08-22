@@ -9,6 +9,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.llm_router import llm_router
+from api.task_router import task_router
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,7 @@ async def health_check():
 # init
 # Include the LLM router
 app.include_router(llm_router)
-
+app.include_router(task_router)
 
 # if __name__ == "__main__":
 #     import uvicorn
