@@ -1,11 +1,11 @@
 import sys
 
-sys.path.append("../src")
+sys.path.append("..")
 import os
 
 os.environ["CONFIG_PATH"] = "../config.yaml"
 
-from core.tools.search_engine import search_tool
+from nova.core.tools.search_engine import search_tool
 
 # 同步调用
 result = search_tool.invoke(

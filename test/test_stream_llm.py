@@ -1,11 +1,11 @@
 import asyncio
 import sys
 
-sys.path.append("../src")
+sys.path.append("..")
 import os
 
 os.environ["CONFIG_PATH"] = "../config.yaml"
-from core.llms import get_llm_by_type
+from nova.core.llms import get_llm_by_type
 
 print("\n===\n")
 #

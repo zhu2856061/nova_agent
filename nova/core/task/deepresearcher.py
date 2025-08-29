@@ -21,9 +21,9 @@ from langgraph.types import Command
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
 
-from nova.core.agent.researcher import ResearcherAgent
+from nova.core.agent.researcher import researcher_agent
 from nova.core.llms import get_llm_by_type
-from nova.core.prompts.deep_researcher import apply_system_prompt_template
+from nova.core.prompts.deepresearcher import apply_system_prompt_template
 from nova.core.tools import markdown_to_html_tool
 from nova.core.utils import (
     get_notes_from_tool_calls,
@@ -322,7 +322,7 @@ async def supervisor_tools(
         coros = []
         for tool_call in conduct_research_calls:
             coros.append(
-                ResearcherAgent.ainvoke(
+                researcher_agent.ainvoke(
                     {
                         "researcher_messages": [
                             HumanMessage(content=tool_call["args"]["research_topic"]),

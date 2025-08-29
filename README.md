@@ -11,9 +11,16 @@
 🚀[2025-08-11] 加入工具 Crawl4AI 实现爬取数据
 1 需要安装 playwright ``` playwright install ``` ``` playwright install-deps ```
 
+🚀[2025-08-20] 完成researcher Agent的创建，并运行成功
+
+🚀[2025-08-27] 完成deepresearcher Task的创建，并运行成功
+
 
 [todo]
-- 构建Agent模块
+- 构建前端界面展示
+- 具备llm chat 功能
+- 具备llm agent 功能
+- 具备llm task 功能
 
 
 

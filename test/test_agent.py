@@ -5,11 +5,11 @@
 import asyncio
 import sys
 
-sys.path.append("../src")
+sys.path.append("..")
 import os
 
 os.environ["CONFIG_PATH"] = "../config.yaml"
-from core.agent.researcher import ResearcherAgent
+from nova.core.agent.researcher import researcher_agent
 
 inputs = {
     "researcher_messages": [
@@ -29,7 +29,7 @@ context = {
 
 
 async def async_generate_response():
-    tmp = await ResearcherAgent.ainvoke(inputs, context=context)
+    tmp = await researcher_agent.ainvoke(inputs, context=context)  # type: ignore
     print("Assistant:\n", tmp)
 
 

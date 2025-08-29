@@ -30,7 +30,7 @@ from pydantic import BaseModel, Field
 
 # from readabilipy import simple_json_from_html_string
 from nova.core.llms import get_llm_by_type
-from nova.core.prompts.deep_researcher import apply_system_prompt_template
+from nova.core.prompts.researcher import apply_system_prompt_template
 from nova.core.utils import get_today_str
 
 logger = logging.getLogger(__name__)
@@ -351,7 +351,7 @@ class SerpBaiduTool(BaseTool):
         return asyncio.run(self._arun(query, max_results))
 
 
-class DeepResearcherToolInput(BaseModel):
+class SearchToolInput(BaseModel):
     """Input for the search tool."""
 
     queries: List[str] = Field(description="The queries to search for")
@@ -401,13 +401,13 @@ async def summarize_webpage(model: BaseChatModel, content: str):
     return content
 
 
-class DeepResearcherTool(BaseTool):
+class SearchTool(BaseTool):
     name: str = "search_tool"
     description: str = (
         "A search engine optimized for comprehensive, accurate, and trusted results. "
         "Useful for when you need to answer questions about current events."
     )
-    args_schema: Type[BaseModel] = DeepResearcherToolInput
+    args_schema: Type[BaseModel] = SearchToolInput
 
     def clean_markdown_links(self, text):
         # 移除各种类型的链接
@@ -543,4 +543,4 @@ class DeepResearcherTool(BaseTool):
 # Create an instance
 crawl_tool = CrawlTool()
 serp_tool = SerpBaiduTool()
-deep_researcher_tool = DeepResearcherTool()
+search_tool = SearchTool()

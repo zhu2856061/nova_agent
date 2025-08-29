@@ -5,11 +5,11 @@
 import asyncio
 import sys
 
-sys.path.append("../src")
+sys.path.append("..")
 import os
 
 os.environ["CONFIG_PATH"] = "../config.yaml"
-from core.task.deep_researcher import graph
+from nova.core.task.deepresearcher import graph
 
 inputs = {
     "messages": [
@@ -36,7 +36,7 @@ context = {
 
 
 async def async_generate_response():
-    tmp = await graph.ainvoke(inputs, context=context)
+    tmp = await graph.ainvoke(inputs, context=context)  # type: ignore
     print("Assistant:\n", tmp)
 
 

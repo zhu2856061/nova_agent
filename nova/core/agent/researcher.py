@@ -14,14 +14,15 @@ from langchain_core.messages import (
     ToolMessage,
     filter_messages,
 )
-from langgraph.graph import END, START, StateGraph
+from langgraph.graph import START, StateGraph
 from langgraph.runtime import Runtime
 from langgraph.types import Command
+from pydantic import BaseModel
 from typing_extensions import TypedDict
 
 from nova.core.llms import get_llm_by_type
-from nova.core.prompts.deep_researcher import apply_system_prompt_template
-from nova.core.tools import deep_researcher_tool
+from nova.core.prompts.researcher import apply_system_prompt_template
+from nova.core.tools import search_tool
 from nova.core.utils import (
     get_today_str,
     override_reducer,
@@ -55,6 +56,10 @@ class Context(TypedDict):
     max_react_tool_calls: int
 
 
+class ResearchComplete(BaseModel):
+    """Call this tool to indicate that the research is complete."""
+
+
 # ######################################################################################
 # 函数
 
@@ -84,7 +89,7 @@ async def researcher(
 
         # LLM
         def _get_llm():
-            _tools = [deep_researcher_tool]
+            _tools = [search_tool, ResearchComplete]
             return get_llm_by_type(_model_name).bind_tools(_tools)
 
         response = await _get_llm().ainvoke(_assemble_prompt(_messages))
@@ -127,7 +132,10 @@ async def researcher_tools(
         _max_react_tool_calls = runtime.context.get("max_react_tool_calls", 5)
 
         # 执行
-        if not _most_recent_message.tool_calls:  # type: ignore
+        if not _most_recent_message.tool_calls or any(  # type: ignore
+            tool_call["name"] == "ResearchComplete"
+            for tool_call in _most_recent_message.tool_calls  # type: ignore
+        ):
             return Command(
                 goto="compress_research",
             )
@@ -143,7 +151,7 @@ async def researcher_tools(
         coros = []
         for tool_call in tool_calls:
             tmp = {**tool_call["args"], "runtime": {"summarize_model": _model_name}}
-            coros.append(execute_tool_safely(deep_researcher_tool, tmp))
+            coros.append(execute_tool_safely(search_tool, tmp))
 
         observations = await asyncio.gather(*coros)
 
@@ -163,10 +171,7 @@ async def researcher_tools(
             for observation, tool_call in zip(observations, tool_calls)
         ]
 
-        if _tool_call_iterations >= _max_react_tool_calls or any(
-            tool_call["name"] == "ResearchComplete"
-            for tool_call in _most_recent_message.tool_calls  # type: ignore
-        ):
+        if _tool_call_iterations >= _max_react_tool_calls:
             return Command(
                 goto="compress_research",
                 update={
@@ -232,6 +237,12 @@ async def compress_research(
             try:
                 _tmp_messages = _assemble_prompt(_messages)
                 response = await _get_llm().ainvoke(_tmp_messages)
+                logger.info(
+                    set_color(
+                        f"trace_id={_trace_id} | node=compress_research | message=\n {str(response.content)} ",
+                        "pink",
+                    )
+                )
                 return Command(
                     goto="__end__",
                     update={
@@ -289,4 +300,4 @@ _agent.add_node("researcher_tools", researcher_tools)
 _agent.add_node("compress_research", compress_research)
 _agent.add_edge(START, "researcher")
 
-ResearcherAgent = _agent.compile()
+researcher_agent = _agent.compile()

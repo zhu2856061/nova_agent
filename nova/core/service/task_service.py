@@ -8,7 +8,7 @@ from typing import Dict, Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 
-from nova.core.task.deep_researcher import graph
+from nova.core.task.deepresearcher import graph
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +32,7 @@ class TaskResponse(BaseModel):
     messages: Dict = Field(..., description=" response message")
 
 
-@task_router.post("/deep_researcher", response_model=TaskResponse)
+@task_router.post("/deepresearcher", response_model=TaskResponse)
 async def deep_researcher_server(request: TaskRequest):
     """LLM Server"""
     if not request:

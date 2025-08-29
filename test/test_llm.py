@@ -5,7 +5,7 @@
 import asyncio
 import sys
 
-sys.path.append("../src")
+sys.path.append("..")
 import os
 
 os.environ["CONFIG_PATH"] = "../config.yaml"
@@ -13,8 +13,8 @@ os.environ["CONFIG_PATH"] = "../config.yaml"
 # 设置环境变量
 from pydantic import BaseModel, Field
 
-from core.llms import get_llm_by_type, with_structured_output
-from core.utils import repair_json_output
+from nova.core.llms import get_llm_by_type, with_structured_output
+from nova.core.utils import repair_json_output
 
 
 class Summary(BaseModel):

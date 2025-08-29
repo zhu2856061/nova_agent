@@ -21,6 +21,8 @@ dependencies = [
     "markdown>=3.8.2",
     "markdownify>=1.2.0",
     "readabilipy>=0.3.0",
+    "streamlit>=1.48.1",
+    "streamlit-flow>=0.1.0",
     "uvicorn>=0.35.0",
 ]
 

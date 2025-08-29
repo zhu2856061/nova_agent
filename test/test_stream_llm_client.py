@@ -1,11 +1,4 @@
 """
-
-curl -X POST http://0.0.0.0:11021/predict -H 'Content-Type: application/json' -d '{"uid": "123", "businessParam": {"fuid": 139070046, "fage": 21, "fsex": 1, "fcollege_level": 1, "foverdue_max_day": 65, "foverdue_amount": 5028, "fdeduct_strategy_chain_id": 73, "fdeduct_strategy_id": 65}}'
-
-curl -X POST http://mlplatform.fql.com/seldon/mlapp-pre/paytype/predict -H 'Content-Type: application/json' -d '{"uid": "123", "businessParam": {"fuid": 139070046, "fage": 21, "fsex": 1, "fcollege_level": 1, "foverdue_max_day": 65, "foverdue_amount": 5028, "fdeduct_strategy_chain_id": 73, "fdeduct_strategy_id": 65}}'
-
-
-
 curl -X GET http://0.0.0.0:12023/health
 """
 
@@ -13,6 +6,52 @@ import asyncio
 import json
 
 import httpx
+import requests
+
+
+def stream_llm_request():
+    inputs = {
+        "trace_id": "123",
+        "llm_dtype": "basic_no_thinking",
+        "messages": [
+            {
+                "role": "system",
+                "content": "You are a helpful assistant.",
+            },
+            {
+                "role": "user",
+                "content": "What is the capital of France?",
+            },
+        ],
+    }
+
+    try:
+        # 发送POST请求并设置stream=True以接收流式响应
+        with requests.post(
+            "http://0.0.0.0:2021/chat/stream_llm",
+            json=inputs,
+            stream=True,
+            headers={"Accept": "text/event-stream"},
+        ) as r:
+            r.raise_for_status()  # 检查请求是否成功
+
+            # 逐行处理流式响应
+            for line in r.iter_lines(decode_unicode=True):
+                if line:
+                    try:
+                        # 解析JSON数据
+                        data = json.loads(line)
+                        if data["code"] == 0:
+                            print(data["messages"]["content"], end="", flush=True)
+                    except json.JSONDecodeError:
+                        # 处理非JSON格式的响应
+                        print(line, end="", flush=True)
+
+            # 输出完成后换行
+            print()
+
+    except requests.exceptions.RequestException as e:
+        print(f"请求发生错误: {e}")
 
 
 async def stream_llm_client():
@@ -36,7 +75,10 @@ async def stream_llm_client():
     async with httpx.AsyncClient() as client:
         # 发送 POST 请求到 /stream_llm 路由
         async with client.stream(
-            "POST", "http://0.0.0.0:2021/stream_llm", json=request_data, timeout=20.0
+            "POST",
+            "http://0.0.0.0:2021/chat/stream_llm",
+            json=request_data,
+            timeout=20.0,
         ) as response:
             # 检查响应状态码
             if response.status_code != 200:
@@ -46,7 +88,9 @@ async def stream_llm_client():
             async for chunk in response.aiter_bytes():
                 if chunk:
                     tmp = json.loads(chunk.decode("utf-8"))
-                    print(tmp["messages"]["content"], end="|", flush=True)
+                    print(tmp["messages"]["content"], flush=True)
 
 
-asyncio.run(stream_llm_client())
+if __name__ == "__main__":
+    asyncio.run(stream_llm_client())
+    # stream_llm_request()
