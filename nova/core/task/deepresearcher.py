@@ -331,6 +331,7 @@ async def supervisor_tools(
                     context=runtime.context,
                 )
             )
+
             logger.info(
                 set_color(
                     f"trace_id={_trace_id} | node=supervisor_tools | message=use researcher_subgraph: \n tool_call_id: {tool_call['id']}\n tool_args: {tool_call['args']} ",
@@ -427,7 +428,7 @@ async def final_report_generation(
             try:
                 final_report = await _get_llm(_model_name).ainvoke(final_report_prompt)
 
-                await markdown_to_html_tool.ainvoke(
+                await markdown_to_html_tool.arun(
                     {
                         "md_content": final_report.content,
                         "output_file": os.path.join(_work_dir, "final_report.html"),
@@ -494,4 +495,4 @@ graph_builder.add_edge(START, "clarify_with_user")
 graph_builder.add_edge("research_supervisor", "final_report_generation")
 
 
-graph = graph_builder.compile()
+deepresearcher = graph_builder.compile()

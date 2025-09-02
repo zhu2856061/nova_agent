@@ -11,7 +11,7 @@ CHAT_PAGE_INTRODUCTION = "你好，我是 **Nova Chat** 智能助手，有什么
 
 LLM_OPTIONS = ["basic", "reasoning", "basic_no_thinking"]
 # 后端接口地址
-BACKEND_URL = "http://0.0.0.0:2021/stream_llm"  # 需根据实际修改
+BACKEND_URL = "http://0.0.0.0:2021/chat/stream_llm"  # 需根据实际修改
 AVATAR_PATH = "chat.png"
 SUCCESS_DURATION = 2  # 提示显示时长（秒）
 

@@ -5,6 +5,7 @@
 import logging
 from typing import AsyncGenerator, Dict, List, Optional
 
+import aiohttp
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -65,25 +66,36 @@ async def stream_llm_server(request: LLMRequest):
         model = get_llm_by_type(request.llm_dtype)
 
         # 定义一个生成器函数来逐步生成响应
-        async def async_generate_response() -> AsyncGenerator:
-            # 假设模型提供了异步生成器接口
-            if request.config:
-                async for response in model.astream(request.messages, **request.config):
-                    if response.content:
-                        llm_response = LLMResponse(
-                            code=0, messages={"content": response.content}
-                        )
-                        yield llm_response.model_dump_json() + "\n"
-            else:
-                async for response in model.astream(request.messages):
-                    if response.content:
-                        llm_response = LLMResponse(
-                            code=0, messages={"content": response.content}
-                        )
-                        yield llm_response.model_dump_json() + "\n"
+        async def async_service() -> AsyncGenerator:
+            session = None
+            try:
+                session = aiohttp.ClientSession()  # 创建会话
+                # 假设模型提供了异步生成器接口
+                if request.config:
+                    async for response in model.astream(
+                        request.messages, **request.config
+                    ):
+                        if response.content:
+                            llm_response = LLMResponse(
+                                code=0, messages={"content": response.content}
+                            )
+                            yield llm_response.model_dump_json() + "\n"
+                else:
+                    async for response in model.astream(request.messages):
+                        if response.content:
+                            llm_response = LLMResponse(
+                                code=0, messages={"content": response.content}
+                            )
+                            yield llm_response.model_dump_json() + "\n"
+            except Exception as e:
+                logger.error(f"Error during streaming: {e}")
+                raise
+            finally:
+                if session is not None:
+                    await session.close()  # 确保会话关闭
 
         return StreamingResponse(
-            async_generate_response(),
+            async_service(),
             media_type="application/json",  # 流式数据的 MIME 类型
         )
     except Exception as e:

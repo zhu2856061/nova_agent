@@ -11,13 +11,13 @@ AGENT_PAGE_INTRODUCTION = "你好，我是 **Nova Agent** 智能助手，有什�
 LLM_OPTIONS = ["basic", "reasoning", "basic_no_thinking"]
 
 # 后端接口地址
-BACKEND_URL = "http://0.0.0.0:2021/agent/stream_researcher"  # 需根据实际修改
+BACKEND_URL = "http://0.0.0.0:2021/task/stream_deepresearcher"  # 需根据实际修改
 AVATAR_PATH = "chat.png"
 
 logger = logging.getLogger(__name__)
 
 
-def get_agent_response(llm_dtype: str, messages: list, max_react_tool_calls: int):
+def get_task_response(llm_dtype: str, messages: list, max_react_tool_calls: int):
     """
     发送请求到后端并获取流式响应
 
@@ -33,13 +33,20 @@ def get_agent_response(llm_dtype: str, messages: list, max_react_tool_calls: int
     request_data = {
         "trace_id": trace_id,
         "context": {
+            "clarify_model": llm_dtype,
+            "research_brief_model": llm_dtype,
+            "supervisor_model": llm_dtype,
             "researcher_model": llm_dtype,
             "summarize_model": llm_dtype,
             "compress_research_model": llm_dtype,
+            "report_model": llm_dtype,
+            "number_of_initial_queries": 1,
+            "max_research_loops": 1,
+            "max_concurrent_research_units": 2,
             "max_react_tool_calls": max_react_tool_calls,
         },
         "state": {
-            "researcher_messages": messages,
+            "messages": messages,
         },
     }
     try:
@@ -176,7 +183,7 @@ def display_agent_history():
             st.write(message["content"])
 
 
-def llm_agent_page():
+def llm_task_page():
     """聊天页面主函数"""
     st.set_page_config(
         page_title="Nova 智能助手",
@@ -222,7 +229,7 @@ def llm_agent_page():
 
         # 获取模型响应并流式显示
         with st.chat_message("assistant", avatar=get_img_base64(AVATAR_PATH)):
-            response_generator = get_agent_response(
+            response_generator = get_task_response(
                 llm_type, history_messages, max_react_tool_calls
             )
             full_response = st.write_stream(response_generator)

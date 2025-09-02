@@ -203,7 +203,7 @@ class CrawlTool(BaseTool):
                     render_timeout=60000,  # 渲染超时（毫秒）
                 ):  # type: ignore
                     if not result.success:
-                        logger.warning(f"Failed to crawl {result.url}: {result.error}")
+                        logger.warning(f"Failed to crawl {result.url}: {result}")
                         continue
                     if result.url in crawled_urls:
                         logger.debug(f"Skipping duplicate URL: {result.url}")
@@ -303,9 +303,7 @@ class SerpBaiduTool(BaseTool):
             while len(results) < max_results and attempts < max_attempts:
                 try:
                     # 等待新加载的结果
-                    await page.wait_for_selector(
-                        ".result-op, .result.c-container", timeout=10_000
-                    )
+                    await page.wait_for_selector(".result.c-container", timeout=20_000)
 
                     # 提取数据
                     current_results = await page.evaluate("""() => {

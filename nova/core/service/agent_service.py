@@ -5,6 +5,7 @@
 import logging
 from typing import AsyncGenerator, Dict, Optional
 
+import aiohttp
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
@@ -44,6 +45,11 @@ def handle_event(trace_id, event):
             if (metadata.get("checkpoint_ns") is None)  # type: ignore
             else metadata.get("checkpoint_ns").split(":")[0]  # type: ignore
         )
+        langgraph_node = (
+            ""
+            if (metadata.get("langgraph_node") is None)
+            else str(metadata["langgraph_node"])
+        )
         langgraph_step = (
             ""
             if (metadata.get("langgraph_step") is None)  # type: ignore
@@ -53,11 +59,9 @@ def handle_event(trace_id, event):
         run_id = "" if (event.get("run_id") is None) else str(event["run_id"])
 
         if kind == "on_chain_start":
-            """
-            {'event': 'on_chain_start', 'data': {'input': {'researcher_messages': [{'role': 'user', 'content': '请查询网络上的信息，深圳的最近一周内的经济新闻'}]}}, 'name': 'LangGraph', 'tags': [], 'run_id': '98153528-c5cd-4376-a1c6-ce4e27865b55', 'metadata': {}, 'parent_ids': []}
-            """
-            _name = node or name
-            if _name == "RunnableSequence":
+            _name = langgraph_node + " -> " + name
+            # 工具内部执行过程不再展示
+            if "RunnableSequence" in _name and "tool" in _name:
                 return None
 
             ydata = {
@@ -73,8 +77,9 @@ def handle_event(trace_id, event):
             return ydata
 
         elif kind == "on_chain_end":
-            _name = node or name
-            if _name == "RunnableSequence":
+            _name = langgraph_node + " -> " + name
+            # 工具内部执行过程不再展示
+            if "RunnableSequence" in _name and "tool" in _name:
                 return None
 
             ydata = {
@@ -88,8 +93,9 @@ def handle_event(trace_id, event):
             }
 
         elif kind == "on_chat_model_start":
-            _name = node or name
-            if _name == "ChatLiteLLMRouter":
+            _name = langgraph_node + " -> " + name
+            # 工具内部执行过程不再展示
+            if "ChatLiteLLMRouter" in name and "tool" in _name:
                 return None
 
             ydata = {
@@ -103,8 +109,9 @@ def handle_event(trace_id, event):
             }
 
         elif kind == "on_chat_model_end":
-            _name = node or name
-            if _name == "ChatLiteLLMRouter":  # 去掉非节点中的输出
+            _name = langgraph_node + " -> " + name
+            # 工具内部执行过程不再展示
+            if "ChatLiteLLMRouter" in _name and "tool" in _name:
                 return None
 
             ydata = {
@@ -114,7 +121,7 @@ def handle_event(trace_id, event):
                     "step": langgraph_step,
                     "run_id": run_id,
                     "trace_id": trace_id,
-                    "ouput": {
+                    "output": {
                         "content": data["output"].content,
                         "reasoning_content": data["output"].additional_kwargs.get(
                             "reasoning_content", ""
@@ -125,66 +132,85 @@ def handle_event(trace_id, event):
             }
 
         elif kind == "on_tool_start":
+            _name = langgraph_node + " -> " + name
             ydata = {
                 "event": "on_tool_start",
                 "data": {
-                    "node_name": name,
+                    "node_name": _name,
                     "step": langgraph_step,
                     "run_id": run_id,
                     "trace_id": trace_id,
-                    "tool_input": data.get("input"),
+                    "input": data.get("input"),
                 },
             }
 
         elif kind == "on_tool_end":
+            _name = langgraph_node + " -> " + name
+
             ydata = {
                 "event": "on_tool_end",
                 "data": {
-                    "node_name": name,
+                    "node_name": _name,
                     "step": langgraph_step,
                     "run_id": run_id,
                     "trace_id": trace_id,
-                    "tool_result": data["output"] if data.get("output") else "",
+                    "output": data["output"] if data.get("output") else "",
                 },
             }
 
-        # elif kind == "on_chat_model_stream":
-        #     content = data["chunk"].content  # type: ignore
-        #     if content is None or content == "":
-        #         if not data["chunk"].additional_kwargs.get("reasoning_content"):  # type: ignore
-        #             # Skip empty messages
-        #             return None
-        #         ydata = {
-        #             "event": "message",
-        #             "data": {
-        #                 "message_id": data["chunk"].id,  # type: ignore
-        #                 "delta": {
-        #                     "reasoning_content": (
-        #                         data["chunk"].additional_kwargs["reasoning_content"]  # type: ignore
-        #                     )
-        #                 },
-        #             },
-        #         }
+        elif kind == "on_chat_model_stream":
+            _name = langgraph_node + " -> " + name
+            # 工具内部执行过程不再展示
+            if "ChatLiteLLMRouter" in _name and "tool" in _name:
+                return None
 
-        #     else:
-        #         ydata = {
-        #             "event": "message",
-        #             "data": {
-        #                 "message_id": data["chunk"].id,  # type: ignore
-        #                 "delta": {"content": content},
-        #             },
-        #         }
+            content = data["chunk"].content
+            if content is None or content == "":
+                if not data["chunk"].additional_kwargs.get("reasoning_content"):
+                    # Skip empty messages
+                    return None
+                ydata = {
+                    "event": "on_chat_model_stream",
+                    "data": {
+                        "node_name": _name,
+                        "step": langgraph_step,
+                        "run_id": run_id,
+                        "trace_id": trace_id,
+                        "output": {
+                            "message_id": data["chunk"].id,
+                            "reasoning_content": data["chunk"].additional_kwargs[
+                                "reasoning_content"
+                            ],
+                        },
+                    },
+                }
+
+            else:
+                ydata = {
+                    "event": "on_chat_model_stream",
+                    "data": {
+                        "node_name": _name,
+                        "step": langgraph_step,
+                        "run_id": run_id,
+                        "trace_id": trace_id,
+                        "output": {"message_id": data["chunk"].id, "content": content},
+                    },
+                }
 
         else:
             return None
+
         return ydata
 
     except Exception as e:
+        logger.error(f"Error: {e}")
         ydata = {
             "event": "error",
             "data": {
-                "id": f"{trace_id}_{node}_{name}_{run_id}",
-                "name": name,
+                "node_name": _name,
+                "step": langgraph_step,
+                "run_id": run_id,
+                "trace_id": trace_id,
                 "error": str(e),
             },
         }
@@ -223,20 +249,30 @@ async def stream_researcher_service(request: AgentRequest):
         context = {**request.context, "trace_id": request.trace_id}
 
         async def async_service(trace_id, inputs, context) -> AsyncGenerator:
-            async for event in researcher_agent.astream_events(
-                inputs, context=context, version="v2"
-            ):
-                data = handle_event(trace_id, event)
-                if data:
-                    if data["event"] == "error":
-                        _response = AgentResponse(code=1, messages=data)
+            session = None
+            try:
+                session = aiohttp.ClientSession()  # 创建会话
+                async for event in researcher_agent.astream_events(
+                    inputs, context=context, version="v2"
+                ):
+                    data = handle_event(trace_id, event)
+                    if data:
+                        if data["event"] == "error":
+                            _response = AgentResponse(code=1, messages=data)
+                        else:
+                            _response = AgentResponse(code=0, messages=data)
+
+                        yield _response.model_dump_json() + "\n"
+
                     else:
-                        _response = AgentResponse(code=0, messages=data)
+                        continue
 
-                    yield _response.model_dump_json() + "\n"
-
-                else:
-                    continue
+            except Exception as e:
+                logger.error(f"Error during streaming: {e}")
+                raise
+            finally:
+                if session is not None:
+                    await session.close()  # 确保会话关闭
 
         return StreamingResponse(
             async_service(request.trace_id, state, context),

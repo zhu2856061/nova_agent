@@ -1,5 +1,5 @@
 import streamlit as st
-from component import llm_agent_page, llm_chat_page
+from component import llm_agent_page, llm_chat_page, llm_task_page
 from utils import get_img_base64
 
 if __name__ == "__main__":
@@ -24,6 +24,13 @@ if __name__ == "__main__":
                 st.Page(
                     llm_agent_page,
                     title="researcher",
+                    icon=":material/chat_add_on:",
+                ),
+            ],
+            "Task": [
+                st.Page(
+                    llm_task_page,
+                    title="deepresearcher",
                     icon=":material/chat_add_on:",
                 ),
             ],
