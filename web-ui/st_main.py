@@ -13,21 +13,21 @@ if __name__ == "__main__":
 
     pg = st.navigation(
         {
-            "Chat": [
+            "📶Chat": [
                 st.Page(
                     llm_chat_page,
                     title="Nova Chat",
-                    icon=":material/chat_bubble:",
+                    icon=":material/chat_add_on:",
                 ),
             ],
-            "Agent": [
+            "📶Agent": [
                 st.Page(
                     llm_agent_page,
                     title="researcher",
                     icon=":material/chat_add_on:",
                 ),
             ],
-            "Task": [
+            "📶Team": [
                 st.Page(
                     llm_task_page,
                     title="deepresearcher",

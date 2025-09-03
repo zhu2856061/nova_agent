@@ -39,27 +39,16 @@ def handle_event(trace_id, event):
         kind = event.get("event")
         data = event.get("data")
         name = event.get("name")
-        metadata = event.get("metadata")
-        node = (
-            ""
-            if (metadata.get("checkpoint_ns") is None)  # type: ignore
-            else metadata.get("checkpoint_ns").split(":")[0]  # type: ignore
-        )
-        langgraph_node = (
-            ""
-            if (metadata.get("langgraph_node") is None)
-            else str(metadata["langgraph_node"])
-        )
-        langgraph_step = (
-            ""
-            if (metadata.get("langgraph_step") is None)  # type: ignore
-            else str(metadata["langgraph_step"])  # type: ignore
-        )
+        metadata = event.get("metadata", {})
+        parent_ids = event.get("parent_ids", [])
 
-        run_id = "" if (event.get("run_id") is None) else str(event["run_id"])
+        checkpoint_ns = str(metadata.get("checkpoint_ns", ""))
+        langgraph_node = str(metadata.get("langgraph_node", ""))
+        langgraph_step = str(metadata.get("langgraph_step", ""))
+        run_id = str(event.get("run_id", ""))
 
         if kind == "on_chain_start":
-            _name = langgraph_node + " -> " + name
+            _name = langgraph_node + "|" + name
             # 工具内部执行过程不再展示
             if "RunnableSequence" in _name and "tool" in _name:
                 return None
@@ -70,6 +59,8 @@ def handle_event(trace_id, event):
                     "node_name": _name,
                     "step": langgraph_step,
                     "run_id": run_id,
+                    "checkpoint_ns": checkpoint_ns,
+                    "parent_ids": parent_ids,
                     "trace_id": trace_id,
                 },
             }
@@ -77,7 +68,7 @@ def handle_event(trace_id, event):
             return ydata
 
         elif kind == "on_chain_end":
-            _name = langgraph_node + " -> " + name
+            _name = langgraph_node + "|" + name
             # 工具内部执行过程不再展示
             if "RunnableSequence" in _name and "tool" in _name:
                 return None
@@ -88,12 +79,14 @@ def handle_event(trace_id, event):
                     "node_name": _name,
                     "step": langgraph_step,
                     "run_id": run_id,
+                    "checkpoint_ns": checkpoint_ns,
+                    "parent_ids": parent_ids,
                     "trace_id": trace_id,
                 },
             }
 
         elif kind == "on_chat_model_start":
-            _name = langgraph_node + " -> " + name
+            _name = langgraph_node + "|" + name
             # 工具内部执行过程不再展示
             if "ChatLiteLLMRouter" in name and "tool" in _name:
                 return None
@@ -104,12 +97,14 @@ def handle_event(trace_id, event):
                     "node_name": _name,
                     "step": langgraph_step,
                     "run_id": run_id,
+                    "checkpoint_ns": checkpoint_ns,
+                    "parent_ids": parent_ids,
                     "trace_id": trace_id,
                 },
             }
 
         elif kind == "on_chat_model_end":
-            _name = langgraph_node + " -> " + name
+            _name = langgraph_node + "|" + name
             # 工具内部执行过程不再展示
             if "ChatLiteLLMRouter" in _name and "tool" in _name:
                 return None
@@ -120,6 +115,8 @@ def handle_event(trace_id, event):
                     "node_name": _name,
                     "step": langgraph_step,
                     "run_id": run_id,
+                    "checkpoint_ns": checkpoint_ns,
+                    "parent_ids": parent_ids,
                     "trace_id": trace_id,
                     "output": {
                         "content": data["output"].content,
@@ -132,7 +129,7 @@ def handle_event(trace_id, event):
             }
 
         elif kind == "on_tool_start":
-            _name = langgraph_node + " -> " + name
+            _name = langgraph_node + "|" + name
 
             ydata = {
                 "event": "on_tool_start",
@@ -140,13 +137,15 @@ def handle_event(trace_id, event):
                     "node_name": _name,
                     "step": langgraph_step,
                     "run_id": run_id,
+                    "checkpoint_ns": checkpoint_ns,
+                    "parent_ids": parent_ids,
                     "trace_id": trace_id,
                     "input": data.get("input"),
                 },
             }
 
         elif kind == "on_tool_end":
-            _name = langgraph_node + " -> " + name
+            _name = langgraph_node + "|" + name
 
             ydata = {
                 "event": "on_tool_end",
@@ -154,13 +153,15 @@ def handle_event(trace_id, event):
                     "node_name": _name,
                     "step": langgraph_step,
                     "run_id": run_id,
+                    "checkpoint_ns": checkpoint_ns,
+                    "parent_ids": parent_ids,
                     "trace_id": trace_id,
                     "output": data["output"] if data.get("output") else "",
                 },
             }
 
         elif kind == "on_chat_model_stream":
-            _name = langgraph_node + " -> " + name
+            _name = langgraph_node + "|" + name
             # 工具内部执行过程不再展示
             if "ChatLiteLLMRouter" in _name and "tool" in _name:
                 return None
@@ -176,6 +177,8 @@ def handle_event(trace_id, event):
                         "node_name": _name,
                         "step": langgraph_step,
                         "run_id": run_id,
+                        "checkpoint_ns": checkpoint_ns,
+                        "parent_ids": parent_ids,
                         "trace_id": trace_id,
                         "output": {
                             "message_id": data["chunk"].id,
@@ -193,6 +196,8 @@ def handle_event(trace_id, event):
                         "node_name": _name,
                         "step": langgraph_step,
                         "run_id": run_id,
+                        "checkpoint_ns": checkpoint_ns,
+                        "parent_ids": parent_ids,
                         "trace_id": trace_id,
                         "output": {"message_id": data["chunk"].id, "content": content},
                     },

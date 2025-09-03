@@ -29,7 +29,7 @@ async def stream_task_client():
             "messages": [
                 {
                     "role": "user",
-                    "content": "请查询网络上的信息，深圳的最近7天内的科技领域经济新闻",
+                    "content": "请查询网络上的信息，深圳的最近3天内的科技领域经济新闻",
                 },
             ],
         },
