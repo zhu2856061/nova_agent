@@ -1,3 +1,32 @@
+## 项目运行
+
+### 项目环境
+python 3.12
+
+安装uv库
+```shell
+pip install nv
+```
+
+根目录下执行
+```shell
+uv sync
+```
+
+### 启动服务
+进入scripts目录下执行
+``` shell
+uv run python run_server.py
+```
+
+### 启动前端界面
+进入web-ui目录下执行
+``` shell
+uv run streamlit run st_main.py
+```
+
+
+## 项目进度
 
 🚀[2025-08-01] 完成LLM部分
 1 异步请求LLM - async_llm.py

@@ -1,0 +1,168 @@
+# -*- coding: utf-8 -*-
+# @Time   : 2025/08/12 10:24
+# @Author : zip
+# @Moto   : Knowledge comes from decomposition
+import asyncio
+import logging
+from dataclasses import dataclass, field
+from typing import Annotated, Literal, cast
+
+from langchain_core.messages import AnyMessage, SystemMessage
+from langgraph.graph import START, StateGraph, add_messages
+from langgraph.runtime import Runtime
+from langgraph.store.base import BaseStore
+from langgraph.types import Command
+
+from nova.core.llms import get_llm_by_type
+from nova.core.prompts.menorizer import apply_system_prompt_template
+from nova.core.tools import upsert_memory
+from nova.core.utils import (
+    get_today_str,
+    set_color,
+)
+
+# ######################################################################################
+# 配置
+logger = logging.getLogger(__name__)
+
+
+# ######################################################################################
+# 全局变量
+@dataclass(kw_only=True)
+class MemoryState:
+    err_message: str = field(
+        default="",
+        metadata={"description": "The error message to use for the agent."},
+    )
+    messages: Annotated[list[AnyMessage], add_messages] = field(
+        default=[], metadata={"description": "The messages to use for the agent."}
+    )
+
+
+@dataclass(kw_only=True)
+class Context:
+    trace_id: str = field(
+        default="default",
+        metadata={"description": "The trace_id to use for the agent."},
+    )
+
+    user_id: str = "default"
+    model: str = field(
+        default="basic",
+        metadata={"description": "The name of llm to use for the agent. "},
+    )
+
+
+# ######################################################################################
+# 函数
+
+
+# 精炼结果
+async def call_model(
+    state: MemoryState, runtime: Runtime[Context]
+) -> Command[Literal["__end__", "store_memory"]]:
+    try:
+        # 变量
+        _trace_id = runtime.context.trace_id
+        _user_id = runtime.context.user_id
+        _model_name = runtime.context.model
+        _messages = state.messages
+
+        memories = await cast(BaseStore, runtime.store).asearch(
+            ("memories", _user_id),
+            query=str([m.content for m in state.messages[-3:]]),
+            limit=10,
+        )
+
+        # 提示词
+        def _assemble_prompt(messages):
+            # Retrieve the most recent memories for context
+
+            # Format memories for inclusion in the prompt
+            formatted = "\n".join(
+                f"[{mem.key}]: {mem.value} (similarity: {mem.score})"
+                for mem in memories
+            )
+
+            SystemMessage(
+                content=apply_system_prompt_template(
+                    "call_model_system",
+                    {"user_info": formatted, "date": get_today_str()},
+                )
+            )
+
+            return [SystemMessage, *messages]
+
+        # LLM
+        def _get_llm():
+            return get_llm_by_type(_model_name)
+
+        _tmp_messages = _assemble_prompt(_messages)
+
+        msg = await _get_llm().bind_tools([upsert_memory]).ainvoke(_tmp_messages)
+
+        if getattr(msg, "tool_calls", None):
+            return Command(
+                goto="store_memory",
+                update={
+                    "messages": [msg],
+                },
+            )
+        return Command(
+            goto="__end__",
+            update={
+                "messages": [msg],
+            },
+        )
+
+    except Exception as e:
+        logger.error(
+            set_color(
+                f"trace_id={_trace_id} | node=researcher_tools | error={e}", "red"
+            )
+        )
+        return Command(
+            goto="__end__",
+            update={
+                "err_message": f"trace_id={_trace_id} | node=researcher_tools | error={e}"
+            },
+        )
+
+
+async def store_memory(
+    state: MemoryState, runtime: Runtime[Context]
+) -> Command[Literal["call_model"]]:
+    # Extract tool calls from the last message
+    tool_calls = getattr(state.messages[-1], "tool_calls", [])
+
+    # Concurrently execute all upsert_memory calls
+    saved_memories = await asyncio.gather(
+        *(
+            upsert_memory(
+                **tc["args"],
+                user_id=runtime.context.user_id,
+                store=cast(BaseStore, runtime.store),
+            )
+            for tc in tool_calls
+        )
+    )
+
+    # Format the results of memory storage operations
+    # This provides confirmation to the model that the actions it took were completed
+    results = [
+        {
+            "role": "tool",
+            "content": mem,
+            "tool_call_id": tc["id"],
+        }
+        for tc, mem in zip(tool_calls, saved_memories)
+    ]
+    return Command(goto="call_model", update={"messages": results})
+
+
+# researcher subgraph
+_agent = StateGraph(MemoryState, context_schema=Context)
+_agent.add_node("call_model", call_model)
+_agent.add_node("store_memory", store_memory)
+_agent.add_edge(START, "call_model")
+memorizer_agent = _agent.compile()
