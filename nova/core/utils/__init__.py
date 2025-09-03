@@ -1,6 +1,7 @@
 from .common import (
     get_notes_from_tool_calls,
     get_today_str,
+    handle_event,
     override_reducer,
     remove_up_to_last_ai_message,
     set_color,
@@ -20,4 +21,5 @@ __all__ = [
     "get_notes_from_tool_calls",
     "override_reducer",
     "remove_up_to_last_ai_message",
+    "handle_event",
 ]
