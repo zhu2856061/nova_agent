@@ -11,7 +11,7 @@ async def upsert_memory(
     content: str,
     context: str,
     *,
-    memory_id: Optional[uuid.UUID] = None,
+    memory_id: Optional[str] = None,
     # Hide these arguments from the model.
     user_id: Annotated[str, InjectedToolArg],
     store: Annotated[BaseStore, InjectedToolArg],
@@ -30,10 +30,12 @@ async def upsert_memory(
         memory_id: ONLY PROVIDE IF UPDATING AN EXISTING MEMORY.
         The memory to overwrite.
     """
+
     mem_id = memory_id or uuid.uuid4()
     await store.aput(
         ("memories", user_id),
         key=str(mem_id),
         value={"content": content, "context": context},
     )
+
     return f"Stored memory {mem_id}"

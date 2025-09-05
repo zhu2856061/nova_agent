@@ -3,6 +3,7 @@ SYSTEM:
   WORKERS: 2
   TIMEOUT: 1800
 
+  log_dir: "./logs"
   env_path: "./env"
   task_dir: "./tasks"
   cache_dir: "./cache"

@@ -3,7 +3,6 @@
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
 
-import os
 from typing import cast
 
 from langchain.globals import set_llm_cache
@@ -21,7 +20,7 @@ from langchain_litellm import ChatLiteLLM, ChatLiteLLMRouter
 from litellm import Router  # type: ignore
 
 from nova.core import CONF
-from nova.core.llms.fix_llm_cache import SQLiteCacheFixed
+from nova.core.memory import SQLITECACHE
 
 # ######################################################################################
 # 配置
@@ -41,12 +40,7 @@ _litellm_router = Router(model_list=LLM_CONFIG)
 # ######################################################################################
 # 其他
 # 设置 SQLite 缓存，指定数据库文件名
-os.makedirs(SYSTEM_CONFIG["cache_dir"], exist_ok=True)
-set_llm_cache(
-    SQLiteCacheFixed(
-        database_path=os.path.join(SYSTEM_CONFIG["cache_dir"], "llm_cache.db")
-    )
-)
+set_llm_cache(SQLITECACHE)
 
 
 # ######################################################################################

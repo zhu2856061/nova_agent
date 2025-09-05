@@ -1,5 +1,4 @@
-call_model_system_prompt = """You are a helpful and friendly chatbot. Get to know the user! \
-Ask questions! Be spontaneous! 
+call_model_system_prompt = """You are a helpful and friendly chatbot. Get to know the user! Ask questions! Be spontaneous! 
 <memories>
 {user_info}
 </memories>

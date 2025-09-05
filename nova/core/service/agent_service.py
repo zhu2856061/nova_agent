@@ -101,7 +101,7 @@ async def stream_researcher_service(request: AgentRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@agent_router.post("/researcher", response_model=AgentResponse)
+@agent_router.post("/memorizer", response_model=AgentResponse)
 async def memorizer_service(request: AgentRequest):
     """LLM Server"""
     if not request:
@@ -122,7 +122,7 @@ async def memorizer_service(request: AgentRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@agent_router.post("/stream_researcher")
+@agent_router.post("/stream_memorizer")
 async def stream_memorizer_service(request: AgentRequest):
     """LLM Server"""
     if not request:

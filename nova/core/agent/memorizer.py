@@ -14,6 +14,7 @@ from langgraph.store.base import BaseStore
 from langgraph.types import Command
 
 from nova.core.llms import get_llm_by_type
+from nova.core.memory import SQLITESTORE
 from nova.core.prompts.menorizer import apply_system_prompt_template
 from nova.core.tools import upsert_memory
 from nova.core.utils import (
@@ -21,9 +22,9 @@ from nova.core.utils import (
     set_color,
 )
 
+logger = logging.getLogger(__name__)
 # ######################################################################################
 # 配置
-logger = logging.getLogger(__name__)
 
 
 # ######################################################################################
@@ -34,9 +35,7 @@ class MemoryState:
         default="",
         metadata={"description": "The error message to use for the agent."},
     )
-    messages: Annotated[list[AnyMessage], add_messages] = field(
-        default=[], metadata={"description": "The messages to use for the agent."}
-    )
+    memorizer_messages: Annotated[list[AnyMessage], add_messages]
 
 
 @dataclass(kw_only=True)
@@ -47,7 +46,7 @@ class Context:
     )
 
     user_id: str = "default"
-    model: str = field(
+    memorizer_model: str = field(
         default="basic",
         metadata={"description": "The name of llm to use for the agent. "},
     )
@@ -57,7 +56,6 @@ class Context:
 # 函数
 
 
-# 精炼结果
 async def call_model(
     state: MemoryState, runtime: Runtime[Context]
 ) -> Command[Literal["__end__", "store_memory"]]:
@@ -65,14 +63,15 @@ async def call_model(
         # 变量
         _trace_id = runtime.context.trace_id
         _user_id = runtime.context.user_id
-        _model_name = runtime.context.model
-        _messages = state.messages
+        _model_name = runtime.context.memorizer_model
+        _messages = state.memorizer_messages
 
         memories = await cast(BaseStore, runtime.store).asearch(
             ("memories", _user_id),
-            query=str([m.content for m in state.messages[-3:]]),
+            query=str([m.content for m in _messages[-3:]]),
             limit=10,
         )
+        print("===>", memories)
 
         # 提示词
         def _assemble_prompt(messages):
@@ -84,14 +83,16 @@ async def call_model(
                 for mem in memories
             )
 
-            SystemMessage(
-                content=apply_system_prompt_template(
-                    "call_model_system",
-                    {"user_info": formatted, "date": get_today_str()},
+            messages = [
+                SystemMessage(
+                    content=apply_system_prompt_template(
+                        "call_model_system",
+                        {"user_info": formatted, "date": get_today_str()},
+                    )
                 )
-            )
+            ] + messages
 
-            return [SystemMessage, *messages]
+            return messages
 
         # LLM
         def _get_llm():
@@ -101,25 +102,20 @@ async def call_model(
 
         msg = await _get_llm().bind_tools([upsert_memory]).ainvoke(_tmp_messages)
 
+        goto = "__end__"
         if getattr(msg, "tool_calls", None):
-            return Command(
-                goto="store_memory",
-                update={
-                    "messages": [msg],
-                },
-            )
+            goto = "store_memory"
+
         return Command(
-            goto="__end__",
+            goto=goto,
             update={
-                "messages": [msg],
+                "memorizer_messages": [msg],
             },
         )
 
     except Exception as e:
         logger.error(
-            set_color(
-                f"trace_id={_trace_id} | node=researcher_tools | error={e}", "red"
-            )
+            set_color(f"trace_id={_trace_id} | node=call_model | error={e}", "red")
         )
         return Command(
             goto="__end__",
@@ -132,20 +128,30 @@ async def call_model(
 async def store_memory(
     state: MemoryState, runtime: Runtime[Context]
 ) -> Command[Literal["call_model"]]:
-    # Extract tool calls from the last message
-    tool_calls = getattr(state.messages[-1], "tool_calls", [])
+    _trace_id = runtime.context.trace_id
+    _user_id = runtime.context.user_id
 
+    # Extract tool calls from the last message
+    tool_calls = getattr(state.memorizer_messages[-1], "tool_calls", [])
+    print("=1=>", tool_calls)
     # Concurrently execute all upsert_memory calls
-    saved_memories = await asyncio.gather(
-        *(
+    _upsert_memorys = []
+    for tc in tool_calls:
+        if "user_id" in tc["args"]:
+            tc["args"].pop("user_id")
+
+        if "store" in tc["args"]:
+            tc["args"].pop("store")
+
+        _upsert_memorys.append(
             upsert_memory(
                 **tc["args"],
-                user_id=runtime.context.user_id,
+                user_id=_user_id,
                 store=cast(BaseStore, runtime.store),
             )
-            for tc in tool_calls
         )
-    )
+
+    saved_memories = await asyncio.gather(*_upsert_memorys)
 
     # Format the results of memory storage operations
     # This provides confirmation to the model that the actions it took were completed
@@ -157,7 +163,7 @@ async def store_memory(
         }
         for tc, mem in zip(tool_calls, saved_memories)
     ]
-    return Command(goto="call_model", update={"messages": results})
+    return Command(goto="call_model", update={"memorizer_messages": results})
 
 
 # researcher subgraph
@@ -165,4 +171,6 @@ _agent = StateGraph(MemoryState, context_schema=Context)
 _agent.add_node("call_model", call_model)
 _agent.add_node("store_memory", store_memory)
 _agent.add_edge(START, "call_model")
-memorizer_agent = _agent.compile()
+
+
+memorizer_agent = _agent.compile(store=SQLITESTORE)

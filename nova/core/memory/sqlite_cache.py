@@ -1,10 +1,8 @@
-"""
-source : https://api.python.langchain.com/en/latest/_modules/langchain_community/cache.html#InMemoryCache
-
-This workaround is to solve this: https://github.com/langchain-ai/langchain/issues/22389
-Create a caching class that looks like it's just in memory but actually saves to sql
-
-"""
+# -*- coding: utf-8 -*-
+# @Time   : 2025/09/04 10:24
+# @Author : zip
+# @Moto   : Knowledge comes from decomposition
+from __future__ import annotations
 
 import sqlite3
 import zlib
@@ -14,6 +12,13 @@ from typing import Any, Optional, Union
 
 import dill
 from langchain_core.caches import RETURN_VAL_TYPE, BaseCache
+
+"""
+source : https://api.python.langchain.com/en/latest/_modules/langchain_community/cache.html#InMemoryCache
+
+This workaround is to solve this: https://github.com/langchain-ai/langchain/issues/22389
+Create a caching class that looks like it's just in memory but actually saves to sql
+"""
 
 
 class SQLiteCacheFixed(BaseCache):
@@ -28,7 +33,11 @@ class SQLiteCacheFixed(BaseCache):
         if self.database_path.exists():
             self.clear()
         else:
-            conn = sqlite3.connect(self.database_path)
+            conn = sqlite3.connect(
+                self.database_path,
+                check_same_thread=False,  # 允许跨线程访问（需注意线程安全）
+                detect_types=sqlite3.PARSE_DECLTYPES | sqlite3.PARSE_COLNAMES,
+            )
             cursor = conn.cursor()
             with self.lock:
                 cursor.execute("""CREATE TABLE IF NOT EXISTS saved_llm_calls

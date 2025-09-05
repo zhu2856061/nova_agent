@@ -9,7 +9,7 @@ sys.path.append("..")
 import os
 
 os.environ["CONFIG_PATH"] = "../config.yaml"
-from nova.core.task.deepresearcher import graph
+from nova.core.task.deepresearcher import deepresearcher
 
 inputs = {
     "messages": [
@@ -36,7 +36,7 @@ context = {
 
 
 async def async_generate_response():
-    tmp = await graph.ainvoke(inputs, context=context)  # type: ignore
+    tmp = await deepresearcher.ainvoke(inputs, context=context)  # type: ignore
     print("Assistant:\n", tmp)
 
 
