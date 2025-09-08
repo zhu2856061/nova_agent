@@ -5,7 +5,7 @@
 import asyncio
 import logging
 import operator
-from typing import Annotated, Literal, cast
+from typing import Annotated, Literal
 
 from langchain_core.messages import (
     HumanMessage,

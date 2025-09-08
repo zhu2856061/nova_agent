@@ -287,7 +287,7 @@ def display_agent_history():
                 st.markdown(msg["content"], unsafe_allow_html=False)
 
 
-def llm_task_page():
+def llm_deepresearcher_page():
     """主页面函数，实现思考过程流式展示后自动折叠"""
     st.set_page_config(
         page_title="Nova 智能助手",

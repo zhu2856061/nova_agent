@@ -36,11 +36,10 @@ class SQLiteStore(BaseStore):
     """
     SQLite-backed store with persistent key-value storage and optional vector search.
 
-    核心改进：
-    1. 使用SQLite数据库替代内存字典，实现数据持久化
-    2. 设计数据表存储键值数据、向量数据及元信息
+    核心：
+    1. 使用SQLite数据库实现数据持久化
+    2. 设计数据表存储键值数据
     3. 保持与InMemoryStore完全兼容的API接口
-    4. 优化向量搜索性能（基于SQLite索引+内存计算）
     """
 
     def __init__(

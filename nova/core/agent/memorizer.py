@@ -45,7 +45,7 @@ class Context:
         metadata={"description": "The trace_id to use for the agent."},
     )
 
-    user_id: str = "default"
+    user_id: str = ""
     memorizer_model: str = field(
         default="basic",
         metadata={"description": "The name of llm to use for the agent. "},
@@ -66,11 +66,19 @@ async def call_model(
         _model_name = runtime.context.memorizer_model
         _messages = state.memorizer_messages
 
+        if _user_id == "":
+            return Command(
+                goto="__end__",
+                update={
+                    "memorizer_messages": ["[Error]: user_id is empty"],
+                },
+            )
         memories = await cast(BaseStore, runtime.store).asearch(
             ("memories", _user_id),
             query=str([m.content for m in _messages[-3:]]),
             limit=10,
         )
+
         print("===>", memories)
 
         # 提示词
@@ -78,10 +86,7 @@ async def call_model(
             # Retrieve the most recent memories for context
 
             # Format memories for inclusion in the prompt
-            formatted = "\n".join(
-                f"[{mem.key}]: {mem.value} (similarity: {mem.score})"
-                for mem in memories
-            )
+            formatted = "\n".join(f"[{mem.key}]: {mem.value}" for mem in memories)
 
             messages = [
                 SystemMessage(
@@ -133,7 +138,6 @@ async def store_memory(
 
     # Extract tool calls from the last message
     tool_calls = getattr(state.memorizer_messages[-1], "tool_calls", [])
-    print("=1=>", tool_calls)
     # Concurrently execute all upsert_memory calls
     _upsert_memorys = []
     for tc in tool_calls:

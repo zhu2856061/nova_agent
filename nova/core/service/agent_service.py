@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from nova.core.agent.memorizer import memorizer_agent
 from nova.core.agent.researcher import researcher_agent
 from nova.core.utils import handle_event
 
@@ -111,8 +112,8 @@ async def memorizer_service(request: AgentRequest):
         state = request.state
         context = {**request.context, "trace_id": request.trace_id}
 
-        result = await researcher_agent.ainvoke(state, context=context)  # type: ignore
-        content = result.get("compressed_research")  # type: ignore
+        result = await memorizer_agent.ainvoke(state, context=context)  # type: ignore
+        content = result.get("memorizer_messages")  # type: ignore
         return AgentResponse(
             code=0,
             messages={"role": "assistant", "content": content},  # type: ignore
@@ -136,7 +137,7 @@ async def stream_memorizer_service(request: AgentRequest):
             session = None
             try:
                 session = aiohttp.ClientSession()  # 创建会话
-                async for event in researcher_agent.astream_events(
+                async for event in memorizer_agent.astream_events(
                     inputs, context=context, version="v2"
                 ):
                     data = handle_event(trace_id, event)
