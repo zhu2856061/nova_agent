@@ -1,5 +1,5 @@
 from .format_result import markdown_to_html_tool
-from .memory_manager import upsert_memory
+from .memory_manager import upsert_memory_tool
 from .search_engine import crawl_tool, search_tool, serp_tool
 
 __all__ = [
@@ -7,5 +7,5 @@ __all__ = [
     "serp_tool",
     "search_tool",
     "markdown_to_html_tool",
-    "upsert_memory",
+    "upsert_memory_tool",
 ]

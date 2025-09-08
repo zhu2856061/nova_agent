@@ -32,7 +32,7 @@ inputs2 = {
         "memorizer_messages": [
             {
                 "role": "user",
-                "content": "what is my name?",
+                "content": "what is Bob like",
             },
         ],
     },

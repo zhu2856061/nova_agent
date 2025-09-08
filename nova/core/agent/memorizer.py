@@ -16,7 +16,7 @@ from langgraph.types import Command
 from nova.core.llms import get_llm_by_type
 from nova.core.memory import SQLITESTORE
 from nova.core.prompts.menorizer import apply_system_prompt_template
-from nova.core.tools import upsert_memory
+from nova.core.tools import upsert_memory_tool
 from nova.core.utils import (
     get_today_str,
     set_color,
@@ -54,11 +54,9 @@ class Context:
 
 # ######################################################################################
 # 函数
-
-
-async def call_model(
+async def memorizer(
     state: MemoryState, runtime: Runtime[Context]
-) -> Command[Literal["__end__", "store_memory"]]:
+) -> Command[Literal["__end__", "memorizer_tools"]]:
     try:
         # 变量
         _trace_id = runtime.context.trace_id
@@ -79,7 +77,7 @@ async def call_model(
             limit=10,
         )
 
-        print("===>", memories)
+        logger.info(f"{_user_id} history: {memories}")
 
         # 提示词
         def _assemble_prompt(messages):
@@ -105,11 +103,11 @@ async def call_model(
 
         _tmp_messages = _assemble_prompt(_messages)
 
-        msg = await _get_llm().bind_tools([upsert_memory]).ainvoke(_tmp_messages)
+        msg = await _get_llm().bind_tools([upsert_memory_tool]).ainvoke(_tmp_messages)
 
         goto = "__end__"
         if getattr(msg, "tool_calls", None):
-            goto = "store_memory"
+            goto = "memorizer_tools"
 
         return Command(
             goto=goto,
@@ -130,9 +128,16 @@ async def call_model(
         )
 
 
-async def store_memory(
+async def execute_tool_safely(tool, args):
+    try:
+        return await tool.arun(**args)
+    except Exception as e:
+        return f"Error executing tool: {str(e)}"
+
+
+async def memorizer_tools(
     state: MemoryState, runtime: Runtime[Context]
-) -> Command[Literal["call_model"]]:
+) -> Command[Literal["memorizer"]]:
     _trace_id = runtime.context.trace_id
     _user_id = runtime.context.user_id
 
@@ -141,17 +146,16 @@ async def store_memory(
     # Concurrently execute all upsert_memory calls
     _upsert_memorys = []
     for tc in tool_calls:
-        if "user_id" in tc["args"]:
-            tc["args"].pop("user_id")
-
-        if "store" in tc["args"]:
-            tc["args"].pop("store")
-
         _upsert_memorys.append(
-            upsert_memory(
-                **tc["args"],
-                user_id=_user_id,
-                store=cast(BaseStore, runtime.store),
+            execute_tool_safely(
+                upsert_memory_tool,
+                {
+                    **tc["args"],
+                    "trace_id": _trace_id,
+                    "memory_id": None,
+                    "user_id": _user_id,
+                    "store": cast(BaseStore, runtime.store),
+                },
             )
         )
 
@@ -167,14 +171,14 @@ async def store_memory(
         }
         for tc, mem in zip(tool_calls, saved_memories)
     ]
-    return Command(goto="call_model", update={"memorizer_messages": results})
+    return Command(goto="memorizer", update={"memorizer_messages": results})
 
 
 # researcher subgraph
 _agent = StateGraph(MemoryState, context_schema=Context)
-_agent.add_node("call_model", call_model)
-_agent.add_node("store_memory", store_memory)
-_agent.add_edge(START, "call_model")
+_agent.add_node("memorizer", memorizer)
+_agent.add_node("memorizer_tools", memorizer_tools)
+_agent.add_edge(START, "memorizer")
 
 
 memorizer_agent = _agent.compile(store=SQLITESTORE)
