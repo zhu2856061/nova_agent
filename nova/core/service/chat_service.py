@@ -80,6 +80,13 @@ async def stream_llm_server(request: LLMRequest):
                                 code=0, messages={"content": response.content}
                             )
                             yield llm_response.model_dump_json() + "\n"
+
+                        if response.additional_kwargs:
+                            llm_response = LLMResponse(
+                                code=0, messages=response.additional_kwargs
+                            )
+                            yield llm_response.model_dump_json() + "\n"
+
                 else:
                     async for response in model.astream(request.messages):
                         if response.content:

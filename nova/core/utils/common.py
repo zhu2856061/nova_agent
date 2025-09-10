@@ -49,9 +49,7 @@ def get_today_str() -> str:
 
 
 # 删除最近一个AI消息
-def remove_up_to_last_ai_message(
-    messages: list[MessageLikeRepresentation],
-) -> list[MessageLikeRepresentation]:
+def remove_up_to_last_ai_message(messages: list[MessageLikeRepresentation]):
     for i in range(len(messages) - 1, -1, -1):
         if isinstance(messages[i], AIMessage):
             return messages[:i]
@@ -84,6 +82,7 @@ def handle_event(trace_id, event):
         checkpoint_ns = str(metadata.get("checkpoint_ns", ""))
         langgraph_node = str(metadata.get("langgraph_node", ""))
         langgraph_step = str(metadata.get("langgraph_step", ""))
+
         run_id = str(event.get("run_id", ""))
 
         if kind == "on_chain_start":
@@ -123,6 +122,41 @@ def handle_event(trace_id, event):
                     "trace_id": trace_id,
                 },
             }
+            return ydata
+
+        elif kind == "on_tool_start":
+            _name = langgraph_node + "|" + name
+
+            ydata = {
+                "event": "on_tool_start",
+                "data": {
+                    "node_name": _name,
+                    "step": langgraph_step,
+                    "run_id": run_id,
+                    "checkpoint_ns": checkpoint_ns,
+                    "parent_ids": parent_ids,
+                    "trace_id": trace_id,
+                    "input": data.get("input"),
+                },
+            }
+            return ydata
+
+        elif kind == "on_tool_end":
+            _name = langgraph_node + "|" + name
+
+            ydata = {
+                "event": "on_tool_end",
+                "data": {
+                    "node_name": _name,
+                    "step": langgraph_step,
+                    "run_id": run_id,
+                    "checkpoint_ns": checkpoint_ns,
+                    "parent_ids": parent_ids,
+                    "trace_id": trace_id,
+                    "output": data["output"] if data.get("output") else "",
+                },
+            }
+            return ydata
 
         elif kind == "on_chat_model_start":
             _name = langgraph_node + "|" + name
@@ -141,6 +175,7 @@ def handle_event(trace_id, event):
                     "trace_id": trace_id,
                 },
             }
+            return ydata
 
         elif kind == "on_chat_model_end":
             _name = langgraph_node + "|" + name
@@ -166,38 +201,7 @@ def handle_event(trace_id, event):
                     },
                 },
             }
-
-        elif kind == "on_tool_start":
-            _name = langgraph_node + "|" + name
-
-            ydata = {
-                "event": "on_tool_start",
-                "data": {
-                    "node_name": _name,
-                    "step": langgraph_step,
-                    "run_id": run_id,
-                    "checkpoint_ns": checkpoint_ns,
-                    "parent_ids": parent_ids,
-                    "trace_id": trace_id,
-                    "input": data.get("input"),
-                },
-            }
-
-        elif kind == "on_tool_end":
-            _name = langgraph_node + "|" + name
-
-            ydata = {
-                "event": "on_tool_end",
-                "data": {
-                    "node_name": _name,
-                    "step": langgraph_step,
-                    "run_id": run_id,
-                    "checkpoint_ns": checkpoint_ns,
-                    "parent_ids": parent_ids,
-                    "trace_id": trace_id,
-                    "output": data["output"] if data.get("output") else "",
-                },
-            }
+            return ydata
 
         elif kind == "on_chat_model_stream":
             _name = langgraph_node + "|" + name
@@ -206,10 +210,13 @@ def handle_event(trace_id, event):
                 return None
 
             content = data["chunk"].content
-            if content is None or content == "":
-                if not data["chunk"].additional_kwargs.get("reasoning_content"):
-                    # Skip empty messages
-                    return None
+            reasoning_content = data["chunk"].additional_kwargs.get("reasoning_content")
+            # tool_calls = data["chunk"].additional_kwargs.get("tool_calls")
+
+            if reasoning_content:
+                """
+                {'chunk': AIMessageChunk(additional_kwargs={'reasoning_content':'Got'}, response_metadata={}, id='run--e09f0e5e-54d2-4c64-87cc-223168efe685')}
+                """
                 ydata = {
                     "event": "on_chat_model_stream",
                     "data": {
@@ -228,7 +235,10 @@ def handle_event(trace_id, event):
                     },
                 }
 
-            else:
+            elif content:
+                """
+                {'chunk': AIMessageChunk(content='Got', additional_kwargs={}, response_metadata={}, id='run--e09f0e5e-54d2-4c64-87cc-223168efe685')}
+                """
                 ydata = {
                     "event": "on_chat_model_stream",
                     "data": {
@@ -242,10 +252,38 @@ def handle_event(trace_id, event):
                     },
                 }
 
+            else:
+                return None
+
+            return ydata
+
+            # elif tool_calls:
+            #     """
+            #     {'chunk': AIMessageChunk(content='', additional_kwargs={'tool_calls': [ChatCompletionDeltaToolCall(id=None, function=Function(arguments=' introduced', name=None), type='function', index=0)]}, response_metadata={}, id='run--70339d03-adee-4632-b8e8-c9c97f10b164', invalid_tool_calls=[{'name': None, 'args': ' introduced', 'id': None, 'error': None, 'type': 'invalid_tool_call'}], tool_call_chunks=[{'name': None, 'args': ' introduced', 'id': None, 'index': 0, 'type': 'tool_call_chunk'}])}
+            #     """
+            #     if (
+            #         len(tool_calls) > 0
+            #         and tool_calls[0].function is not None
+            #         and tool_calls[0].function.arguments
+            #     ):
+            #         ydata = {
+            #             "event": "on_chat_model_stream",
+            #             "data": {
+            #                 "node_name": _name,
+            #                 "step": langgraph_step,
+            #                 "run_id": run_id,
+            #                 "checkpoint_ns": checkpoint_ns,
+            #                 "parent_ids": parent_ids,
+            #                 "trace_id": trace_id,
+            #                 "output": {
+            #                     "message_id": data["chunk"].id,
+            #                     "tool_calls": tool_calls[0].function.arguments,
+            #                 },
+            #             },
+            #         }
+
         else:
             return None
-
-        return ydata
 
     except Exception as e:
         logger.error(f"Error: {e}")

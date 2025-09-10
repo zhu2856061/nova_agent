@@ -50,8 +50,9 @@ uv run streamlit run st_main.py
 
 🚀[2025-09-08] 完成 memory 模块，并构建了memorize agent 验证成功
 
+🚀[2025-09-09] 解决流式输出bug
+
 [todo]
-- 对话形式中，流式输出bug需要解决
 - 新增2-3个agent, 具备独立功能
 
 

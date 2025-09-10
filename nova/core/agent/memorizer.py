@@ -130,7 +130,7 @@ async def memorizer(
 
 async def execute_tool_safely(tool, args):
     try:
-        return await tool.arun(**args)
+        return await tool._arun(**args)
     except Exception as e:
         return f"Error executing tool: {str(e)}"
 
