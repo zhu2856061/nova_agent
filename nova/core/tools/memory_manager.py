@@ -2,14 +2,18 @@
 # @Time   : 2025/08/19 10:24
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
-
 import asyncio
+import logging
 import uuid
-from typing import Annotated, Optional, Type
+from typing import Annotated, Optional, Type, cast
 
 from langchain_core.tools import BaseTool, InjectedToolArg
 from langgraph.store.base import BaseStore
 from pydantic import BaseModel, Field
+
+from nova.core.memory import SQLITESTORE
+
+logger = logging.getLogger(__name__)
 
 
 class UpsertMemoryToolInput(BaseModel):
@@ -30,22 +34,20 @@ class UpsertMemoryTool(BaseTool):
     description: str = "A tool for upserting memory into the store."
     name: str = "upsert_memory"
 
-    async def _arun(self, content, context, trace_id, memory_id, user_id, store):
+    async def _arun(self, content, context, trace_id, memory_id, user_id):
         mem_id = memory_id or uuid.uuid4()
 
-        await store.aput(
+        await cast(BaseStore, SQLITESTORE).aput(
             ("memories", user_id),
             key=trace_id + "|" + str(mem_id),
             value={"content": content, "context": context},
         )
-        print(f"Stored memory {mem_id}")
+        logger.info(f"Stored memory {mem_id}")
         return f"Stored memory {mem_id}"
 
-    def _run(self, content, context, trace_id, memory_id, user_id, store):
+    def _run(self, content, context, trace_id, memory_id, user_id):
         """Synchronous wrapper for the async crawl function."""
-        return asyncio.run(
-            self._arun(content, context, trace_id, memory_id, user_id, store)
-        )
+        return asyncio.run(self._arun(content, context, trace_id, memory_id, user_id))
 
 
 upsert_memory_tool = UpsertMemoryTool()

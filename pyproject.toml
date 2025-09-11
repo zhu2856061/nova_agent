@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = "==3.12.2"
 dependencies = [
+    "aiosqlite>=0.21.0",
     "colorlog>=6.9.0",
     "crawl4ai>=0.7.3",
     "dill>=0.4.0",
@@ -16,6 +17,7 @@ dependencies = [
     "langchain-google-genai>=2.1.9",
     "langchain-litellm>=0.2.2",
     "langgraph>=0.6.4",
+    "langgraph-cli[inmem]>=0.4.2",
     "langsmith>=0.4.10",
     "litellm>=1.74.12",
     "markdown>=3.8.2",

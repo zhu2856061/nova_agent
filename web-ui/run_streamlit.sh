@@ -1,0 +1,1 @@
+uv run streamlit run st_main.py

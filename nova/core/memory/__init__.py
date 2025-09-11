@@ -3,7 +3,7 @@ import os
 from nova.core import CONF
 
 from .sqlite_cache import SQLiteCacheFixed
-from .sqlite_memory import SQLiteStore
+from .sqlite_memory import SQLiteStoreFixed
 
 ######################################################################################
 os.makedirs(CONF["SYSTEM"]["cache_dir"], exist_ok=True)
@@ -11,6 +11,8 @@ os.makedirs(CONF["SYSTEM"]["cache_dir"], exist_ok=True)
 SQLITECACHE = SQLiteCacheFixed(
     os.path.join(CONF["SYSTEM"]["cache_dir"], "llm_cache.db"),
 )
-SQLITESTORE = SQLiteStore(os.path.join(CONF["SYSTEM"]["cache_dir"], "memory_store.db"))
+SQLITESTORE = SQLiteStoreFixed(
+    os.path.join(CONF["SYSTEM"]["cache_dir"], "memory_store.db")
+)
 
 __all__ = ["SQLITECACHE", "SQLITESTORE"]

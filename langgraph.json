@@ -1,0 +1,25 @@
+{
+  "dependencies": [
+    ".."
+  ],
+  "graphs": {
+    "memorizer_graph": "../nova/core/agent/memorizer.py:memorizer_agent",
+    "researcher_graph": "../nova/core/agent/researcher.py:researcher_agent",
+    "deepresearcher_graph": "../nova/core/task/deepresearcher.py:deepresearcher"
+  },
+  "store": {
+    "ttl": {
+      "refresh_on_read": true,
+      "sweep_interval_minutes": 60,
+      "default_ttl": 10080
+    }
+  },
+  "checkpointer": {
+    "ttl": {
+      "strategy": "delete",
+      "sweep_interval_minutes": 10,
+      "default_ttl": 43200
+    }
+  },
+  "env": ".env"
+}

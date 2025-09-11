@@ -68,13 +68,12 @@ class ResearchComplete(BaseModel):
 async def researcher(
     state: ResearcherState, runtime: Runtime[Context]
 ) -> Command[Literal["researcher_tools", "__end__"]]:
+    # 变量
+    _trace_id = runtime.context.get("trace_id", "default")
+    _model_name = runtime.context.get("researcher_model", "basic")
+    _messages = state.get("researcher_messages")
+    _tool_call_iterations = state.get("tool_call_iterations", 0)
     try:
-        # 变量
-        _trace_id = runtime.context.get("trace_id", "default")
-        _model_name = runtime.context.get("researcher_model", "basic")
-        _messages = state.get("researcher_messages")
-        _tool_call_iterations = state.get("tool_call_iterations", 0)
-
         # 提示词
         def _assemble_prompt(messages):
             messages = [

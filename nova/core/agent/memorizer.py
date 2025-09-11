@@ -71,7 +71,7 @@ async def memorizer(
                     "memorizer_messages": ["[Error]: user_id is empty"],
                 },
             )
-        memories = await cast(BaseStore, runtime.store).asearch(
+        memories = await cast(BaseStore, SQLITESTORE).asearch(
             ("memories", _user_id),
             query=str([m.content for m in _messages[-3:]]),
             limit=10,
@@ -154,7 +154,6 @@ async def memorizer_tools(
                     "trace_id": _trace_id,
                     "memory_id": None,
                     "user_id": _user_id,
-                    "store": cast(BaseStore, runtime.store),
                 },
             )
         )
@@ -181,4 +180,4 @@ _agent.add_node("memorizer_tools", memorizer_tools)
 _agent.add_edge(START, "memorizer")
 
 
-memorizer_agent = _agent.compile(store=SQLITESTORE)
+memorizer_agent = _agent.compile()

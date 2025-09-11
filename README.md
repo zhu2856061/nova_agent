@@ -18,14 +18,25 @@ uv sync
 ### 启动服务
 进入scripts目录下执行
 ``` shell
-uv run python run_server.py
+sh run_nova_server_async.sh # 异步
+
+or 
+
+sh run_nova_server_sync.sh # 同步
 ```
 
 ### 启动前端界面
 进入web-ui目录下执行
 ``` shell
-uv run streamlit run st_main.py
+sh run_streamlit.sh
 ```
+
+### [可选项] 可以采用langgraph 自带的langgraph-cli启动一个本地 LangGraph Studio 实例
+根目录下执行
+```shell
+sh run_langgraph_cli.sh
+```
+
 
 
 ## 项目进度
@@ -52,7 +63,8 @@ uv run streamlit run st_main.py
 
 🚀[2025-09-09] 解决流式输出bug
 
-[todo]
-- 新增2-3个agent, 具备独立功能
+🚀[2025-09-09] 加入langgraph dev 模式，方便进行studio的测试Agent,同时将memory相关的全部改成异步处理
 
+[todo]
+- 新增代码分析/解决/生成 agent
 

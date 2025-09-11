@@ -4,8 +4,8 @@ from component import (
     llm_deepresearcher_page,
     llm_momorizer_page,
     llm_researcher_page,
+    get_img_base64,
 )
-from utils import get_img_base64
 
 if __name__ == "__main__":
     st.set_page_config(

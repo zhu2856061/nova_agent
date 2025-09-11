@@ -6,6 +6,7 @@
 from typing import cast
 
 from langchain.globals import set_llm_cache
+from langchain_community.cache import InMemoryCache
 from langchain_core.language_models import BaseChatModel
 from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_tools import (

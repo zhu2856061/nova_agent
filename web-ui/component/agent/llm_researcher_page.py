@@ -1,7 +1,6 @@
 import json
 import logging
 import uuid
-from collections import deque
 
 import requests
 import streamlit as st
@@ -19,37 +18,6 @@ AVATAR_PATH = "chat.png"
 MAX_TOTAL_CHARS = 150000  # 总字符保护限制
 
 logger = logging.getLogger(__name__)
-
-
-class Stack:
-    def __init__(self):
-        self.items = deque()  # 使用双端队列实现栈
-
-    def push(self, item):
-        """入栈操作"""
-        self.items.append(item)
-
-    def pop(self):
-        """出栈操作"""
-        if not self.is_empty():
-            return self.items.pop()
-        else:
-            raise IndexError("栈为空，无法出栈")
-
-    def peek(self):
-        """查看栈顶元素"""
-        if not self.is_empty():
-            return self.items[-1]
-        else:
-            raise IndexError("栈为空，无法查看栈顶元素")
-
-    def is_empty(self):
-        """判断栈是否为空"""
-        return len(self.items) == 0
-
-    def size(self):
-        """返回栈的大小"""
-        return len(self.items)
 
 
 def get_agent_response(llm_dtype: str, messages: list, max_react_tool_calls: int):

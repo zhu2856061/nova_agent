@@ -10,7 +10,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from nova.core.service.agent_service import agent_router
 from nova.core.service.chat_service import chat_router
-from nova.core.service.front_service import create_frontend_router
 from nova.core.service.task_service import task_router
 
 logger = logging.getLogger(__name__)
@@ -56,20 +55,17 @@ app.include_router(agent_router)
 app.include_router(task_router)
 
 # Mount the frontend under /app to not conflict with the LangGraph API routes
-app.mount("/app", create_frontend_router(), name="frontend")
+# app.mount("/app", create_frontend_router(), name="frontend")
 
 
-# if __name__ == "__main__":
-#     import os
+if __name__ == "__main__":
+    import uvicorn
 
-#     import uvicorn
-
-#     os.environ["CONFIG_PATH"] = "../config.yaml"
-#     logger.info("🚀Starting Nova Agent API Server🚀")
-#     uvicorn.run(
-#         "main:app",
-#         host="0.0.0.0",
-#         port=2021,
-#         reload=False,
-#         log_level="info",
-#     )
+    logger.info("🚀Starting Nova Agent API Server🚀")
+    uvicorn.run(
+        "main:app",
+        host="0.0.0.0",
+        port=2021,
+        reload=False,
+        log_level="info",
+    )
