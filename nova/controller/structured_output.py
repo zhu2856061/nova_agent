@@ -5,8 +5,6 @@
 
 from typing import cast
 
-from langchain.globals import set_llm_cache
-from langchain_community.cache import InMemoryCache
 from langchain_core.language_models import BaseChatModel
 from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_tools import (
@@ -17,41 +15,6 @@ from langchain_core.utils.function_calling import (
     convert_to_openai_tool,
 )
 from langchain_core.utils.pydantic import TypeBaseModel, is_basemodel_subclass
-from langchain_litellm import ChatLiteLLM, ChatLiteLLMRouter
-from litellm import Router  # type: ignore
-
-from nova.core import CONF
-from nova.core.memory import SQLITECACHE
-
-# ######################################################################################
-# 配置
-LLM_CONFIG = CONF["LLM"]
-SYSTEM_CONFIG = CONF["SYSTEM"]
-
-# ######################################################################################
-# 全局变量
-
-
-# ######################################################################################
-# 本地变量
-_llm_instance_cache: dict[str, ChatLiteLLM] = {}
-_litellm_router = Router(model_list=LLM_CONFIG)
-
-
-# ######################################################################################
-# 其他
-# 设置 SQLite 缓存，指定数据库文件名
-set_llm_cache(SQLITECACHE)
-
-
-# ######################################################################################
-# 函数
-def get_llm_by_type(llm_type: str):
-    if llm_type in _llm_instance_cache:
-        return _llm_instance_cache[llm_type]
-    llm = ChatLiteLLMRouter(router=_litellm_router, model_name=llm_type)
-    _llm_instance_cache[llm_type] = llm
-    return llm
 
 
 def with_structured_output(llm, schema):

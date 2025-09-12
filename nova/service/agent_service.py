@@ -10,9 +10,9 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from nova.core.agent.memorizer import memorizer_agent
-from nova.core.agent.researcher import researcher_agent
-from nova.core.utils import handle_event
+from nova.agent.memorizer import memorizer_agent
+from nova.agent.researcher import researcher_agent
+from nova.utils import handle_event
 
 logger = logging.getLogger(__name__)
 

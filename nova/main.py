@@ -8,9 +8,9 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from nova.core.service.agent_service import agent_router
-from nova.core.service.chat_service import chat_router
-from nova.core.service.task_service import task_router
+from nova.service.agent_service import agent_router
+from nova.service.chat_service import chat_router
+from nova.service.task_service import task_router
 
 logger = logging.getLogger(__name__)
 

@@ -21,11 +21,11 @@ from langgraph.types import Command
 from pydantic import BaseModel, Field
 from typing_extensions import TypedDict
 
-from nova.core.agent.researcher import researcher_agent
-from nova.core.llms import get_llm_by_type
-from nova.core.prompts.deepresearcher import apply_system_prompt_template
-from nova.core.tools import markdown_to_html_tool
-from nova.core.utils import (
+from nova.agent.researcher import researcher_agent
+from nova.llms import get_llm_by_type
+from nova.prompts.deepresearcher import apply_system_prompt_template
+from nova.tools import markdown_to_html_tool
+from nova.utils import (
     get_notes_from_tool_calls,
     get_today_str,
     override_reducer,

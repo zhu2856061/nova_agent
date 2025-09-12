@@ -10,7 +10,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from nova.core.llms import get_llm_by_type
+from nova.llms import get_llm_by_type
 
 logger = logging.getLogger(__name__)
 

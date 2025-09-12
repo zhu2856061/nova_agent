@@ -11,7 +11,7 @@ from langchain_core.tools import BaseTool, InjectedToolArg
 from langgraph.store.base import BaseStore
 from pydantic import BaseModel, Field
 
-from nova.core.memory import SQLITESTORE
+from nova.memory import SQLITESTORE
 
 logger = logging.getLogger(__name__)
 

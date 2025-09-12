@@ -20,10 +20,10 @@ from langgraph.types import Command
 from pydantic import BaseModel
 from typing_extensions import TypedDict
 
-from nova.core.llms import get_llm_by_type
-from nova.core.prompts.researcher import apply_system_prompt_template
-from nova.core.tools import search_tool
-from nova.core.utils import (
+from nova.llms import get_llm_by_type
+from nova.prompts.researcher import apply_system_prompt_template
+from nova.tools import search_tool
+from nova.utils import (
     get_today_str,
     override_reducer,
     remove_up_to_last_ai_message,

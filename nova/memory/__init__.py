@@ -1,6 +1,6 @@
 import os
 
-from nova.core import CONF
+from nova import CONF
 
 from .sqlite_cache import SQLiteCacheFixed
 from .sqlite_memory import SQLiteStoreFixed

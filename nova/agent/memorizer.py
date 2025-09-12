@@ -13,11 +13,11 @@ from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import Command
 
-from nova.core.llms import get_llm_by_type
-from nova.core.memory import SQLITESTORE
-from nova.core.prompts.menorizer import apply_system_prompt_template
-from nova.core.tools import upsert_memory_tool
-from nova.core.utils import (
+from nova.llms import get_llm_by_type
+from nova.memory import SQLITESTORE
+from nova.prompts.menorizer import apply_system_prompt_template
+from nova.tools import upsert_memory_tool
+from nova.utils import (
     get_today_str,
     set_color,
 )
