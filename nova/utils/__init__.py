@@ -7,6 +7,7 @@ from .common import (
     set_color,
     timer,
 )
+from .env_utils import set_dotenv
 from .json_utils import repair_json_output
 from .log_utils import set_log
 from .yaml_utils import load_yaml_config
@@ -22,4 +23,5 @@ __all__ = [
     "override_reducer",
     "remove_up_to_last_ai_message",
     "handle_event",
+    "set_dotenv",
 ]

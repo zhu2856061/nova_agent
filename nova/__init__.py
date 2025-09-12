@@ -1,10 +1,13 @@
 import os
 
-from .utils import load_yaml_config, set_log
+from .utils import load_yaml_config, set_dotenv, set_log
 
 config_path = os.environ.get("CONFIG_PATH", "./config.yaml")
 
 print(f"Loading configuration from {config_path}")
+
+# Load environment variables
+set_dotenv()
 
 # Load configuration
 CONF = load_yaml_config(config_path)

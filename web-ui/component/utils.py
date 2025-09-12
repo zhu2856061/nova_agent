@@ -1,6 +1,7 @@
 import base64
 import os
 from io import BytesIO
+from pathlib import Path
 
 
 def get_img_base64(file_name: str) -> str:
@@ -8,7 +9,10 @@ def get_img_base64(file_name: str) -> str:
     get_img_base64 used in streamlit.
     absolute local path not working on windows.
     """
-    image_path = os.path.join(os.path.dirname(__file__), "img", file_name)
+    image_path = os.path.join(
+        str(Path(__file__).parent.parent.resolve()), "img", file_name
+    )
+
     # 读取图片
     with open(image_path, "rb") as f:
         buffer = BytesIO(f.read())

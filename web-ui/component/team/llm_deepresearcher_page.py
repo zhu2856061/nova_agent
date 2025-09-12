@@ -5,7 +5,8 @@ from typing import Any, Dict, Generator
 
 import requests
 import streamlit as st
-from utils import get_img_base64
+
+from ..utils import get_img_base64
 
 AGENT_PAGE_INTRODUCTION = "你好，我是 **Nova Agent** 智能助手，有什么可以帮助你的吗？"
 LLM_OPTIONS = ["basic", "reasoning", "basic_no_thinking"]

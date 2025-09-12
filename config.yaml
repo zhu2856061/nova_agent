@@ -12,8 +12,8 @@ LLM:
   - model_name: "basic"
     litellm_params:
       model: "openai/Qwen3-235B-A22B"
-      api_base: "https://quarkml.oa.fenqile.com/v1"
-      api_key: "lx-ai-1234"
+      api_base: $LEXIN_LLM_URL
+      api_key: $LEXIN_LLM_API_KEY
       cache: true
       verbose: true
       request_timeout: 600
@@ -24,8 +24,8 @@ LLM:
   - model_name: "reasoning"
     litellm_params:
       model: "openai/Qwen3-235B-A22B"
-      api_base: "https://quarkml.oa.fenqile.com/v1"
-      api_key: "lx-ai-1234"
+      api_base: $LEXIN_LLM_URL
+      api_key: $LEXIN_LLM_API_KEY
       cache: true
       verbose: true
       request_timeout: 600
@@ -37,8 +37,8 @@ LLM:
   - model_name: "basic_no_thinking"
     litellm_params:
       model: "openai/Qwen3-235B-A22B"
-      api_base: "https://quarkml.oa.fenqile.com/v1"
-      api_key: "lx-ai-1234"
+      api_base: $LEXIN_LLM_URL
+      api_key: $LEXIN_LLM_API_KEY
       cache: true
       verbose: true
       request_timeout: 600
