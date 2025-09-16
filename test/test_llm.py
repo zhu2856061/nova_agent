@@ -13,8 +13,8 @@ os.environ["CONFIG_PATH"] = "../config.yaml"
 # 设置环境变量
 from pydantic import BaseModel, Field
 
-from nova.core.llms import get_llm_by_type, with_structured_output
-from nova.core.utils import repair_json_output
+from nova.llms import get_llm_by_type, with_structured_output
+from nova.utils import repair_json_output
 
 
 class Summary(BaseModel):

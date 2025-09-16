@@ -9,7 +9,7 @@ sys.path.append("..")
 import os
 
 os.environ["CONFIG_PATH"] = "../config.yaml"
-from nova.core.agent.researcher import researcher_agent
+from nova.agent.researcher import researcher_agent
 
 inputs = {
     "researcher_messages": [

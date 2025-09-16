@@ -9,7 +9,7 @@ sys.path.append("..")
 import os
 
 os.environ["CONFIG_PATH"] = "../config.yaml"
-from nova.core.task.deepresearcher import deepresearcher
+from nova.task.deepresearcher import deepresearcher
 
 inputs = {
     "messages": [

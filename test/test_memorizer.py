@@ -5,14 +5,12 @@
 import asyncio
 import sys
 
-from langgraph.store.memory import InMemoryStore
-
 sys.path.append("..")
 import os
 
 os.environ["CONFIG_PATH"] = "../config.yaml"
-from nova.core.agent.memorizer import memorizer_agent
-from nova.core.memory import SQLITESTORE
+from nova.agent.memorizer import memorizer_agent
+from nova.memory import SQLITESTORE
 
 inputs = {
     "memorizer_messages": [
