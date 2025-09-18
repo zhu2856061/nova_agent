@@ -10,28 +10,28 @@ import time
 from datetime import datetime
 from typing import Optional, Type
 
-import requests
 from langchain_core.tools import BaseTool
-from lxml import html
 from markdownify import markdownify
 from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 from pydantic import BaseModel, Field
 
+from nova.utils import SogouUrlFetcher
+
 logger = logging.getLogger(__name__)
 
 
-class CrawlWeixinToolInput(BaseModel):
+class CrawlWechatToolInput(BaseModel):
     """Input schema for the CrawlTool."""
 
     url: str = Field(description="The URL to crawl")
 
 
-class CrawlWeixinTool(BaseTool):
-    name: str = "weixin_crawler"
+class CrawlWechatTool(BaseTool):
+    name: str = "wechat_crawler"
     description: str = (
-        "A tool that crawls weixin websites and returns the content in markdown format"
+        "A tool that crawls wechat websites and returns the content in markdown format"
     )
-    args_schema: Type[BaseModel] = CrawlWeixinToolInput
+    args_schema: Type[BaseModel] = CrawlWechatToolInput
 
     async def _arun(self, url: str):
         """
@@ -45,11 +45,10 @@ class CrawlWeixinTool(BaseTool):
         """
         # 随机用户代理池 - 增加多样性
         USER_AGENTS = [
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Firefox/124.0",
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4 Safari/605.1.15",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Edge/123.0.2420.81",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_6) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Safari/605.1.15",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Edg/137.0.0.0",
+            "Mozilla/5.0 (Linux; Android 14; Pixel 8 Pro) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/136.0.6723.71 Mobile Safari/537.36",
         ]
         # 上次请求时间，用于控制请求频率
         last_request_time = 0
@@ -61,9 +60,9 @@ class CrawlWeixinTool(BaseTool):
 
         # 随机选择用户代理
         user_agent = random.choice(USER_AGENTS)
+        url = SogouUrlFetcher().get_real_url(url)
+        logger.info(f"请求链接: {url}")
 
-        url = self._get_real_url(url)
-        print("===>", url)
         if not url:
             logger.warning(f"无法获取真实链接: {url}")
             return
@@ -113,13 +112,6 @@ class CrawlWeixinTool(BaseTool):
                     color_scheme=random.choice(["light", "dark"]),
                     device_scale_factor=random.choice([1.0, 1.25, 1.5]),  # 常见缩放比例
                     accept_downloads=False,
-                    # 模拟真实网络：设置随机延迟（模拟网络波动，避免请求过于稳定）
-                    extra_http_headers={
-                        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                        "Accept-Language": "zh-CN,zh;q=0.9",
-                        "Referer": "https://weixin.qq.com/",  # 固定Referer为微信首页
-                        "Cache-Control": "max-age=0",
-                    },
                 )
                 # 4. 注入反指纹脚本：修改Canvas、WebGL、navigator等关键标识
                 await self._inject_stealth_scripts(context)
@@ -150,7 +142,7 @@ class CrawlWeixinTool(BaseTool):
                 await self._random_delay(1000, 2000)
 
                 # 检查是否触发反爬
-                if "weixin.sogou.com/antispider" in page.url or "verify" in page.url:
+                if "wechat.sogou.com/antispider" in page.url or "verify" in page.url:
                     logger.warning("⚠️ Anti-spider page detected when accessing article")
                     return f"# 提取文章内容失败，进入验证码网页了\n\n原文链接: {url}"
 
@@ -159,7 +151,7 @@ class CrawlWeixinTool(BaseTool):
                 metadata = await self._extract_metadata(page)
                 content_html = await self._extract_content(page)
                 content_md = markdownify(content_html)
-                content_md = self._remove_svg_data(content_md)
+                content_md = self._remove_svg_data(content_md + "\n")
 
                 # 组合完整的Markdown内容
                 # full_md = f"# {title}\n\n"
@@ -190,97 +182,6 @@ class CrawlWeixinTool(BaseTool):
                     await context.close()
                 if browser and browser.is_connected():
                     await browser.close()
-
-    def _get_real_url(self, sogou_url: str) -> str:
-        """从搜狗微信链接获取真实的微信公众号文章链接"""
-        if not sogou_url:
-            return ""
-
-        headers = {
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,*/*;q=0.8",
-            "Accept-Language": "zh-CN,zh;q=0.9,en;q=0.8",
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "Pragma": "no-cache",
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36 Edg/137.0.0.0",
-            "Cookie": "ABTEST=7|1750756616|v1; SUID=0A5BF4788E52A20B00000000685A6D08; IPLOC=CN1100; SNUID=B3E34CC0B8BF80F5737E3561B9B78454;",
-        }
-
-        try:
-            # 添加随机延迟
-            time.sleep(0.5 + float(time.time()) % 1)  # 0.5-1.5秒随机延迟
-            response = requests.get(
-                sogou_url, headers=headers, timeout=10, allow_redirects=False
-            )
-
-            # 解析页面中的真实链接
-            script_content = response.text
-            url_parts = []
-            start_index = 0
-
-            while True:
-                part_start = script_content.find("url += '", start_index)
-                if part_start == -1:
-                    break
-                part_end = script_content.find("'", part_start + len("url += '"))
-                if part_end == -1:
-                    break
-                url_parts.append(
-                    script_content[part_start + len("url += '") : part_end]
-                )
-                start_index = part_end + 1
-
-            # 拼接并处理真实链接
-            full_url = "".join(url_parts).replace("@", "")
-            if full_url.startswith("weixin.qq.com"):
-                return f"https://{full_url}"
-            elif full_url.startswith("//mp.weixin.qq.com"):
-                return f"https:{full_url}"
-            elif full_url.startswith("mp.weixin.qq.com"):
-                return f"https://{full_url}"
-            return full_url
-
-        except Exception as e:
-            logger.error(f"获取真实链接失败 ({sogou_url}): {str(e)}")
-            return ""
-
-    def _get_article_content(self, real_url: str, referer: str) -> str:
-        """获取微信公众号文章的正文内容"""
-        if not real_url:
-            return "获取文章内容失败: 真实链接为空"
-
-        headers = {
-            "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,*/*;q=0.8",
-            "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
-            "cache-control": "no-cache",
-            "pragma": "no-cache",
-            "referer": referer,
-            "sec-ch-ua": '"Microsoft Edge";v="137", "Chromium";v="137"',
-            "sec-ch-ua-mobile": "?0",
-            "sec-ch-ua-platform": '"Windows"',
-            "upgrade-insecure-requests": "1",
-            "user-agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36 Edg/137.0.0.0",
-        }
-
-        try:
-            # 添加随机延迟
-            time.sleep(1 + float(time.time()) % 2)  # 1-3秒随机延迟
-            response = requests.get(real_url, headers=headers, timeout=15)
-            tree = html.fromstring(response.text)
-
-            # 提取文章正文内容
-            content_elements = tree.xpath("//div[@id='js_content']//text()")
-            cleaned_content = [
-                text.strip() for text in content_elements if text.strip()
-            ]
-
-            if not cleaned_content:
-                return "获取文章内容失败: 未找到正文区域"
-
-            return "\n".join(cleaned_content)
-
-        except Exception as e:
-            return f"获取文章内容失败: {str(e)}"
 
     async def _inject_stealth_scripts(self, context: BrowserContext):
         """注入反指纹脚本，修改浏览器关键标识"""
@@ -337,7 +238,7 @@ class CrawlWeixinTool(BaseTool):
     async def _pre_visit(self, page: Page):
         """访问前置页面，模拟正常浏览流程"""
         # 先访问微信首页
-        await page.goto("https://weixin.qq.com/", wait_until="networkidle")
+        await page.goto("https://wechat.qq.com/", wait_until="networkidle")
         await self._random_delay(1000, 3000)
 
         # 随机点击几个元素，模拟用户行为
@@ -376,14 +277,14 @@ class CrawlWeixinTool(BaseTool):
             {
                 "name": "wxuin",
                 "value": str(random.randint(1000000000, 9999999999)),
-                "domain": ".weixin.qq.com",
+                "domain": ".wechat.qq.com",
                 "path": "/",
                 "expires": int(time.time()) + 3600 * 24 * 7,
             },
             {
                 "name": "devicetype",
                 "value": f"windows-{random.randint(1000, 9999)}",
-                "domain": ".weixin.qq.com",
+                "domain": ".wechat.qq.com",
                 "path": "/",
                 "expires": int(time.time()) + 3600 * 24 * 7,
             },
@@ -475,10 +376,12 @@ class CrawlWeixinTool(BaseTool):
     def _remove_svg_data(self, text):
         # 正则表达式模式：匹配所有Markdown格式的SVG图片
         # 特点：以![](./data:image/svg+xml,开头，包含任意字符，直到)结束
-        svg_pattern = r"!\[\]\(data:image/svg\+xml,.*?\n"
-
-        # 替换所有匹配项为空字符串
+        svg_pattern = r"!\[.*?\]\(data:image/svg\+xml,.*?\n"
         cleaned_text = re.sub(svg_pattern, "", text)
+
+        # 特点：以![](https,开头，包含任意字符，直到)结束
+        img_pattern = r"!\[图片\]\(https://mmbiz\.qpic\.cn/.*?\)"
+        cleaned_text = re.sub(img_pattern, "", cleaned_text)
 
         # 可选：清除替换后可能产生的空行
         cleaned_text = re.sub(r"\n\s*\n", "\n\n", cleaned_text).strip()
@@ -554,4 +457,4 @@ class CrawlWeixinTool(BaseTool):
 
 
 # Create an instance
-crawl_weixin_tool = CrawlWeixinTool()
+crawl_wechat_tool = CrawlWechatTool()

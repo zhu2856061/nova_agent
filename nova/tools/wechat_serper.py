@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field
 logger = logging.getLogger(__name__)
 
 
-class SerpWeixinToolInput(BaseModel):
+class SerpWechatToolInput(BaseModel):
     """Input schema for the SerpTool."""
 
     query: str = Field(description="The query to search for")
@@ -23,10 +23,10 @@ class SerpWeixinToolInput(BaseModel):
     )
 
 
-class SerpWeixinTool(BaseTool):
-    name: str = "serp_weixin_tool"
+class SerpWechatTool(BaseTool):
+    name: str = "serp_wechat_tool"
     description: str = "A tool that searches the web and returns the top results"
-    args_schema: Type[BaseModel] = SerpWeixinToolInput
+    args_schema: Type[BaseModel] = SerpWechatToolInput
 
     async def _arun(self, query: str, max_results: int):
         # 1. 配置浏览器参数（增强反爬）
@@ -34,7 +34,7 @@ class SerpWeixinTool(BaseTool):
         results = []  # 存储最终结果
         current_page = 1  # 当前页码
         max_pages = 10  # 最大翻页次数（防止无限循环）
-        crawl_success = False  # 爬取状态标记
+        serp_success = False  # 爬取状态标记
         async with async_playwright() as p:
             try:
                 # 启动浏览器（无头模式，生产环境可用）
@@ -195,7 +195,7 @@ class SerpWeixinTool(BaseTool):
                         break
                 # 截取目标数量的结果（避免超出max_results）
                 results = results[:max_results]
-                crawl_success = True
+                serp_success = True
 
             except Exception as e:
                 logger.error(f"Fatal error during crawling: {str(e)}", exc_info=True)
@@ -211,9 +211,8 @@ class SerpWeixinTool(BaseTool):
         return {
             "query": query,
             "max_results_requested": max_results,
-            "actual_results_count": len(results),
             "results": results,
-            "crawl_success": crawl_success,
+            "serp_success": serp_success,
         }
 
     def _run(self, query: str, max_results: int):
@@ -229,4 +228,4 @@ class SerpWeixinTool(BaseTool):
 
 
 # Create an instance
-serp_weixin_tool = SerpWeixinTool()
+serp_wechat_tool = SerpWechatTool()

@@ -10,6 +10,7 @@ from .common import (
 from .env_utils import set_dotenv
 from .json_utils import repair_json_output
 from .log_utils import set_log
+from .url_fetcher import SogouUrlFetcher
 from .yaml_utils import load_yaml_config
 
 __all__ = [
@@ -24,4 +25,5 @@ __all__ = [
     "remove_up_to_last_ai_message",
     "handle_event",
     "set_dotenv",
+    "SogouUrlFetcher",
 ]

@@ -89,7 +89,7 @@ async def memorizer(
             messages = [
                 SystemMessage(
                     content=apply_system_prompt_template(
-                        "call_model_system",
+                        "memorizer_system",
                         {"user_info": formatted, "date": get_today_str()},
                     )
                 )
@@ -118,12 +118,12 @@ async def memorizer(
 
     except Exception as e:
         logger.error(
-            set_color(f"trace_id={_trace_id} | node=call_model | error={e}", "red")
+            set_color(f"trace_id={_trace_id} | node=memorizer | error={e}", "red")
         )
         return Command(
             goto="__end__",
             update={
-                "err_message": f"trace_id={_trace_id} | node=researcher_tools | error={e}"
+                "err_message": f"trace_id={_trace_id} | node=memorizer | error={e}"
             },
         )
 

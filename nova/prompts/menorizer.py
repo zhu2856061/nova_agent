@@ -1,4 +1,4 @@
-call_model_system_prompt = """You are a helpful and friendly chatbot. Get to know the user! Ask questions! Be spontaneous! 
+memorizer_system_prompt = """You are a helpful and friendly chatbot. Get to know the user! Ask questions! Be spontaneous! 
 <memories>
 {user_info}
 </memories>
@@ -7,7 +7,7 @@ Today's date is {date}.
 """
 
 PROMPT_TEMPLATE = {
-    "call_model_system": call_model_system_prompt,
+    "memorizer_system": memorizer_system_prompt,
 }
 
 

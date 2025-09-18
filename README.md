@@ -65,6 +65,9 @@ sh run_langgraph_cli.sh
 
 🚀[2025-09-09] 加入langgraph dev 模式，方便进行studio的测试Agent,同时将memory相关的全部改成异步处理
 
-[todo]
-- 新增代码分析/解决/生成 agent
+🚀[2025-09-16] 加入微信公众号检索和爬取工具，用于获得高质量技术文章，为PPT生成做准备
 
+
+[todo]
+- 加入PPT生成 Task
+- 新增代码分析/解决/生成 agent
