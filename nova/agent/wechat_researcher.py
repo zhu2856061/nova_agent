@@ -46,10 +46,6 @@ class State:
         default=0,
         metadata={"description": "The number of iterations of tool calls."},
     )
-    compressed_research: str = field(
-        default="",
-        metadata={"description": "The compressed research to use for the agent."},
-    )
 
 
 @dataclass(kw_only=True)
@@ -106,6 +102,14 @@ async def wechat_researcher(
             )
         )
 
+        if not cast(AIMessage, response).tool_calls or any(
+            tool_call["name"] == "ResearchComplete"
+            for tool_call in cast(AIMessage, response).tool_calls
+        ):
+            return Command(
+                goto="__end__",
+            )
+
         return Command(
             goto="wechat_researcher_tools",
             update={
@@ -128,21 +132,13 @@ async def wechat_researcher(
 
 async def wechat_researcher_tools(
     state: State, runtime: Runtime[Context]
-) -> Command[Literal["wechat_researcher", "compress_research", "__end__"]]:
+) -> Command[Literal["wechat_researcher", "__end__"]]:
     try:
         # 变量
         _trace_id = runtime.context.trace_id
         _most_recent_message = state.wechat_researcher_messages[-1]
         _tool_call_iterations = state.tool_call_iterations
         _max_react_tool_calls = runtime.context.max_react_tool_calls
-
-        if not cast(AIMessage, _most_recent_message).tool_calls or any(
-            tool_call["name"] == "ResearchComplete"
-            for tool_call in cast(AIMessage, _most_recent_message).tool_calls
-        ):
-            return Command(
-                goto="compress_research",
-            )
 
         async def execute_tool_safely(tool, args):
             try:
@@ -176,7 +172,7 @@ async def wechat_researcher_tools(
 
         if _tool_call_iterations >= _max_react_tool_calls:
             return Command(
-                goto="compress_research",
+                goto="__end__",
                 update={
                     "wechat_researcher_messages": tool_outputs,
                 },
@@ -285,7 +281,6 @@ async def compress_research(
 _agent = StateGraph(State, context_schema=Context)
 _agent.add_node("wechat_researcher", wechat_researcher)
 _agent.add_node("wechat_researcher_tools", wechat_researcher_tools)
-_agent.add_node("compress_research", compress_research)
 _agent.add_edge(START, "wechat_researcher")
 
 wechat_researcher_agent = _agent.compile()

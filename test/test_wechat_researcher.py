@@ -29,7 +29,7 @@ context = {
 
 async def async_generate_response():
     tmp = await wechat_researcher_agent.ainvoke(inputs, context=context)  # type: ignore
-    print("Assistant:\n", tmp["compressed_research"])
+    print("Assistant:\n", tmp["wechat_researcher_messages"][-1])
 
 
 asyncio.run(async_generate_response())
