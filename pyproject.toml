@@ -24,8 +24,7 @@ dependencies = [
     "markdownify>=1.2.0",
     "python-pptx>=1.0.2",
     "readabilipy>=0.3.0",
-    "streamlit>=1.48.1",
-    "streamlit-flow>=0.1.0",
+    "reflex>=0.8.11",
     "uvicorn>=0.35.0",
 ]
 

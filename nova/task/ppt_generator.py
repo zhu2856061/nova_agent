@@ -22,7 +22,6 @@ from pptx.dml.color import RGBColor
 from pptx.enum.text import MSO_ANCHOR, PP_ALIGN
 from pptx.util import Inches, Pt
 from pydantic import BaseModel, Field
-from tavily import TavilyClient
 
 # 加载环境变量
 load_dotenv()
@@ -44,34 +43,6 @@ class PPTGenerator:
 
         # 初始化OpenAI客户端
         self.client = OpenAI()
-
-        # 初始化工具
-        tavily_client = TavilyClient()
-
-        def search_with_tavily(query: str) -> str:
-            """使用Tavily搜索信息"""
-            try:
-                search_result = tavily_client.search(query, search_depth="advanced")
-                # 提取前5个结果的内容
-                # 限制每个结果的内容长度
-                contents = []
-                for result in search_result.get("results", [])[:3]:  # 只取前3个结果
-                    content = result.get("content", "")
-                    if len(content) > 500:  # 限制每个内容最多500字符
-                        content = content[:500] + "..."
-                    contents.append(content)
-                return " ".join(contents)
-            except Exception as e:
-                print(f"\033[91m[搜索错误]\033[0m {str(e)}", file=sys.stderr)
-                return ""
-
-        self.tools = [
-            Tool(
-                name="search",
-                func=search_with_tavily,
-                description="用于搜索最新的市场数据、行业趋势和相关信息",
-            )
-        ]
 
         # 创建提示模板
         self.prompt = ChatPromptTemplate.from_messages(

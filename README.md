@@ -13,26 +13,22 @@ pip install nv
 uv sync
 ```
 
-注意： ⚠️ 需要安装 playwright 
+注意： ⚠️ 需要安装 playwright ``` playwright install ``` ``` playwright install-deps ```
 
 ### 启动服务
 进入scripts目录下执行
 ``` shell
-sh run_nova_server_async.sh # 异步
-
-or 
-
-sh run_nova_server_sync.sh # 同步
+sh run_server.sh
 ```
 
 ### 启动前端界面
-进入web-ui目录下执行
+进入scripts目录下执行
 ``` shell
-sh run_streamlit.sh
+sh run_web.sh
 ```
 
 ### [可选项] 可以采用langgraph 自带的langgraph-cli启动一个本地 LangGraph Studio 实例
-根目录下执行
+进入scripts目录下执行
 ```shell
 sh run_langgraph_cli.sh
 ```
@@ -50,8 +46,7 @@ sh run_langgraph_cli.sh
 3 加入结构化输出-with_structured_output
 4 完成llm的服务化和stream llm 的服务化
 
-🚀[2025-08-11] 加入工具 Crawl4AI 实现爬取数据
-1 需要安装 playwright ``` playwright install ``` ``` playwright install-deps ```
+🚀[2025-08-11] 加入工具 Crawl4AI 实现爬取数据（需要安装 playwright）
 
 🚀[2025-08-20] 完成researcher Agent的创建，并运行成功
 
@@ -65,9 +60,10 @@ sh run_langgraph_cli.sh
 
 🚀[2025-09-09] 加入langgraph dev 模式，方便进行studio的测试Agent,同时将memory相关的全部改成异步处理
 
-🚀[2025-09-16] 加入微信公众号检索和爬取工具，用于获得高质量技术文章，为PPT生成做准备
+🚀[2025-09-16] 加入微信公众号检索和爬取工具，用于获得高质量技术文章
 
+🚀[2025-09-26] 前端切换，不再使用streamlit，采用reflex
 
 [todo]
-- 加入PPT生成 Task
 - 新增代码分析/解决/生成 agent
+- 知乎检索
