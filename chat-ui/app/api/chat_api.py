@@ -6,13 +6,13 @@ import httpx
 import requests
 
 # 后端接口地址
-STREAM_LLM_BACKEND_URL = "http://0.0.0.0:2021/chat/stream_llm"  # 需根据实际修改
+STREAM_CHAT_BACKEND_URL = "http://0.0.0.0:2021/chat/stream_llm"  # 需根据实际修改
 
 logger = logging.getLogger(__name__)
 
 
-async def get_stream_llm_response(
-    trace_id: str, llm_dtype: str, messages: list, config: dict
+async def get_chat_api(
+    url: str, trace_id: str, llm_dtype: str, messages: list, config: dict
 ):
     """
     发送请求到后端并获取流式响应
@@ -31,14 +31,14 @@ async def get_stream_llm_response(
         "trace_id": trace_id,
         "llm_dtype": llm_dtype,
         "messages": messages,
-        "config": dict(config),
+        "config": config,
     }
 
     try:
         async with httpx.AsyncClient() as client:
             # 发送 POST 请求到 /stream_llm 路由
             async with client.stream(
-                "POST", STREAM_LLM_BACKEND_URL, json=request_data, timeout=20.0
+                "POST", url, json=request_data, timeout=60.0
             ) as response:
                 # 检查响应状态码
                 if response.status_code != 200:

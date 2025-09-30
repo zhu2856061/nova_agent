@@ -18,7 +18,7 @@ def sidebar_chat(State, chat: str) -> rx.Component:
             # 聊天标题按钮，点击时设置当前聊天
             rx.button(
                 chat,  # 显示聊天标题
-                on_click=lambda: State.set_chat(chat),  # 点击时更新状态中的当前聊天
+                on_click=lambda: State.set_chat_name(chat),
                 width="80%",  # 占父容器80%宽度
                 variant="surface",  # 使用表面样式的按钮变体
             ),
@@ -54,7 +54,7 @@ def sidebar(State, trigger) -> rx.Component:
                     rx.divider(),  # 分隔线
                     # 遍历状态中的所有聊天标题，为每个创建一个sidebar_chat组件
                     rx.foreach(
-                        State.chat_titles, lambda chat: sidebar_chat(State, chat)
+                        State.get_chat_names, lambda chat: sidebar_chat(State, chat)
                     ),
                     align_items="stretch",  # 子元素拉伸填满宽度
                     width="100%",  # 占满父容器宽度
@@ -74,7 +74,7 @@ def sidebar(State, trigger) -> rx.Component:
     )
 
 
-def modal(State, trigger) -> rx.Component:
+def new_chat_modal(State, trigger) -> rx.Component:
     """用于创建新聊天的模态框组件"""
     return rx.dialog.root(  # 对话框根组件
         rx.dialog.trigger(trigger),  # 对话框触发器，传入的参数作为触发元素
@@ -84,12 +84,12 @@ def modal(State, trigger) -> rx.Component:
                 # 水平堆叠布局，放置输入框和创建按钮
                 rx.hstack(
                     rx.input(  # 输入框，用于输入新聊天名称
-                        placeholder="Chat name",  # 占位文本
+                        placeholder=f"{State.unique_id} name",  # 占位文本
                         name="new_chat_name",  # 表单字段名称
                         flex="1",  # 弹性布局，占满可用空间
                         min_width="20ch",  # 最小宽度为20个字符
                     ),
-                    rx.button("Create chat"),  # 创建聊天按钮
+                    rx.button(f"Create {State.unique_id}"),  # 创建聊天按钮
                     spacing="2",  # 子元素间距
                     wrap="wrap",  # 超出时自动换行
                     width="100%",  # 占满父容器宽度
@@ -98,40 +98,71 @@ def modal(State, trigger) -> rx.Component:
             ),
             background_color=rx.color("mauve", 1),  # 使用mauve色系的第1种颜色作为背景
         ),
-        open=State.is_modal_open,  # 控制模态框是否打开的状态
-        on_open_change=State.set_is_modal_open,  # 模态框打开状态变化时调用的方法
+        open=State.is_new_chat_modal_open,  # 控制模态框是否打开的状态
+        on_open_change=State.set_is_new_chat_modal_open,  # 模态框打开状态变化时调用的方法
     )
 
 
 def navbar(State):
     """导航栏组件，显示当前聊天、创建新聊天按钮和侧边栏按钮"""
     return rx.hstack(  # 水平堆叠布局
-        # 显示当前聊天的徽章
-        rx.badge(
-            State.current_chat,  # 显示当前聊天标题
-            # 信息提示框，鼠标悬停时显示提示信息
-            rx.tooltip(
-                rx.icon("info", size=14),  # 信息图标
-                content="The current selected chat.",  # 提示内容
+        # 侧边栏收起/展开切换按钮
+        rx.hstack(
+            rx.button(
+                rx.icon(
+                    tag=rx.cond(
+                        State.sidebar_visible,
+                        "circle-chevron-left",  # 展开状态显示左箭头
+                        "circle-chevron-right",  # 收起状态显示右箭头
+                    )
+                ),
+                on_click=State.toggle_sidebar,
+                size="1",
+                background_color=rx.color("mauve", 2),
             ),
-            size="3",  # 徽章大小
-            variant="soft",  # 柔和样式的徽章变体
-            margin_inline_end="auto",  # 右侧外边距自动，将后续元素推到右边
-        ),
-        # 创建新聊天的模态框，使用消息加号图标作为触发器
-        modal(
-            State,
-            rx.icon_button("message-square-plus"),
-        ),
-        # 侧边栏组件，使用消息图标作为触发器
-        sidebar(
-            State,
-            rx.icon_button(
-                "messages-square",  # 消息图标
-                background_color=rx.color(
-                    "mauve", 6
-                ),  # 使用mauve色系的第6种颜色作为背景
+            # 显示当前聊天的徽章
+            rx.badge(
+                State.unique_id,  # 显示当前聊天标题
+                # 信息提示框，鼠标悬停时显示提示信息
+                rx.tooltip(
+                    rx.icon("info", size=14),  # 信息图标
+                    content="The current selected menu",  # 提示内容
+                ),
+                size="3",  # 徽章大小
+                variant="soft",  # 柔和样式的徽章变体
+                margin_inline_end="auto",  # 右侧外边距自动，将后续元素推到右边
             ),
+            spacing="2",
+        ),
+        rx.text(
+            State.current_chat,
+            font_size="1.25rem",  # 稍大一点的字体
+            font_weight="600",  # 半粗体，比普通字重更突出但不过分
+            font_style="italic",  # 斜体样式
+            color=rx.color("slate", 8),  # 使用沉稳的深色
+            letter_spacing="0.02em",  # 轻微增加字母间距提升优雅感
+            _hover={
+                "color": rx.color("violet", 6),  # 悬停时的颜色变化
+                "transition": "color 0.2s ease-in-out",  # 平滑过渡效果
+            },
+        ),
+        rx.hstack(
+            # 创建新聊天的模态框，使用消息加号图标作为触发器
+            new_chat_modal(
+                State,
+                rx.icon_button("message-square-plus"),
+            ),
+            # 侧边栏组件，使用消息图标作为触发器
+            sidebar(
+                State,
+                rx.icon_button(
+                    "messages-square",  # 消息图标
+                    background_color=rx.color(
+                        "mauve", 6
+                    ),  # 使用mauve色系的第6种颜色作为背景
+                ),
+            ),
+            spacing="2",
         ),
         justify_content="space-between",  # 子元素两端对齐
         align_items="center",  # 子元素垂直居中

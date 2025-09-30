@@ -7,35 +7,35 @@ from typing import Any
 
 import reflex as rx
 
-from app.api.chat_api import STREAM_CHAT_BACKEND_URL, get_chat_api
+from app.api.agent_api import STREAM_AGENT_MEMORIZER_BACKEND_URL, get_agent_api
 from app.states.state import Message, Parameters, State
 
 logger = logging.getLogger(__name__)
 
-_INTRODUCTION = "Hi! I'm **Nova Chat**, a helpful assistant."
+_INTRODUCTION = "Hi! I'm **Nova Agent Memorizer**, a helpful assistant."
 MAX_TOTAL_CHARS = 150000  # 总字符保护限制
 _DEFAULT_NAME = "Nova"
 
 
-class ChatState(State):
-    unique_id = "Chat"
+class AgentMemorizerState(State):
+    unique_id = "Agent - Memorizer"
     _default_introduction = _INTRODUCTION
     _default_name = _DEFAULT_NAME
 
     params_fields: list[Parameters] = [
         Parameters(
-            mkey="llm_type",
+            mkey="user_id",
+            mtype="text",
+            mvalue="merlin",
+            mvaluetype="str",
+            mselected=None,
+        ),
+        Parameters(
+            mkey="memorizer_model",
             mtype="select",
             mvalue="basic",
             mvaluetype="str",
             mselected=["basic", "reasoning", "basic_no_thinking"],
-        ),
-        Parameters(
-            mkey="temperature",
-            mtype="text",
-            mvalue=0.2,
-            mvaluetype="float",
-            mselected=None,
         ),
     ]
 
@@ -56,14 +56,18 @@ class ChatState(State):
                         item.mvalue = int(v)
                     else:
                         item.mvalue = v
+        logger.info(f"change settings, {self.params_fields}")
 
     @rx.event
     def create_chat(self, form_data: dict[str, Any]):
+        """Create a new chat."""
+        # Add the new chat to the list of chats.
         new_chat_name = form_data["new_chat_name"]
         self.current_chat = new_chat_name
         self._chat2messages[new_chat_name] = [
             Message(role="assistant", content=self._default_introduction)
         ]
+
         self.is_new_chat_modal_open = False
 
     @rx.var
@@ -104,14 +108,8 @@ class ChatState(State):
         question = form_data["question"]
         if not question:
             return
-
-        # get llm type
-        _llm_type = "basic"
         config = {}
         for item in self.params_fields:
-            if item.mkey == "llm_type":
-                _llm_type = item.mvalue
-                continue
             config[item.mkey] = item.mvalue
 
         self._chat2messages[self.current_chat].append(
@@ -128,34 +126,68 @@ class ChatState(State):
         # 初始化
         self._chat2messages[self.current_chat].append(Message(role="assistant"))
 
-        is_start_answer = True
-        is_start_thinking = True
-        async for value in get_chat_api(
-            STREAM_CHAT_BACKEND_URL,
-            self.current_chat,
-            _llm_type,
-            messages,
-            config,
+        full_response = ""
+        _content_len = 0
+
+        async for item in get_agent_api(
+            STREAM_AGENT_MEMORIZER_BACKEND_URL, self.current_chat, messages, config
         ):  # type: ignore
-            if value and value.get("type") == "thought":
-                if is_start_thinking:
+            content = item["content"]
+            full_response += str(content)  # 累加完整响应
+            if len(full_response) >= MAX_TOTAL_CHARS:
+                full_response += "\n\n⚠️ 已达到最大字符限制，后续内容已截断。"
+                continue  # 终止流式处理
+
+            # 🔹 处理 System 消息（如任务状态、工具调用）
+            if item["type"] in ["system", "error"]:
+                if item["type"] == "error":
                     self._chat2messages[self.current_chat][
                         -1
-                    ].content += "\n\n🤔 Thinking...\n\n"
-                    is_start_thinking = False
+                    ].content += f"<span style='color:red'>{content}</span>"
 
-                self._chat2messages[self.current_chat][-1].content += value["content"]
-                self._chat2messages = self._chat2messages
+                else:
+                    self._chat2messages[self.current_chat][-1].content += content
 
-            if value and value.get("type") == "answer":
-                if is_start_answer:
-                    self._chat2messages[self.current_chat][
-                        -1
-                    ].content += "\n\n✨ Answering...\n\n"
-                    is_start_answer = False
+            elif item["type"] == "chat_start":
+                self._chat2messages[self.current_chat][-1].content += content
 
-                self._chat2messages[self.current_chat][-1].content += value["content"]
-                self._chat2messages = self._chat2messages
+            elif item["type"] == "chat_end":
+                if isinstance(content, dict):
+                    _reasoning_content = content["reasoning_content"]
+                    _content = content["content"]
+                    _tool_calls = content["tool_calls"]
+                    print(content)
+
+                    if _content_len > 0:
+                        self._chat2messages[self.current_chat][
+                            -1
+                        ].content = self._chat2messages[self.current_chat][-1].content[
+                            :-_content_len
+                        ]
+                        _content_len = 0
+
+                    if _reasoning_content:
+                        self._chat2messages[self.current_chat][
+                            -1
+                        ].content += f"📝 思考过程\n\n{_reasoning_content}\n\n"
+
+                    if _tool_calls:
+                        self._chat2messages[self.current_chat][
+                            -1
+                        ].content += f"📝 工具入参\n\n{_tool_calls}\n\n"
+
+                    if _content.strip():
+                        self._chat2messages[self.current_chat][
+                            -1
+                        ].content += f"📘 【Answer】\n\n{_content} \n\n"
+
+            elif item["type"] == "answer":
+                self._chat2messages[self.current_chat][-1].content += content
+                _content_len += len(content)
+
+            elif item["type"] == "thought":
+                self._chat2messages[self.current_chat][-1].content += content
+                _content_len += len(content)
 
             yield
 

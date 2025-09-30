@@ -5,7 +5,7 @@
 import reflex as rx
 from reflex.constants.colors import ColorType
 
-from app.states.chat_state import Message
+from app.states.state import Message
 
 
 def message_content(text: str, color: ColorType) -> rx.Component:
@@ -61,7 +61,7 @@ def message(message: Message) -> rx.Component:
 def chat(AgentState) -> rx.Component:
     """List all the messages in a single conversation."""
     return rx.auto_scroll(
-        rx.foreach(AgentState.selected_chat, message),
+        rx.foreach(AgentState.show_chat_content, message),
         flex="1",
         padding="8px",
     )

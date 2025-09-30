@@ -5,16 +5,16 @@
 import reflex as rx
 
 from app.components import action_bar, chat, navbar, sidebar
-from app.states.agent_state import AgentState
+from app.states.task_deepresearcher_state import TaskDeepresearcherState
 
 
-def agent_page() -> rx.Component:
+def task_deepresearcher_page() -> rx.Component:
     return rx.hstack(
-        sidebar(),
+        sidebar(TaskDeepresearcherState),
         rx.vstack(
-            navbar(AgentState),
-            chat(AgentState),
-            action_bar(AgentState),
+            navbar(TaskDeepresearcherState),
+            chat(TaskDeepresearcherState),
+            action_bar(TaskDeepresearcherState),
             background_color=rx.color("mauve", 1),
             color=rx.color("mauve", 12),
             height="100%",

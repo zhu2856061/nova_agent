@@ -4,8 +4,11 @@
 # @Moto   : Knowledge comes from decomposition
 import reflex as rx
 
-from app.pages.agent_page import agent_page
+from app.pages.agent_memorizer_page import agent_memorizer_page
+from app.pages.agent_researcher_page import agent_researcher_page
+from app.pages.agent_wechat_researcher_page import agent_wechat_researcher_page
 from app.pages.chat_page import chat_page
+from app.pages.task_deepresearcher_page import task_deepresearcher_page
 
 
 def redirect_component():
@@ -34,8 +37,6 @@ def redirect_component():
             # 占据整个屏幕
             height="100vh",
             background_color=rx.color("mauve", 3),
-            # 添加轻微的背景渐变
-            # background="linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%)",
         ),
         on_mount=lambda: rx.redirect("/chat"),
     )
@@ -53,14 +54,35 @@ app.add_page(
 
 app.add_page(
     component=chat_page,
-    title="Nova AI chat",
+    title="Nova chat",
     route="/chat",
     image="novaait.png",
 )
 
 app.add_page(
-    component=agent_page,
-    title="Nova AI chat",
-    route="/agent",
+    component=agent_memorizer_page,
+    title="Nova Agent",
+    route="/agent/memorizer",
+    image="novaait.png",
+)
+
+app.add_page(
+    component=agent_researcher_page,
+    title="Nova Agent",
+    route="/agent/researcher",
+    image="novaait.png",
+)
+
+app.add_page(
+    component=agent_wechat_researcher_page,
+    title="Nova Agent",
+    route="/agent/wechat_researcher",
+    image="novaait.png",
+)
+
+app.add_page(
+    component=task_deepresearcher_page,
+    title="Nova Agent",
+    route="/task/deepresearcher",
     image="novaait.png",
 )

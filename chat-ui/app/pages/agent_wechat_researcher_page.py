@@ -5,15 +5,16 @@
 import reflex as rx
 
 from app.components import action_bar, chat, navbar, sidebar
+from app.states.agent_wechat_researcher_state import AgentWeChatResearcherState
 
 
-def task_page() -> rx.Component:
+def agent_wechat_researcher_page() -> rx.Component:
     return rx.hstack(
-        sidebar(),
+        sidebar(AgentWeChatResearcherState),
         rx.vstack(
-            navbar(),
-            chat(),
-            action_bar(),
+            navbar(AgentWeChatResearcherState),
+            chat(AgentWeChatResearcherState),
+            action_bar(AgentWeChatResearcherState),
             background_color=rx.color("mauve", 1),
             color=rx.color("mauve", 12),
             height="100%",

@@ -5,16 +5,16 @@
 import reflex as rx
 
 from app.components import action_bar, chat, navbar, sidebar
-from app.states.chat_state import ChatState
+from app.states.agent_researcher_state import AgentResearcherState
 
 
-def chat_page() -> rx.Component:
+def agent_researcher_page() -> rx.Component:
     return rx.hstack(
-        sidebar(ChatState),
+        sidebar(AgentResearcherState),
         rx.vstack(
-            navbar(ChatState),
-            chat(ChatState),
-            action_bar(ChatState),
+            navbar(AgentResearcherState),
+            chat(AgentResearcherState),
+            action_bar(AgentResearcherState),
             background_color=rx.color("mauve", 1),
             color=rx.color("mauve", 12),
             height="100%",
@@ -24,7 +24,7 @@ def chat_page() -> rx.Component:
         ),
         background_color=rx.color("mauve", 1),
         color=rx.color("mauve", 12),
+        align_items="stretch",
         spacing="0",
-        width="100%",
         height="100dvh",
     )
