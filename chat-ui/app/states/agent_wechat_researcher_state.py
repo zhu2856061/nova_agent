@@ -24,14 +24,14 @@ class AgentWeChatResearcherState(State):
 
     params_fields: list[Parameters] = [
         Parameters(
-            mkey="user_id",
+            mkey="max_react_tool_calls",
             mtype="text",
-            mvalue="merlin",
-            mvaluetype="str",
+            mvalue=2,
+            mvaluetype="int",
             mselected=None,
         ),
         Parameters(
-            mkey="memorizer_model",
+            mkey="wechat_researcher_model",
             mtype="select",
             mvalue="basic",
             mvaluetype="str",

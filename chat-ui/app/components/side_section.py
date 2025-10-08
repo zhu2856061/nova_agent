@@ -74,7 +74,7 @@ def sidebar(State) -> rx.Component:
         rx.vstack(
             # 品牌标识区域
             rx.hstack(
-                rx.avatar(name="NovaAI", src="novaai.png"),
+                rx.avatar(name="NovaAI", src="../novaai.png"),
                 rx.text("NovaAI", size="6", weight="bold"),
                 justify_content="center",
                 align_items="center",

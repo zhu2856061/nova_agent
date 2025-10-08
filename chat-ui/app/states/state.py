@@ -54,6 +54,7 @@ class State(rx.State):
         FunctionMenu(
             title="Agent",
             icon="bot-message-square",
+            tobe="/agent/researcher",
             children=[
                 FunctionMenu(
                     title="memorizer",
@@ -75,6 +76,7 @@ class State(rx.State):
         FunctionMenu(
             title="Task",
             icon="clipboard-list",
+            tobe="/task/deepresearcher",
             children=[
                 FunctionMenu(
                     title="deepresearcher",
