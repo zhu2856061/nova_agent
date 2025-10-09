@@ -8,7 +8,7 @@ from typing import Any
 import reflex as rx
 
 from app.api.agent_api import STREAM_AGENT_MEMORIZER_BACKEND_URL, get_agent_api
-from app.states.state import Message, Parameters, State
+from app.states.state import _SELECTED_MODELS, Message, Parameters, State
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +35,7 @@ class AgentMemorizerState(State):
             mtype="select",
             mvalue="basic",
             mvaluetype="str",
-            mselected=["basic", "reasoning", "basic_no_thinking"],
+            mselected=_SELECTED_MODELS,
         ),
     ]
 

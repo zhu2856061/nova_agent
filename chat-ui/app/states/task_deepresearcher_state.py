@@ -8,7 +8,7 @@ from typing import Any
 import reflex as rx
 
 from app.api.task_api import STREAM_TASK_DEEPRESEARCHER_BACKEND_URL, get_task_api
-from app.states.state import Message, Parameters, State
+from app.states.state import _SELECTED_MODELS, Message, Parameters, State
 
 logger = logging.getLogger(__name__)
 
@@ -28,49 +28,49 @@ class TaskDeepresearcherState(State):
             mtype="select",
             mvalue="reasoning",
             mvaluetype="str",
-            mselected=["basic", "reasoning", "basic_no_thinking"],
+            mselected=_SELECTED_MODELS,
         ),
         Parameters(
             mkey="research_brief_model",
             mtype="select",
             mvalue="reasoning",
             mvaluetype="str",
-            mselected=["basic", "reasoning", "basic_no_thinking"],
+            mselected=_SELECTED_MODELS,
         ),
         Parameters(
             mkey="supervisor_model",
             mtype="select",
             mvalue="basic_no_thinking",
             mvaluetype="str",
-            mselected=["basic", "reasoning", "basic_no_thinking"],
+            mselected=_SELECTED_MODELS,
         ),
         Parameters(
             mkey="researcher_model",
             mtype="select",
             mvalue="basic_no_thinking",
             mvaluetype="str",
-            mselected=["basic", "reasoning", "basic_no_thinking"],
+            mselected=_SELECTED_MODELS,
         ),
         Parameters(
             mkey="summarize_model",
             mtype="select",
             mvalue="reasoning",
             mvaluetype="str",
-            mselected=["basic", "reasoning", "basic_no_thinking"],
+            mselected=_SELECTED_MODELS,
         ),
         Parameters(
             mkey="compress_research_model",
             mtype="select",
             mvalue="reasoning",
             mvaluetype="str",
-            mselected=["basic", "reasoning", "basic_no_thinking"],
+            mselected=_SELECTED_MODELS,
         ),
         Parameters(
             mkey="report_model",
             mtype="select",
             mvalue="reasoning",
             mvaluetype="str",
-            mselected=["basic", "reasoning", "basic_no_thinking"],
+            mselected=_SELECTED_MODELS,
         ),
         Parameters(
             mkey="number_of_initial_queries",

@@ -8,7 +8,7 @@ from typing import Any
 import reflex as rx
 
 from app.api.agent_api import STREAM_AGENT_RESEARCHER_BACKEND_URL, get_agent_api
-from app.states.state import Message, Parameters, State
+from app.states.state import _SELECTED_MODELS, Message, Parameters, State
 
 logger = logging.getLogger(__name__)
 
@@ -28,21 +28,21 @@ class AgentResearcherState(State):
             mtype="select",
             mvalue="reasoning",
             mvaluetype="str",
-            mselected=["basic", "reasoning", "basic_no_thinking"],
+            mselected=_SELECTED_MODELS,
         ),
         Parameters(
             mkey="summarize_model",
             mtype="select",
             mvalue="reasoning",
             mvaluetype="str",
-            mselected=["basic", "reasoning", "basic_no_thinking"],
+            mselected=_SELECTED_MODELS,
         ),
         Parameters(
             mkey="compress_research_model",
             mtype="select",
             mvalue="reasoning",
             mvaluetype="str",
-            mselected=["basic", "reasoning", "basic_no_thinking"],
+            mselected=_SELECTED_MODELS,
         ),
         Parameters(
             mkey="max_react_tool_calls",

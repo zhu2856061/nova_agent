@@ -45,9 +45,9 @@ class ClarifyWithUser(BaseModel):
     )
 
 
-llm_instance = get_llm_by_type("reasoning").with_structured_output(
-    AnswerWithJustification
-)
+llm_instance = get_llm_by_type(
+    "gemini"
+)  # .with_structured_output(AnswerWithJustification)
 # llm_instance = get_llm_by_type("reasoning")
 
 question = """请查询网络上的信息，深圳的天气"""

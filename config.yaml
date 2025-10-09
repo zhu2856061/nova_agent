@@ -49,4 +49,28 @@ LLM:
       chat_template_kwargs:
          enable_thinking: false # 关闭思考模式
 
+  - model_name: "deepseek"
+    litellm_params:
+      model: "deepseek/deepseek-chat"
+      api_base: $DEEPSEEK_URL
+      api_key: $DEEPSEEK_API_KEY
+      cache: true
+      verbose: true
+      request_timeout: 600
+      temperature: 0.2
+      top_p: 0.2
+      top_k: 10
+      max_retries: 2
 
+  - model_name: "gemini"
+    litellm_params:
+      model: "openai/gemini-2.0-flash"
+      api_base: $GEMINI_URL
+      api_key: $GEMINI_API_KEY
+      cache: true
+      verbose: true
+      request_timeout: 600
+      temperature: 0.2
+      top_p: 0.2
+      top_k: 10
+      max_retries: 2
