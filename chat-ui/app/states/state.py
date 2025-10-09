@@ -83,6 +83,11 @@ class State(rx.State):
                     icon="clipboard-list",
                     tobe="/task/deepresearcher",
                 ),
+                FunctionMenu(
+                    title="ainovel",
+                    icon="clipboard-list",
+                    tobe="/task/ainovel",
+                ),
             ],
         ),
     ]

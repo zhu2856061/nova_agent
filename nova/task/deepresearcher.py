@@ -328,7 +328,7 @@ async def supervisor_tools(
                             HumanMessage(content=tool_call["args"]["research_topic"]),
                         ],
                     },  # type: ignore
-                    context=runtime.context,
+                    context=runtime.context,  # type: ignore
                 )
             )
 

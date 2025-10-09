@@ -7,7 +7,7 @@ from typing import Any
 
 import reflex as rx
 
-from app.api.agent_api import STREAM_AGENT_MEMORIZER_BACKEND_URL, get_agent_api
+from app.api.task_api import STREAM_TASK_DEEPRESEARCHER_BACKEND_URL, get_task_api
 from app.states.state import Message, Parameters, State
 
 logger = logging.getLogger(__name__)
@@ -192,8 +192,11 @@ class TaskDeepresearcherState(State):
         full_response = ""
         _content_len = 0
 
-        async for item in get_agent_api(
-            STREAM_AGENT_MEMORIZER_BACKEND_URL, self.current_chat, messages, config
+        async for item in get_task_api(
+            STREAM_TASK_DEEPRESEARCHER_BACKEND_URL,
+            self.current_chat,
+            {"messages": messages},
+            config,
         ):  # type: ignore
             content = item["content"]
             full_response += str(content)  # 累加完整响应

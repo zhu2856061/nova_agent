@@ -12,6 +12,7 @@ from pydantic import BaseModel, Field
 
 from nova.agent.memorizer import memorizer_agent
 from nova.agent.researcher import researcher_agent
+from nova.agent.wechat_researcher import wechat_researcher_agent
 from nova.utils import handle_event
 
 logger = logging.getLogger(__name__)
@@ -138,6 +139,72 @@ async def stream_memorizer_service(request: AgentRequest):
             try:
                 session = aiohttp.ClientSession()  # 创建会话
                 async for event in memorizer_agent.astream_events(
+                    inputs, context=context, version="v2"
+                ):
+                    data = handle_event(trace_id, event)
+                    if data:
+                        if data["event"] == "error":
+                            _response = AgentResponse(code=1, messages=data)
+                        else:
+                            _response = AgentResponse(code=0, messages=data)
+
+                        yield _response.model_dump_json() + "\n"
+
+                    else:
+                        continue
+
+            except Exception as e:
+                logger.error(f"Error during streaming: {e}")
+                raise
+            finally:
+                if session is not None:
+                    await session.close()  # 确保会话关闭
+
+        return StreamingResponse(
+            async_service(request.trace_id, state, context),
+            media_type="application/json",  # 流式数据的 MIME 类型
+        )
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@agent_router.post("/wechat_researcher", response_model=AgentResponse)
+async def wechat_researcher_service(request: AgentRequest):
+    """LLM Server"""
+    if not request:
+        raise HTTPException(status_code=400, detail="Input instances cannot be empty")
+
+    try:
+        state = request.state
+        context = {**request.context, "trace_id": request.trace_id}
+
+        result = await wechat_researcher_agent.ainvoke(state, context=context)  # type: ignore
+        content = result.get("memorizer_messages")  # type: ignore
+        return AgentResponse(
+            code=0,
+            messages={"role": "assistant", "content": content},  # type: ignore
+        )
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@agent_router.post("/stream_wechat_researcher")
+async def stream_wechat_researcher_service(request: AgentRequest):
+    """LLM Server"""
+    if not request:
+        raise HTTPException(status_code=400, detail="Input instances cannot be empty")
+
+    try:
+        state = request.state
+        context = {**request.context, "trace_id": request.trace_id}
+
+        async def async_service(trace_id, inputs, context) -> AsyncGenerator:
+            session = None
+            try:
+                session = aiohttp.ClientSession()  # 创建会话
+                async for event in wechat_researcher_agent.astream_events(
                     inputs, context=context, version="v2"
                 ):
                     data = handle_event(trace_id, event)

@@ -65,5 +65,6 @@ sh run_langgraph_cli.sh
 🚀[2025-09-26] 前端切换，不再使用streamlit，采用reflex
 
 [todo]
+- 小说生成 novel agent
 - 新增代码分析/解决/生成 agent
 - 知乎检索

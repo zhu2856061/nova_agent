@@ -6,25 +6,23 @@ import httpx
 import requests
 
 # 后端接口地址
-STREAM_AGENT_MEMORIZER_BACKEND_URL = (
-    "http://0.0.0.0:2021/agent/stream_memorizer"  # 需根据实际修改
+STREAM_TASK_AINOVEL_BACKEND_URL = (
+    "http://0.0.0.0:2021/task/stream_ainovel"  # 需根据实际修改
 )
-STREAM_AGENT_RESEARCHER_BACKEND_URL = (
-    "http://0.0.0.0:2021/agent/stream_researcher"  # 需根据实际修改
+STREAM_TASK_DEEPRESEARCHER_BACKEND_URL = (
+    "http://0.0.0.0:2021/task/stream_deepresearcher"  # 需根据实际修改
 )
-STREAM_AGENT_WECHATRESEARCHER_BACKEND_URL = (
-    "http://0.0.0.0:2021/agent/stream_wechat_researcher"  # 需根据实际修改
-)
+
 logger = logging.getLogger(__name__)
 
 
-async def get_agent_api(url: str, trace_id: str, state: dict, context: dict):
+async def get_task_api(url: str, trace_id: str, state: dict, context: dict):
     trace_id = trace_id or str(uuid.uuid4())
 
     request_data = {
         "trace_id": trace_id,
         "context": context,
-        "state": state,  # {"memorizer_messages": messages}
+        "state": state,  # {"memorizer_messages": messages},
     }
 
     current_answer_message_id = None

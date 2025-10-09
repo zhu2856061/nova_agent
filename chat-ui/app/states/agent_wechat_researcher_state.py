@@ -132,7 +132,7 @@ class AgentWeChatResearcherState(State):
         async for item in get_agent_api(
             STREAM_AGENT_WECHATRESEARCHER_BACKEND_URL,
             self.current_chat,
-            messages,
+            {"wechat_researcher_messages": messages},
             config,
         ):  # type: ignore
             content = item["content"]

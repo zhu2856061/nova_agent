@@ -7,33 +7,40 @@ from typing import Any
 
 import reflex as rx
 
-from app.api.agent_api import STREAM_AGENT_MEMORIZER_BACKEND_URL, get_agent_api
+from app.api.task_api import STREAM_TASK_AINOVEL_BACKEND_URL, get_task_api
 from app.states.state import Message, Parameters, State
 
 logger = logging.getLogger(__name__)
 
-_INTRODUCTION = "Hi! I'm **Nova Agent Memorizer**, a helpful assistant."
+_INTRODUCTION = "Hi! I'm **Nova Task AiNovel**, a helpful assistant."
 MAX_TOTAL_CHARS = 150000  # 总字符保护限制
 _DEFAULT_NAME = "Nova"
 
 
-class AgentMemorizerState(State):
-    unique_id = "Agent - Memorizer"
+class TaskAiNovelState(State):
+    unique_id = "Task - AiNovel"
     _default_introduction = _INTRODUCTION
     _default_name = _DEFAULT_NAME
 
     params_fields: list[Parameters] = [
         Parameters(
-            mkey="user_id",
+            mkey="task_dir",
             mtype="text",
             mvalue="merlin",
             mvaluetype="str",
             mselected=None,
         ),
         Parameters(
-            mkey="memorizer_model",
+            mkey="clarify_model",
             mtype="select",
-            mvalue="basic",
+            mvalue="reasoning",
+            mvaluetype="str",
+            mselected=["basic", "reasoning", "basic_no_thinking"],
+        ),
+        Parameters(
+            mkey="architecture_model",
+            mtype="select",
+            mvalue="basic_no_thinking",
             mvaluetype="str",
             mselected=["basic", "reasoning", "basic_no_thinking"],
         ),
@@ -129,10 +136,10 @@ class AgentMemorizerState(State):
         full_response = ""
         _content_len = 0
 
-        async for item in get_agent_api(
-            STREAM_AGENT_MEMORIZER_BACKEND_URL,
+        async for item in get_task_api(
+            STREAM_TASK_AINOVEL_BACKEND_URL,
             self.current_chat,
-            {"memorizer_messages": messages},
+            {"messages": messages},
             config,
         ):  # type: ignore
             content = item["content"]

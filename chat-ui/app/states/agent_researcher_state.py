@@ -144,7 +144,10 @@ class AgentResearcherState(State):
         _content_len = 0
 
         async for item in get_agent_api(
-            STREAM_AGENT_RESEARCHER_BACKEND_URL, self.current_chat, messages, config
+            STREAM_AGENT_RESEARCHER_BACKEND_URL,
+            self.current_chat,
+            {"researcher_messages": messages},
+            config,
         ):  # type: ignore
             content = item["content"]
             full_response += str(content)  # 累加完整响应

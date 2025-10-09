@@ -8,6 +8,7 @@ from app.pages.agent_memorizer_page import agent_memorizer_page
 from app.pages.agent_researcher_page import agent_researcher_page
 from app.pages.agent_wechat_researcher_page import agent_wechat_researcher_page
 from app.pages.chat_page import chat_page
+from app.pages.task_ainovel_page import task_ainovel_page
 from app.pages.task_deepresearcher_page import task_deepresearcher_page
 
 
@@ -82,7 +83,14 @@ app.add_page(
 
 app.add_page(
     component=task_deepresearcher_page,
-    title="Nova Agent",
+    title="Nova Task",
     route="/task/deepresearcher",
+    image="novaait.png",
+)
+
+app.add_page(
+    component=task_ainovel_page,
+    title="Nova Task",
+    route="/task/ainovel",
     image="novaait.png",
 )
