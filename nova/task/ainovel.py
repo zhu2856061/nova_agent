@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 
 from nova.llms import get_llm_by_type
 from nova.prompts.ainovel import apply_system_prompt_template
-from nova.tools import write_file_tool
+from nova.tools import read_file_tool, write_file_tool
 from nova.utils import (
     override_reducer,
     set_color,
@@ -43,6 +43,10 @@ class AgentState:
     )
     messages: Annotated[list[MessageLikeRepresentation], add_messages]
     architecture_messages: Annotated[list[MessageLikeRepresentation], override_reducer]
+    number_of_chapters: int = field(
+        default=0,
+        metadata={"description": "The number of chapters in the novel."},
+    )
 
 
 @dataclass(kw_only=True)
@@ -91,6 +95,31 @@ class ArchitectureState:
         default="",
         metadata={"description": "The plot arch result to use for the agent."},
     )
+    # # 5 整体架构
+    # overall_architecture_result: str = field(
+    #     default="",
+    #     metadata={
+    #         "description": "The overall architecture result to use for the agent."
+    #     },
+    # )
+
+
+@dataclass(kw_only=True)
+class ChapterState:
+    err_message: str = field(
+        default="",
+        metadata={"description": "The error message to use for the agent."},
+    )
+    chapter_messages: Annotated[list[MessageLikeRepresentation], override_reducer]
+    number_of_chapters: int = field(
+        default=0,
+        metadata={"description": "The number of chapters in the novel."},
+    )
+    # 1 章节目录生成
+    chapter_blueprint_result: str = field(
+        default="",
+        metadata={"description": "The core seed result to use for the agent."},
+    )
 
 
 @dataclass(kw_only=True)
@@ -110,6 +139,18 @@ class Context:
     architecture_model: str = field(
         default="basic",
         metadata={"description": "The name of llm to use for the agent. "},
+    )
+    chapter_model: str = field(
+        default="basic",
+        metadata={"description": "The name of llm to use for the agent. "},
+    )
+    chunk_size: int = field(
+        default=5,
+        metadata={"description": "The chunk size to use for the agent."},
+    )
+    max_chapter_length: int = field(
+        default=10,
+        metadata={"description": "The max chapter length to use for the agent."},
     )
 
 
@@ -134,10 +175,10 @@ class ExtractSetting(BaseModel):
     genre: str = Field(
         description="the genre of novel",
     )
-    number_of_chapters: str = Field(
+    number_of_chapters: int = Field(
         description="the number of chapters in a novel",
     )
-    word_number: str = Field(
+    word_number: int = Field(
         description="the word count of each chapter in the novel",
     )
 
@@ -180,14 +221,16 @@ async def clarify_with_user(
             return Command(
                 goto="__end__",
                 update={
-                    "architecture_messages": [AIMessage(content=response.question)]  # type: ignore
+                    "messages": [AIMessage(content=response.question)]  # type: ignore
                 },
             )
         else:
             return Command(
                 goto="architecture",
                 update={
-                    "architecture_messages": [AIMessage(content=response.verification)]  # type: ignore
+                    "architecture_messages": [
+                        HumanMessage(content=response.verification)  # type: ignore
+                    ]
                 },
             )
     except Exception as e:
@@ -489,6 +532,204 @@ async def plot_arch(
         )
 
 
+# 章节处理路由选择
+async def route_chapter_blueprint(
+    state: ChapterState, runtime: Runtime[Context]
+) -> Command[Literal["chapter_blueprint", "chunk_chapter_blueprint"]]:
+    # 变量
+    _trace_id = runtime.context.trace_id
+    _number_of_chapters = state.number_of_chapters
+    _max_chapter_length = runtime.context.max_chapter_length
+    if _number_of_chapters <= _max_chapter_length:
+        logger.info(
+            set_color(
+                f"trace_id={_trace_id} | node=route_chapter_blueprint | goto=chapter_blueprint",
+                "pink",
+            )
+        )
+        return Command(
+            goto="chapter_blueprint",
+        )
+    else:
+        logger.info(
+            set_color(
+                f"trace_id={_trace_id} | node=route_chapter_blueprint | goto=chunk_chapter_blueprint",
+                "pink",
+            )
+        )
+        return Command(
+            goto="chunk_chapter_blueprint",
+        )
+
+
+# 章节目录
+async def chapter_blueprint(
+    state: ChapterState, runtime: Runtime[Context]
+) -> Command[Literal["__end__"]]:
+    try:
+        # 变量
+        _trace_id = runtime.context.trace_id
+        _model_name = runtime.context.chapter_model
+        _work_dir = os.path.join(runtime.context.task_dir, _trace_id)
+        _messages = state.chapter_messages
+        _number_of_chapters = state.number_of_chapters
+
+        #
+        if os.path.exists(f"{_work_dir}/novel_architecture.md"):
+            _novel_architecture = await read_file_tool.arun(
+                {"file_path": f"{_work_dir}/novel_architecture.md"}
+            )
+        else:
+            _novel_architecture = ""
+
+        if _novel_architecture is None:
+            return Command(
+                goto="__end__",
+                update={
+                    "err_message": f"trace_id={_trace_id} | node=chapter_blueprint | error=novel_architecture is None"
+                },
+            )
+
+        # 提示词
+        def _assemble_prompt(messages):
+            tmp = {
+                "user_guidance": get_buffer_string(messages),
+                "novel_architecture": _novel_architecture,
+                "number_of_chapters": _number_of_chapters,
+            }
+            return [
+                HumanMessage(
+                    content=apply_system_prompt_template("chapter_blueprint", tmp)
+                )
+            ]
+
+        # LLM
+        def _get_llm():
+            return get_llm_by_type(_model_name)
+
+        response = await _get_llm().ainvoke(_assemble_prompt(_messages))
+        logger.info(
+            set_color(
+                f"trace_id={_trace_id} | node=chapter_blueprint | message={response}",
+                "pink",
+            )
+        )
+
+        return Command(
+            goto="__end__",
+            update={
+                "chapter_blueprint_result": response.content,
+            },
+        )
+
+    except Exception as e:
+        logger.error(
+            set_color(
+                f"trace_id={_trace_id} | node=chapter_blueprint | error={e}", "red"
+            )
+        )
+        return Command(
+            goto="__end__",
+            update={
+                "err_message": f"trace_id={_trace_id} | node=chapter_blueprint | error={e}"
+            },
+        )
+
+
+# 递归单章节目录
+async def chunk_chapter_blueprint(
+    state: ChapterState, runtime: Runtime[Context]
+) -> Command[Literal["__end__"]]:
+    try:
+        # 变量
+        _trace_id = runtime.context.trace_id
+        _model_name = runtime.context.chapter_model
+        _work_dir = os.path.join(runtime.context.task_dir, _trace_id)
+        _messages = state.chapter_messages
+        _number_of_chapters = state.number_of_chapters
+        _chunk_size = runtime.context.chunk_size
+
+        #
+        if os.path.exists(f"{_work_dir}/novel_architecture.md"):
+            _novel_architecture = await read_file_tool.arun(
+                {"file_path": f"{_work_dir}/novel_architecture.md"}
+            )
+        else:
+            _novel_architecture = ""
+
+        if _novel_architecture is None:
+            return Command(
+                goto="__end__",
+                update={
+                    "err_message": f"trace_id={_trace_id} | node=chapter_blueprint | error=novel_architecture is None"
+                },
+            )
+
+        # 提示词
+        def _assemble_prompt(messages, chapter_list, start, end):
+            tmp = {
+                "user_guidance": get_buffer_string(messages),
+                "novel_architecture": _novel_architecture,
+                "number_of_chapters": _number_of_chapters,
+                "chapter_list": chapter_list,
+                "start": start,
+                "end": end,
+            }
+            return [
+                HumanMessage(
+                    content=apply_system_prompt_template(
+                        "chunked_chapter_blueprint", tmp
+                    )
+                )
+            ]
+
+        # LLM
+        def _get_llm():
+            return get_llm_by_type(_model_name)
+
+        current_start = 1
+        final_chapter_blueprint = []
+
+        while current_start <= _number_of_chapters:
+            current_end = min(current_start + _chunk_size, _number_of_chapters)
+            chapter_list = "\n\n".join(final_chapter_blueprint[-200:])
+
+            response = await _get_llm().ainvoke(
+                _assemble_prompt(_messages, chapter_list, current_start, current_end)
+            )
+            final_chapter_blueprint.append(response.content)
+
+            logger.info(
+                set_color(
+                    f"trace_id={_trace_id} | node=chunk_chapter_blueprint | current_start={current_start} | current_end={current_end} | message={response}",
+                    "pink",
+                )
+            )
+            current_start = current_end + 1
+
+        final_chapter_blueprint = "\n\n".join(final_chapter_blueprint)
+
+        return Command(
+            goto="__end__",
+            update={
+                "chapter_blueprint_result": final_chapter_blueprint,
+            },
+        )
+
+    except Exception as e:
+        logger.error(
+            set_color(
+                f"trace_id={_trace_id} | node=chapter_blueprint | error={e}", "red"
+            )
+        )
+        return Command(
+            goto="__end__",
+            update={
+                "err_message": f"trace_id={_trace_id} | node=chapter_blueprint | error={e}"
+            },
+        )
+
+
 #
 # Agent - Workflow
 
@@ -503,9 +744,21 @@ architecture_subgraph_builder.add_edge(START, "extract_setting")
 architecture_subgraph = architecture_subgraph_builder.compile()
 
 
+# chapter subgraph
+chapter_subgraph_builder = StateGraph(ChapterState, context_schema=Context)
+chapter_subgraph_builder.add_node("route_chapter_blueprint", route_chapter_blueprint)
+chapter_subgraph_builder.add_node("chapter_blueprint", chapter_blueprint)
+chapter_subgraph_builder.add_node("chunk_chapter_blueprint", chunk_chapter_blueprint)
+chapter_subgraph_builder.add_edge(START, "route_chapter_blueprint")
+chapter_subgraph = chapter_subgraph_builder.compile()
+
+
 # supervisor researcher graph
 graph_builder = StateGraph(AgentState, context_schema=Context)
 graph_builder.add_node("clarify_with_user", clarify_with_user)
 graph_builder.add_node("architecture", architecture_subgraph)
+graph_builder.add_node("chapter", chapter_subgraph)
 graph_builder.add_edge(START, "clarify_with_user")
+graph_builder.add_edge("architecture", "chapter")
+
 ainovel = graph_builder.compile()
