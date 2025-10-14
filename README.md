@@ -5,7 +5,7 @@ python 3.12
 
 安装uv库
 ```shell
-pip install nv
+pip install uv
 ```
 
 根目录下执行
