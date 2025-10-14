@@ -32,7 +32,7 @@ async def get_task_api(url: str, trace_id: str, state: dict, context: dict):
         async with httpx.AsyncClient() as client:
             # 发送 POST 请求到 /stream_llm 路由
             async with client.stream(
-                "POST", url, json=request_data, timeout=600.0
+                "POST", url, json=request_data, timeout=3600.0
             ) as response:
                 response.raise_for_status()
 

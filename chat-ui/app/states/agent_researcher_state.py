@@ -173,7 +173,6 @@ class AgentResearcherState(State):
                     _reasoning_content = content["reasoning_content"]
                     _content = content["content"]
                     _tool_calls = content["tool_calls"]
-                    print(content)
 
                     if _content_len > 0:
                         self._chat2messages[self.current_chat][

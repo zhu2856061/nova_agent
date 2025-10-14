@@ -8,7 +8,7 @@ from typing import Any
 import reflex as rx
 
 from app.api.task_api import STREAM_TASK_AINOVEL_BACKEND_URL, get_task_api
-from app.states.state import Message, Parameters, State, _SELECTED_MODELS
+from app.states.state import _SELECTED_MODELS, Message, Parameters, State
 
 logger = logging.getLogger(__name__)
 
@@ -166,7 +166,6 @@ class TaskAiNovelState(State):
                     _reasoning_content = content["reasoning_content"]
                     _content = content["content"]
                     _tool_calls = content["tool_calls"]
-                    print(content)
 
                     if _content_len > 0:
                         self._chat2messages[self.current_chat][
