@@ -15,16 +15,26 @@ STREAM_AGENT_RESEARCHER_BACKEND_URL = (
 STREAM_AGENT_WECHATRESEARCHER_BACKEND_URL = (
     "http://0.0.0.0:2021/agent/stream_wechat_researcher"  # 需根据实际修改
 )
+
+STREAM_AGENT_THEMESLICER_BACKEND_URL = (
+    "http://0.0.0.0:2021/agent/stream_theme_slicer"  # 需根据实际修改
+)
+
+HUMAN_IN_LOOP_BACKEND_URL = "http://0.0.0.0:2021/agent/human_in_loop"
+
 logger = logging.getLogger(__name__)
 
 
-async def get_agent_api(url: str, trace_id: str, state: dict, context: dict):
+async def get_agent_api(
+    url: str, trace_id: str, state: dict, context: dict, user_guidance: dict
+):
     trace_id = trace_id or str(uuid.uuid4())
 
     request_data = {
         "trace_id": trace_id,
         "context": context,
         "state": state,  # {"memorizer_messages": messages}
+        "user_guidance": user_guidance,
     }
 
     current_answer_message_id = None
@@ -34,7 +44,7 @@ async def get_agent_api(url: str, trace_id: str, state: dict, context: dict):
         async with httpx.AsyncClient() as client:
             # 发送 POST 请求到 /stream_llm 路由
             async with client.stream(
-                "POST", url, json=request_data, timeout=600.0
+                "POST", url, json=request_data, timeout=3600.0
             ) as response:
                 response.raise_for_status()
 
@@ -146,7 +156,7 @@ async def get_agent_api(url: str, trace_id: str, state: dict, context: dict):
                                         current_reasoning_message_id = _message_id
                                         yield {
                                             "type": "thought",
-                                            "content": "📝 思考过程：\n\n",
+                                            "content": "\n\n📝 思考过程：\n\n",
                                         }
 
                                     yield {
@@ -160,10 +170,19 @@ async def get_agent_api(url: str, trace_id: str, state: dict, context: dict):
                                         current_answer_message_id = _message_id
                                         yield {
                                             "type": "answer",
-                                            "content": "📌 回答内容：\n\n",
+                                            "content": "\n\n📌 回答内容：\n\n",
                                         }
 
                                     yield {"type": "answer", "content": f"{_answer}"}
+
+                        elif _event in ["on_chain_stream"]:
+                            _output = _data["output"]
+                            _trace_id = _output["message_id"]
+                            _content = _output.get("content", "")
+                            yield {
+                                "type": "human_in_loop",
+                                "content": f"\n\n📌 人工介入：{_content}\n\n",
+                            }
 
                     except json.JSONDecodeError:
                         error_msg = f"❌ 响应格式错误: 无法解析内容（前200字符）: {chunk[:200]}..."

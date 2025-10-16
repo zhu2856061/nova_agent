@@ -12,6 +12,7 @@ from langchain_core.messages import (
     MessageLikeRepresentation,
     get_buffer_string,
 )
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import START, StateGraph, add_messages
 from langgraph.runtime import Runtime
 from langgraph.types import Command
@@ -172,4 +173,5 @@ graph_builder.add_node("chapter_draft", ainovel_chapter_draft_agent)
 graph_builder.add_edge(START, "clarify_with_user")
 graph_builder.add_edge("architecture", "chapter")
 graph_builder.add_edge("chapter", "chapter_draft")
-ainovel = graph_builder.compile()
+checkpointer = InMemorySaver()
+ainovel = graph_builder.compile(checkpointer=checkpointer)

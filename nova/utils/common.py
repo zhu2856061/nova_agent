@@ -287,6 +287,28 @@ def handle_event(trace_id, event):
             #             },
             #         }
 
+        elif kind == "on_chain_stream":
+            _name = langgraph_node + "|" + name
+
+            try:
+                interrupt_content = data["chunk"].get("__interrupt__")
+            except Exception:
+                interrupt_content = None
+
+            if interrupt_content:
+                ydata = {
+                    "event": "on_chain_stream",
+                    "data": {
+                        "node_name": _name,
+                        "step": langgraph_step,
+                        "run_id": run_id,
+                        "checkpoint_ns": checkpoint_ns,
+                        "parent_ids": parent_ids,
+                        "trace_id": trace_id,
+                        "output": interrupt_content[0].value,
+                    },
+                }
+                return ydata
         else:
             return None
 

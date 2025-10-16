@@ -6,6 +6,7 @@ import reflex as rx
 
 from app.pages.agent_memorizer_page import agent_memorizer_page
 from app.pages.agent_researcher_page import agent_researcher_page
+from app.pages.agent_theme_slicer_page import agent_theme_slicer_page
 from app.pages.agent_wechat_researcher_page import agent_wechat_researcher_page
 from app.pages.chat_page import chat_page
 from app.pages.task_ainovel_page import task_ainovel_page
@@ -78,6 +79,13 @@ app.add_page(
     component=agent_wechat_researcher_page,
     title="Nova Agent",
     route="/agent/wechat_researcher",
+    image="novaait.png",
+)
+
+app.add_page(
+    component=agent_theme_slicer_page,
+    title="Nova Agent",
+    route="/agent/theme_slicer",
     image="novaait.png",
 )
 

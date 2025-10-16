@@ -12,9 +12,10 @@ from langchain_core.messages import (
     MessageLikeRepresentation,
     get_buffer_string,
 )
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import START, StateGraph, add_messages
 from langgraph.runtime import Runtime
-from langgraph.types import Command
+from langgraph.types import Command, interrupt
 from pydantic import BaseModel, Field
 
 from nova.llms import get_llm_by_type
@@ -40,7 +41,11 @@ class ArchitectureState:
         metadata={"description": "The error message to use for the agent."},
     )
     architecture_messages: Annotated[list[MessageLikeRepresentation], add_messages]
-
+    # 用户介入的信息
+    user_guidance: str = field(
+        default="",
+        metadata={"description": "The user guidance to use for the agent."},
+    )
     # 0 小说设定
     topic: str = field(
         default="",
@@ -471,4 +476,5 @@ _agent.add_node("world_building", world_building)
 _agent.add_node("plot_arch", plot_arch)
 _agent.add_edge(START, "extract_setting")
 
-ainovel_architecture_agent = _agent.compile()
+checkpointer = InMemorySaver()
+ainovel_architecture_agent = _agent.compile(checkpointer=checkpointer)

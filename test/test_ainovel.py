@@ -26,10 +26,11 @@ context = {
     "clarify_model": "reasoning",
     "architecture_model": "reasoning",
 }
+config = {"configurable": {"thread_id": "1"}}
 
 
 async def async_generate_response():
-    tmp = await ainovel.ainvoke(inputs, context=context)  # type: ignore
+    tmp = await ainovel.ainvoke(inputs, config=config, context=context)  # type: ignore
     print("Assistant:\n", tmp)
 
 
