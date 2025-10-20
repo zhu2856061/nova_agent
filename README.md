@@ -13,7 +13,7 @@ pip install uv
 uv sync
 ```
 
-注意： ⚠️ 需要安装 playwright ``` playwright install ``` ``` playwright install-deps ```
+注意： ⚠️ 使用里面的researcher, 需要安装 playwright ``` playwright install ``` ``` playwright install-deps ```
 
 ### 启动服务
 进入scripts目录下执行
@@ -64,7 +64,9 @@ sh run_langgraph_cli.sh
 
 🚀[2025-09-26] 前端切换，不再使用streamlit，采用reflex
 
+🚀[2025-10-16] 完成小说生成 ainovel
+
 [todo]
-- 小说生成 novel agent
+- 小说生成，需要新增各种人工编辑器（以章节为单位进行）
 - 新增代码分析/解决/生成 agent
 - 知乎检索

@@ -35,10 +35,8 @@ logger = logging.getLogger(__name__)
 
 # ######################################################################################
 # 全局变量
-
-
 @dataclass(kw_only=True)
-class AgentState:
+class State:
     err_message: str = field(
         default="",
         metadata={"description": "The error message to use for the agent."},
@@ -106,7 +104,7 @@ class ClarifyWithUser(BaseModel):
 
 # 用户澄清
 async def clarify_with_user(
-    state: AgentState, runtime: Runtime[Context]
+    state: State, runtime: Runtime[Context]
 ) -> Command[Literal["architecture", "__end__"]]:
     try:
         # 变量
@@ -165,7 +163,7 @@ async def clarify_with_user(
 
 
 # supervisor researcher graph
-graph_builder = StateGraph(AgentState, context_schema=Context)
+graph_builder = StateGraph(State, context_schema=Context)
 graph_builder.add_node("clarify_with_user", clarify_with_user)
 graph_builder.add_node("architecture", ainovel_architecture_agent)
 graph_builder.add_node("chapter", ainovel_chapter_agent)

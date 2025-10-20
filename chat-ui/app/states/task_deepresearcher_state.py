@@ -197,6 +197,7 @@ class TaskDeepresearcherState(State):
             self.current_chat,
             {"messages": messages},
             config,
+            {},
         ):  # type: ignore
             content = item["content"]
             full_response += str(content)  # 累加完整响应

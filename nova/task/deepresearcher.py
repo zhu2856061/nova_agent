@@ -328,7 +328,21 @@ async def supervisor_tools(
                             HumanMessage(content=tool_call["args"]["research_topic"]),
                         ],
                     },  # type: ignore
-                    context=runtime.context,  # type: ignore
+                    context={
+                        "trace_id": _trace_id,
+                        "researcher_model": runtime.context.get(
+                            "researcher_model", "basic"
+                        ),
+                        "summarize_model": runtime.context.get(
+                            "summarize_model", "basic"
+                        ),
+                        "compress_research_model": runtime.context.get(
+                            "compress_research_model", "basic"
+                        ),
+                        "max_react_tool_calls": runtime.context.get(
+                            "max_react_tool_calls", 5
+                        ),
+                    },  # type: ignore
                 )
             )
 

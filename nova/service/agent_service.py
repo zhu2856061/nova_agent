@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 # Define the router
 agent_router = APIRouter(
     prefix="/agent",
-    tags=["TASK AGENT SERVER"],
+    tags=["AGENT SERVER"],
     responses={404: {"description": "Not found"}},
 )
 
@@ -35,6 +35,7 @@ class AgentRequest(BaseModel):
     state: Optional[Dict] = Field(None, description="the input messages of the task")
     context: Dict = Field(..., description="the context runtime dict")
     user_guidance: Optional[Dict] = Field(None, description="the user guidance")
+    stream: bool = Field(True, description="whether to stream the response")
 
 
 class AgentResponse(BaseModel):
@@ -42,291 +43,80 @@ class AgentResponse(BaseModel):
     messages: Dict = Field(..., description=" response message")
 
 
+async def service(Task, request: AgentRequest):
+    if not request:
+        raise HTTPException(status_code=400, detail="Input instances cannot be empty")
+
+    try:
+        state = request.state
+        context = {**request.context, "trace_id": request.trace_id}
+        config = {"configurable": {"thread_id": request.trace_id}}
+        stream = request.stream
+
+        if not stream:
+            result = await Task.ainvoke(state, context=context, config=config)  # type: ignore
+            content = result.get("messages")[-1].content  # type: ignore
+            return AgentResponse(
+                code=0,
+                messages={"role": "assistant", "content": content},  # type: ignore
+            )
+        else:
+
+            async def async_service(
+                trace_id, inputs, context, config
+            ) -> AsyncGenerator:
+                session = None
+                try:
+                    session = aiohttp.ClientSession()  # 创建会话
+                    async for event in Task.astream_events(
+                        inputs, config=config, context=context, version="v2"
+                    ):
+                        data = handle_event(trace_id, event)
+                        if data:
+                            if data["event"] == "error":
+                                _response = AgentResponse(code=1, messages=data)
+                            else:
+                                _response = AgentResponse(code=0, messages=data)
+
+                            yield _response.model_dump_json() + "\n"
+
+                        else:
+                            continue
+
+                except Exception as e:
+                    logger.error(f"Error during streaming: {e}")
+                    raise
+                finally:
+                    if session is not None:
+                        await session.close()  # 确保会话关闭
+
+            return StreamingResponse(
+                async_service(request.trace_id, state, context, config),
+                media_type="application/json",  # 流式数据的 MIME 类型
+            )
+    except Exception as e:
+        logger.error(f"Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @agent_router.post("/researcher", response_model=AgentResponse)
 async def researcher_service(request: AgentRequest):
-    """LLM Server"""
-    if not request:
-        raise HTTPException(status_code=400, detail="Input instances cannot be empty")
-
-    try:
-        state = request.state
-        context = {**request.context, "trace_id": request.trace_id}
-
-        result = await researcher_agent.ainvoke(state, context=context)  # type: ignore
-        content = result.get("compressed_research")  # type: ignore
-        return AgentResponse(
-            code=0,
-            messages={"role": "assistant", "content": content},  # type: ignore
-        )
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@agent_router.post("/stream_researcher")
-async def stream_researcher_service(request: AgentRequest):
-    """LLM Server"""
-    if not request:
-        raise HTTPException(status_code=400, detail="Input instances cannot be empty")
-
-    try:
-        state = request.state
-        context = {**request.context, "trace_id": request.trace_id}
-
-        async def async_service(trace_id, inputs, context) -> AsyncGenerator:
-            session = None
-            try:
-                session = aiohttp.ClientSession()  # 创建会话
-                async for event in researcher_agent.astream_events(
-                    inputs, context=context, version="v2"
-                ):
-                    data = handle_event(trace_id, event)
-                    if data:
-                        if data["event"] == "error":
-                            _response = AgentResponse(code=1, messages=data)
-                        else:
-                            _response = AgentResponse(code=0, messages=data)
-
-                        yield _response.model_dump_json() + "\n"
-
-                    else:
-                        continue
-
-            except Exception as e:
-                logger.error(f"Error during streaming: {e}")
-                raise
-            finally:
-                if session is not None:
-                    await session.close()  # 确保会话关闭
-
-        return StreamingResponse(
-            async_service(request.trace_id, state, context),
-            media_type="application/json",  # 流式数据的 MIME 类型
-        )
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@agent_router.post("/memorizer", response_model=AgentResponse)
-async def memorizer_service(request: AgentRequest):
-    """LLM Server"""
-    if not request:
-        raise HTTPException(status_code=400, detail="Input instances cannot be empty")
-
-    try:
-        state = request.state
-        context = {**request.context, "trace_id": request.trace_id}
-
-        result = await memorizer_agent.ainvoke(state, context=context)  # type: ignore
-        content = result.get("memorizer_messages")  # type: ignore
-        return AgentResponse(
-            code=0,
-            messages={"role": "assistant", "content": content},  # type: ignore
-        )
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@agent_router.post("/stream_memorizer")
-async def stream_memorizer_service(request: AgentRequest):
-    """LLM Server"""
-    if not request:
-        raise HTTPException(status_code=400, detail="Input instances cannot be empty")
-
-    try:
-        state = request.state
-        context = {**request.context, "trace_id": request.trace_id}
-
-        async def async_service(trace_id, inputs, context) -> AsyncGenerator:
-            session = None
-            try:
-                session = aiohttp.ClientSession()  # 创建会话
-                async for event in memorizer_agent.astream_events(
-                    inputs, context=context, version="v2"
-                ):
-                    data = handle_event(trace_id, event)
-                    if data:
-                        if data["event"] == "error":
-                            _response = AgentResponse(code=1, messages=data)
-                        else:
-                            _response = AgentResponse(code=0, messages=data)
-
-                        yield _response.model_dump_json() + "\n"
-
-                    else:
-                        continue
-
-            except Exception as e:
-                logger.error(f"Error during streaming: {e}")
-                raise
-            finally:
-                if session is not None:
-                    await session.close()  # 确保会话关闭
-
-        return StreamingResponse(
-            async_service(request.trace_id, state, context),
-            media_type="application/json",  # 流式数据的 MIME 类型
-        )
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return await service(researcher_agent, request)
 
 
 @agent_router.post("/wechat_researcher", response_model=AgentResponse)
 async def wechat_researcher_service(request: AgentRequest):
-    """LLM Server"""
-    if not request:
-        raise HTTPException(status_code=400, detail="Input instances cannot be empty")
-
-    try:
-        state = request.state
-        context = {**request.context, "trace_id": request.trace_id}
-
-        result = await wechat_researcher_agent.ainvoke(state, context=context)  # type: ignore
-        content = result.get("memorizer_messages")  # type: ignore
-        return AgentResponse(
-            code=0,
-            messages={"role": "assistant", "content": content},  # type: ignore
-        )
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+    return await service(wechat_researcher_agent, request)
 
 
-@agent_router.post("/stream_wechat_researcher")
-async def stream_wechat_researcher_service(request: AgentRequest):
-    """LLM Server"""
-    if not request:
-        raise HTTPException(status_code=400, detail="Input instances cannot be empty")
-
-    try:
-        state = request.state
-        context = {**request.context, "trace_id": request.trace_id}
-
-        async def async_service(trace_id, inputs, context) -> AsyncGenerator:
-            session = None
-            try:
-                session = aiohttp.ClientSession()  # 创建会话
-                async for event in wechat_researcher_agent.astream_events(
-                    inputs, context=context, version="v2"
-                ):
-                    data = handle_event(trace_id, event)
-                    if data:
-                        if data["event"] == "error":
-                            _response = AgentResponse(code=1, messages=data)
-                        else:
-                            _response = AgentResponse(code=0, messages=data)
-
-                        yield _response.model_dump_json() + "\n"
-
-                    else:
-                        continue
-
-            except Exception as e:
-                logger.error(f"Error during streaming: {e}")
-                raise
-            finally:
-                if session is not None:
-                    await session.close()  # 确保会话关闭
-
-        return StreamingResponse(
-            async_service(request.trace_id, state, context),
-            media_type="application/json",  # 流式数据的 MIME 类型
-        )
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+@agent_router.post("/memorizer")
+async def memorizer_service(request: AgentRequest):
+    return await service(memorizer_agent, request)
 
 
-@agent_router.post("/stream_ainovel_architect")
-async def stream_ainovel_architect_service(request: AgentRequest):
-    """LLM Server"""
-    if not request:
-        raise HTTPException(status_code=400, detail="Input instances cannot be empty")
-
-    try:
-        state = request.state
-        context = {**request.context, "trace_id": request.trace_id}
-        config: RunnableConfig = {"configurable": {"thread_id": request.trace_id}}
-
-        async def async_service(trace_id, inputs, context) -> AsyncGenerator:
-            session = None
-            try:
-                session = aiohttp.ClientSession()  # 创建会话
-                async for event in ainovel_architecture_agent.astream_events(
-                    inputs, config=config, context=context, version="v2"
-                ):
-                    data = handle_event(trace_id, event)
-                    if data:
-                        if data["event"] == "error":
-                            _response = AgentResponse(code=1, messages=data)
-                        else:
-                            _response = AgentResponse(code=0, messages=data)
-
-                        yield _response.model_dump_json() + "\n"
-                    else:
-                        continue
-
-            except Exception as e:
-                logger.error(f"Error during streaming: {e}")
-                raise
-            finally:
-                if session is not None:
-                    await session.close()  # 确保会话关闭
-
-        return StreamingResponse(
-            async_service(request.trace_id, state, context),
-            media_type="application/json",  # 流式数据的 MIME 类型
-        )
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@agent_router.post("/stream_theme_slicer")
-async def stream_theme_slicer_service(request: AgentRequest):
-    """LLM Server"""
-    if not request:
-        raise HTTPException(status_code=400, detail="Input instances cannot be empty")
-    try:
-        state = request.state
-        context = {**request.context, "trace_id": request.trace_id}
-        config: RunnableConfig = {"configurable": {"thread_id": request.trace_id}}
-
-        async def async_service(trace_id, inputs, context) -> AsyncGenerator:
-            session = None
-            try:
-                session = aiohttp.ClientSession()  # 创建会话
-                async for event in theme_slicer_agent.astream_events(
-                    inputs, config=config, context=context, version="v2"
-                ):
-                    data = handle_event(trace_id, event)
-                    if data:
-                        if data["event"] == "error":
-                            _response = AgentResponse(code=1, messages=data)
-                        else:
-                            _response = AgentResponse(code=0, messages=data)
-
-                        yield _response.model_dump_json() + "\n"
-                    else:
-                        continue
-
-            except Exception as e:
-                logger.error(f"Error during streaming: {e}")
-                raise
-            finally:
-                if session is not None:
-                    await session.close()  # 确保会话关闭
-
-        return StreamingResponse(
-            async_service(request.trace_id, state, context),
-            media_type="application/json",  # 流式数据的 MIME 类型
-        )
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+@agent_router.post("/ainovel_architect")
+async def ainovel_architect_service(request: AgentRequest):
+    return await service(ainovel_architecture_agent, request)
 
 
 @agent_router.post("/human_in_loop")

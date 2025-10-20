@@ -6,7 +6,7 @@ import httpx
 import requests
 
 # 后端接口地址
-STREAM_CHAT_BACKEND_URL = "http://0.0.0.0:2021/chat/stream_llm"  # 需根据实际修改
+STREAM_CHAT_BACKEND_URL = "http://0.0.0.0:2021/chat/llm"  # 需根据实际修改
 
 logger = logging.getLogger(__name__)
 

@@ -188,13 +188,14 @@ async def wechat_researcher_tools(
     except Exception as e:
         logger.error(
             set_color(
-                f"trace_id={_trace_id} | node=researcher_tools | error={e}", "red"
+                f"trace_id={_trace_id} | node=wechat_researcher_tools | error={e}",
+                "red",
             )
         )
         return Command(
             goto="__end__",
             update={
-                "err_message": f"trace_id={_trace_id} | node=researcher_tools | error={e}"
+                "err_message": f"trace_id={_trace_id} | node=wechat_researcher_tools | error={e}"
             },
         )
 
@@ -266,13 +267,13 @@ async def compress_research(
     except Exception as e:
         logger.error(
             set_color(
-                f"trace_id={_trace_id} | node=researcher_tools | error={e}", "red"
+                f"trace_id={_trace_id} | node=compress_research | error={e}", "red"
             )
         )
         return Command(
             goto="__end__",
             update={
-                "err_message": f"trace_id={_trace_id} | node=researcher_tools | error={e}"
+                "err_message": f"trace_id={_trace_id} | node=compress_research | error={e}"
             },
         )
 

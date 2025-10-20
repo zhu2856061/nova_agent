@@ -7,17 +7,13 @@ import requests
 
 # 后端接口地址
 STREAM_AGENT_MEMORIZER_BACKEND_URL = (
-    "http://0.0.0.0:2021/agent/stream_memorizer"  # 需根据实际修改
+    "http://0.0.0.0:2021/agent/memorizer"  # 需根据实际修改
 )
 STREAM_AGENT_RESEARCHER_BACKEND_URL = (
-    "http://0.0.0.0:2021/agent/stream_researcher"  # 需根据实际修改
+    "http://0.0.0.0:2021/agent/researcher"  # 需根据实际修改
 )
 STREAM_AGENT_WECHATRESEARCHER_BACKEND_URL = (
-    "http://0.0.0.0:2021/agent/stream_wechat_researcher"  # 需根据实际修改
-)
-
-STREAM_AGENT_THEMESLICER_BACKEND_URL = (
-    "http://0.0.0.0:2021/agent/stream_theme_slicer"  # 需根据实际修改
+    "http://0.0.0.0:2021/agent/wechat_researcher"  # 需根据实际修改
 )
 
 HUMAN_IN_LOOP_BACKEND_URL = "http://0.0.0.0:2021/agent/human_in_loop"
@@ -177,11 +173,10 @@ async def get_agent_api(
 
                         elif _event in ["on_chain_stream"]:
                             _output = _data["output"]
-                            _trace_id = _output["message_id"]
                             _content = _output.get("content", "")
                             yield {
                                 "type": "human_in_loop",
-                                "content": f"\n\n📌 人工介入：{_content}\n\n",
+                                "content": f"\n\n🐞 人工介入：{_content}\n\n",
                             }
 
                     except json.JSONDecodeError:

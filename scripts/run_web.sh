@@ -1,2 +1,2 @@
 cd ../chat-ui
-reflex run
+uv run reflex run

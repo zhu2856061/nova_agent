@@ -6,23 +6,25 @@ import httpx
 import requests
 
 # 后端接口地址
-STREAM_TASK_AINOVEL_BACKEND_URL = (
-    "http://0.0.0.0:2021/task/stream_ainovel"  # 需根据实际修改
-)
+STREAM_TASK_AINOVEL_BACKEND_URL = "http://0.0.0.0:2021/task/ainovel"  # 需根据实际修改
 STREAM_TASK_DEEPRESEARCHER_BACKEND_URL = (
-    "http://0.0.0.0:2021/task/stream_deepresearcher"  # 需根据实际修改
+    "http://0.0.0.0:2021/task/deepresearcher"  # 需根据实际修改
 )
+HUMAN_IN_LOOP_BACKEND_URL = "http://0.0.0.0:2021/task/human_in_loop"
 
 logger = logging.getLogger(__name__)
 
 
-async def get_task_api(url: str, trace_id: str, state: dict, context: dict):
+async def get_task_api(
+    url: str, trace_id: str, state: dict, context: dict, user_guidance: dict
+):
     trace_id = trace_id or str(uuid.uuid4())
 
     request_data = {
         "trace_id": trace_id,
         "context": context,
-        "state": state,  # {"memorizer_messages": messages},
+        "state": state,
+        "user_guidance": user_guidance,
     }
 
     current_answer_message_id = None
@@ -162,6 +164,14 @@ async def get_task_api(url: str, trace_id: str, state: dict, context: dict):
                                         }
 
                                     yield {"type": "answer", "content": f"{_answer}"}
+
+                        elif _event in ["on_chain_stream"]:
+                            _output = _data["output"]
+                            _content = _output.get("content", "")
+                            yield {
+                                "type": "human_in_loop",
+                                "content": f"\n\n🐞 人工介入：{_content}\n\n",
+                            }
 
                     except json.JSONDecodeError:
                         error_msg = f"❌ 响应格式错误: 无法解析内容（前200字符）: {chunk[:200]}..."

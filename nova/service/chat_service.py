@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 # Define the router
 chat_router = APIRouter(
     prefix="/chat",
-    tags=["LLM SERVER"],
+    tags=["CHAT SERVER"],
     responses={404: {"description": "Not found"}},
 )
 
@@ -28,6 +28,7 @@ class LLMRequest(BaseModel):
     llm_dtype: str = Field(..., description="llm_dtype")
     messages: List[Dict] = Field(..., description="messages dict")
     config: Optional[Dict] = Field(None, description="config dict")
+    stream: bool = Field(True, description="whether to stream the response")
 
 
 class LLMResponse(BaseModel):
@@ -43,68 +44,68 @@ async def llm_server(request: LLMRequest):
 
     try:
         model = get_llm_by_type(request.llm_dtype)
-        if request.config:
-            result = await model.ainvoke(request.messages, **request.config)
+        config = {"configurable": {"thread_id": request.trace_id}}
+        stream = request.stream
+
+        if not stream:
+            if request.config:
+                result = await model.ainvoke(
+                    request.messages,
+                    config=config,  # type: ignore
+                    **request.config,
+                )
+            else:
+                result = await model.ainvoke(request.messages, config=config)  # type: ignore
+
+            return LLMResponse(
+                code=0, messages={"role": "assistant", "content": result.content}
+            )
         else:
-            result = await model.ainvoke(request.messages)
+            # 定义一个生成器函数来逐步生成响应
+            async def async_service() -> AsyncGenerator:
+                session = None
+                try:
+                    session = aiohttp.ClientSession()  # 创建会话
+                    # 假设模型提供了异步生成器接口
+                    if request.config:
+                        async for response in model.astream(
+                            request.messages,
+                            config=config,  # type: ignore
+                            **request.config,
+                        ):
+                            if response.content:
+                                llm_response = LLMResponse(
+                                    code=0, messages={"content": response.content}
+                                )
+                                yield llm_response.model_dump_json() + "\n"
 
-        return LLMResponse(
-            code=0, messages={"role": "assistant", "content": result.content}
-        )
-    except Exception as e:
-        logger.error(f"Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+                            if response.additional_kwargs:
+                                llm_response = LLMResponse(
+                                    code=0, messages=response.additional_kwargs
+                                )
+                                yield llm_response.model_dump_json() + "\n"
 
+                    else:
+                        async for response in model.astream(
+                            request.messages,
+                            config=config,  # type: ignore
+                        ):
+                            if response.content:
+                                llm_response = LLMResponse(
+                                    code=0, messages={"content": response.content}
+                                )
+                                yield llm_response.model_dump_json() + "\n"
+                except Exception as e:
+                    logger.error(f"Error during streaming: {e}")
+                    raise
+                finally:
+                    if session is not None:
+                        await session.close()  # 确保会话关闭
 
-@chat_router.post("/stream_llm")
-async def stream_llm_server(request: LLMRequest):
-    """LLM Server"""
-    if not request:
-        raise HTTPException(status_code=400, detail="Input instances cannot be empty")
-
-    try:
-        model = get_llm_by_type(request.llm_dtype)
-
-        # 定义一个生成器函数来逐步生成响应
-        async def async_service() -> AsyncGenerator:
-            session = None
-            try:
-                session = aiohttp.ClientSession()  # 创建会话
-                # 假设模型提供了异步生成器接口
-                if request.config:
-                    async for response in model.astream(
-                        request.messages, **request.config
-                    ):
-                        if response.content:
-                            llm_response = LLMResponse(
-                                code=0, messages={"content": response.content}
-                            )
-                            yield llm_response.model_dump_json() + "\n"
-
-                        if response.additional_kwargs:
-                            llm_response = LLMResponse(
-                                code=0, messages=response.additional_kwargs
-                            )
-                            yield llm_response.model_dump_json() + "\n"
-
-                else:
-                    async for response in model.astream(request.messages):
-                        if response.content:
-                            llm_response = LLMResponse(
-                                code=0, messages={"content": response.content}
-                            )
-                            yield llm_response.model_dump_json() + "\n"
-            except Exception as e:
-                logger.error(f"Error during streaming: {e}")
-                raise
-            finally:
-                if session is not None:
-                    await session.close()  # 确保会话关闭
-
-        return StreamingResponse(
-            async_service(),
-            media_type="application/json",  # 流式数据的 MIME 类型
-        )
+            return StreamingResponse(
+                async_service(),
+                media_type="application/json",  # 流式数据的 MIME 类型
+            )
     except Exception as e:
         logger.error(f"Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))

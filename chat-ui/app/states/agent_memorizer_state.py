@@ -134,6 +134,7 @@ class AgentMemorizerState(State):
             self.current_chat,
             {"memorizer_messages": messages},
             config,
+            {},
         ):  # type: ignore
             content = item["content"]
             full_response += str(content)  # 累加完整响应

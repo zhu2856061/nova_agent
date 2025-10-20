@@ -1,58 +1,56 @@
-clarify_with_user_prompt = """These are the messages that have been exchanged so far from the user asking for the novel:
-<Messages>
+clarify_with_user_prompt = """
+这些是到目前为止从要求写小说的用户那里交换的信息：
+<留言>
 {messages}
-</Messages>
+</留言>
 
-Assess whether you need to ask a clarifying question, or if the user has already provided enough information for you to start write a novel.
-IMPORTANT: If you can see in the messages history that you have already asked a clarifying question, you almost always do not need to ask another one. Only ask another question if ABSOLUTELY NECESSARY.
+评估你是否需要问一个澄清问题，或者用户是否已经提供了足够的信息让你开始写小说。
+重要提示：如果您在消息历史记录中看到您已经提出了一个澄清问题，则几乎总是不需要再提出另一个问题。只有在绝对必要的情况下才问另一个问题。
 
-If there are acronyms, abbreviations, or unknown terms, ask the user to clarify.
-If you need to ask a question, follow these guidelines:
-- Be concise while gathering all necessary information
-- Make sure to gather all the information needed to carry out the write a novel in a concise, well-structured manner.
-- Use bullet points or numbered lists if appropriate for clarity. Make sure that this uses markdown formatting and will be rendered correctly if the string output is passed to a markdown renderer.
-- Don't ask for unnecessary information, or information that the user has already provided. If you can see that the user has already provided the information, do not ask for it again.
+如果有首字母缩略词、缩写或未知术语，请用户澄清。
+如果您需要提问，请遵循以下指南：
+-在收集所有必要信息时保持简洁
+-确保以简洁、结构良好的方式收集写小说所需的所有信息。
+-为清楚起见，请使用要点或编号列表。确保这使用了markdown格式，并且如果将字符串输出传递给markdown呈现器，则会正确呈现。
+-不要询问不必要的信息，或者用户已经提供的信息。如果你能看到用户已经提供了信息，不要再要求了。
 
-Respond in valid JSON format with these exact keys:
+使用以下确切的键以有效的JSON格式响应：
 "need_clarification": boolean,
 "question": "<question to ask the user to clarify the report scope>",
 "verification": "<verification message that we will start research>"
 
-If you need to ask a clarifying question, return:
+如果您需要提出澄清问题，请返回：
 "need_clarification": true,
 "question": "<your clarifying question>",
 "verification": ""
 
-If you do not need to ask a clarifying question, return:
+如果您不需要提出澄清问题，请返回：
 "need_clarification": false,
 "question": "",
 "verification": "<acknowledgement message that you will now start research based on the provided information>"
 
-If the messages is in a specific language, prioritize sources published in that language.
-
-For the verification message when no clarification is needed:
-- Acknowledge that you have sufficient information to proceed
-- Briefly summarize the key settings of what you understand from their request
-- Keep the message concise and professional
-- The key settings include topic(the topic of novel), genre(the genre of novel), count_of_chapters(the number of chapters in a novel), word_numbers(the word count of each chapter in the novel)
+如果消息使用特定语言，请优先考虑以该语言发布的来源。
+对于不需要澄清的验证消息：
+-确认您有足够的信息继续
+-简要总结您从他们的请求中了解到的关键设置
+-保持信息简洁专业
+-关键设置包括 topic（小说的主题）、genre（小说的类型）、count_of_chapters（小说中的章节数）、word_numbers（小说中每章的字数）
 """
 
-extract_setting_prompt = """You will be given a set of messages that have been exchanged so far between yourself and the user. 
-Your job is to extract **key settings** from these messages
-
-The messages that have been exchanged so far between yourself and the user are:
-<Messages>
+extract_setting_prompt = """\
+你将收到一组你和用户之间迄今为止交换的消息。 
+你的工作是从这些消息中提取**关键设置**
+到目前为止，你和用户之间交换的消息是：
+<消息>
 {messages}
-</Messages>
-
-You will return **key settings** that will be used to guide the novel.
-
-Guidelines:
-The key settings include: 
-- topic: the topic of novel
-- genre: the genre of novel
-- count_of_chapters: the number of chapters in a novel
-- word_numbers: the word count of each chapter in the novel
+</消息>
+您将返回用于指导小说的**按键设置**。
+指导方针：
+关键设置包括：
+-topic：小说的主题
+-genre：小说的类型
+-number_of_chapters：小说的章数
+-word_number：小说每一章的字数
 """
 
 # =============== 1. 核心种子设定（雪花第1层）===================
@@ -76,7 +74,8 @@ core_seed_prompt = """\
 # =============== 2. 角色动力学设定（角色弧光模型）===================
 character_dynamics_prompt = """\
 基于以下元素：
-- 核心种子：{core_seed_result}
+- 内容指导：{user_guidance}
+- 核心种子：{core_seed}
 
 请设计3-6个具有动态变化潜力的核心角色，每个角色需包含：
 特征：
@@ -105,7 +104,8 @@ character_dynamics_prompt = """\
 # =============== 3. 世界构建矩阵（三维度交织法）===================
 world_building_prompt = """\
 基于以下元素：
-- 核心冲突："{core_seed_result}"
+- 内容指导：{user_guidance}
+- 核心冲突："{core_seed}"
 
 为服务上述内容，请构建三维交织的世界观：
 
@@ -132,9 +132,10 @@ world_building_prompt = """\
 # =============== 4. 情节架构（三幕式悬念）===================
 plot_arch_prompt = """\
 基于以下元素：
-- 核心种子：{core_seed_result}
-- 角色体系：{character_dynamics_result}
-- 世界观：{world_building_result}
+- 内容指导：{user_guidance}
+- 核心种子：{core_seed}
+- 角色体系：{character_dynamics}
+- 世界观：{world_building}
 
 要求按以下结构设计：
 第一幕（触发） 

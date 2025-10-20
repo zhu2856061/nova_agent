@@ -5,7 +5,7 @@
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Annotated, Literal
+from typing import Annotated, Dict, Literal
 
 from langchain_core.messages import (
     HumanMessage,
@@ -35,54 +35,21 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(kw_only=True)
-class ArchitectureState:
+class State:
     err_message: str = field(
         default="",
         metadata={"description": "The error message to use for the agent."},
     )
     architecture_messages: Annotated[list[MessageLikeRepresentation], add_messages]
+
     # 用户介入的信息
     user_guidance: str = field(
         default="",
         metadata={"description": "The user guidance to use for the agent."},
     )
-    # 0 小说设定
-    topic: str = field(
-        default="",
-        metadata={"description": "The topic of the novel."},
-    )
-    genre: str = field(
-        default="",
-        metadata={"description": "The genre of the novel."},
-    )
-    number_of_chapters: int = field(
-        default=0,
-        metadata={"description": "The number of chapters in the novel."},
-    )
-    word_number: int = field(
-        default=0,
-        metadata={"description": "The word number of each chapter in the novel."},
-    )
-
-    # 1 核心种子
-    core_seed_result: str = field(
-        default="",
-        metadata={"description": "The core seed result to use for the agent."},
-    )
-    # 2 角色动力学
-    character_dynamics_result: str = field(
-        default="",
-        metadata={"description": "The character dynamics result to use for the agent."},
-    )
-    # 3 世界观
-    world_building_result: str = field(
-        default="",
-        metadata={"description": "The world building result to use for the agent."},
-    )
-    # 4 三幕式情节架构
-    plot_arch_result: str = field(
-        default="",
-        metadata={"description": "The plot arch result to use for the agent."},
+    middle_result: Dict = field(
+        default_factory=dict,
+        metadata={"description": "The middle result to use for the agent."},
     )
 
 
@@ -125,7 +92,7 @@ class ExtractSetting(BaseModel):
 
 # 抽取设定
 async def extract_setting(
-    state: ArchitectureState, runtime: Runtime[Context]
+    state: State, runtime: Runtime[Context]
 ) -> Command[Literal["core_seed", "__end__"]]:
     try:
         # 变量
@@ -154,15 +121,14 @@ async def extract_setting(
             )
         )
 
-        return Command(
-            goto="core_seed",
-            update={
-                "topic": response.topic,  # type: ignore
-                "genre": response.genre,  # type: ignore
-                "number_of_chapters": response.number_of_chapters,  # type: ignore
-                "word_number": response.word_number,  # type: ignore
-            },
-        )
+        _middle_result = {
+            "topic": response.topic,  # type: ignore
+            "genre": response.genre,  # type: ignore
+            "number_of_chapters": response.number_of_chapters,  # type: ignore
+            "word_number": response.word_number,  # type: ignore
+        }
+
+        return Command(goto="core_seed", update={"middle_result": _middle_result})
 
     except Exception as e:
         logger.error(
@@ -178,25 +144,18 @@ async def extract_setting(
 
 # 核心种子
 async def core_seed(
-    state: ArchitectureState, runtime: Runtime[Context]
+    state: State, runtime: Runtime[Context]
 ) -> Command[Literal["character_dynamics", "__end__"]]:
     try:
         # 变量
         _trace_id = runtime.context.trace_id
         _model_name = runtime.context.architecture_model
-        _topic = state.topic
-        _genre = state.genre
-        _number_of_chapters = state.number_of_chapters
-        _word_number = state.word_number
+        _middle_result = state.middle_result
+        _user_guidance = state.user_guidance
 
         # 提示词
         def _assemble_prompt():
-            tmp = {
-                "topic": _topic,
-                "genre": _genre,
-                "number_of_chapters": _number_of_chapters,
-                "word_number": _word_number,
-            }
+            tmp = {**_middle_result, "user_guidance": _user_guidance}
             return [
                 HumanMessage(content=apply_system_prompt_template("core_seed", tmp))
             ]
@@ -213,8 +172,10 @@ async def core_seed(
             )
         )
 
+        _middle_result = {**_middle_result, "core_seed": response.content}
+
         return Command(
-            goto="character_dynamics", update={"core_seed_result": response.content}
+            goto="character_dynamics", update={"middle_result": _middle_result}
         )
 
     except Exception as e:
@@ -231,17 +192,18 @@ async def core_seed(
 
 # 角色动力学
 async def character_dynamics(
-    state: ArchitectureState, runtime: Runtime[Context]
+    state: State, runtime: Runtime[Context]
 ) -> Command[Literal["create_character_state", "__end__"]]:
     try:
         # 变量
         _trace_id = runtime.context.trace_id
         _model_name = runtime.context.architecture_model
-        _core_seed_result = state.core_seed_result
+        _middle_result = state.middle_result
+        _user_guidance = state.user_guidance
 
         # 提示词
         def _assemble_prompt():
-            tmp = {"core_seed_result": _core_seed_result}
+            tmp = {**_middle_result, "user_guidance": _user_guidance}
             return [
                 HumanMessage(
                     content=apply_system_prompt_template("character_dynamics", tmp)
@@ -260,9 +222,10 @@ async def character_dynamics(
             )
         )
 
+        _middle_result = {**_middle_result, "character_dynamics": response.content}
+
         return Command(
-            goto="create_character_state",
-            update={"character_dynamics_result": response.content},
+            goto="create_character_state", update={"middle_result": _middle_result}
         )
 
     except Exception as e:
@@ -281,21 +244,21 @@ async def character_dynamics(
 
 # 初始化角色状态
 async def create_character_state(
-    state: ArchitectureState, runtime: Runtime[Context]
+    state: State, runtime: Runtime[Context]
 ) -> Command[Literal["world_building", "__end__"]]:
     try:
         # 变量
         _trace_id = runtime.context.trace_id
         _model_name = runtime.context.architecture_model
         _task_dir = runtime.context.task_dir
-        _character_dynamics_result = state.character_dynamics_result
+        _middle_result = state.middle_result
 
         _work_dir = os.path.join(_task_dir, _trace_id)
         os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
         def _assemble_prompt():
-            tmp = {"character_dynamics": _character_dynamics_result}
+            tmp = {**_middle_result}
             return [
                 HumanMessage(
                     content=apply_system_prompt_template("create_character_state", tmp)
@@ -339,17 +302,18 @@ async def create_character_state(
 
 # 世界观
 async def world_building(
-    state: ArchitectureState, runtime: Runtime[Context]
+    state: State, runtime: Runtime[Context]
 ) -> Command[Literal["plot_arch", "__end__"]]:
     try:
         # 变量
         _trace_id = runtime.context.trace_id
         _model_name = runtime.context.architecture_model
-        _core_seed_result = state.core_seed_result
+        _middle_result = state.middle_result
+        _user_guidance = state.user_guidance
 
         # 提示词
         def _assemble_prompt():
-            tmp = {"core_seed_result": _core_seed_result}
+            tmp = {**_middle_result, "user_guidance": _user_guidance}
             return [
                 HumanMessage(
                     content=apply_system_prompt_template("world_building", tmp)
@@ -368,9 +332,9 @@ async def world_building(
             )
         )
 
-        return Command(
-            goto="plot_arch", update={"world_building_result": response.content}
-        )
+        _middle_result = {**_middle_result, "world_building": response.content}
+
+        return Command(goto="plot_arch", update={"middle_result": _middle_result})
 
     except Exception as e:
         logger.error(
@@ -386,31 +350,22 @@ async def world_building(
 
 # 三幕式情节架构
 async def plot_arch(
-    state: ArchitectureState, runtime: Runtime[Context]
+    state: State, runtime: Runtime[Context]
 ) -> Command[Literal["__end__"]]:
     try:
         # 变量
         _trace_id = runtime.context.trace_id
         _model_name = runtime.context.architecture_model
         _task_dir = runtime.context.task_dir
-        _topic = state.topic
-        _genre = state.genre
-        _number_of_chapters = state.number_of_chapters
-        _word_number = state.word_number
-        _core_seed_result = state.core_seed_result
-        _character_dynamics_result = state.character_dynamics_result
-        _world_building_result = state.world_building_result
+        _middle_result = state.middle_result
+        _user_guidance = state.user_guidance
 
         _work_dir = os.path.join(_task_dir, _trace_id)
         os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
         def _assemble_prompt():
-            tmp = {
-                "core_seed_result": _core_seed_result,
-                "character_dynamics_result": _character_dynamics_result,
-                "world_building_result": _world_building_result,
-            }
+            tmp = {**_middle_result, "user_guidance": _user_guidance}
             return [
                 HumanMessage(content=apply_system_prompt_template("plot_arch", tmp))
             ]
@@ -429,13 +384,13 @@ async def plot_arch(
 
         final_content = (
             "#=== 0) 小说设定 ===\n"
-            f"主题：{_topic},类型：{_genre},篇幅：约{_number_of_chapters}章（每章{_word_number}字）\n\n"
+            f"主题：{_middle_result['topic']},类型：{_middle_result['genre']},篇幅：约{_middle_result['number_of_chapters']}章（每章{_middle_result['word_number']}字）\n\n"
             "#=== 1) 核心种子 ===\n"
-            f"{_core_seed_result}\n\n"
+            f"{_middle_result['core_seed']}\n\n"
             "#=== 2) 角色动力学 ===\n"
-            f"{_character_dynamics_result}\n\n"
+            f"{_middle_result['character_dynamics']}\n\n"
             "#=== 3) 世界观 ===\n"
-            f"{_world_building_result}\n\n"
+            f"{_middle_result['world_building']}\n\n"
             "#=== 4) 三幕式情节架构 ===\n"
             f"{response.content}\n"
         )
@@ -448,10 +403,7 @@ async def plot_arch(
 
         return Command(
             goto="__end__",
-            update={
-                "plot_arch_result": response.content,
-                "architecture_messages": final_content,
-            },
+            update={"architecture_messages": final_content},
         )
 
     except Exception as e:
@@ -466,15 +418,36 @@ async def plot_arch(
         )
 
 
+# 人工指导
+async def human_in_loop(
+    state: State, runtime: Runtime[Context]
+) -> Command[Literal["__end__"]]:
+    _trace_id = runtime.context.trace_id
+    user_guidance = interrupt(
+        {
+            "message_id": _trace_id,
+            "content": "基础上述生成信息，是否需要人工指导，需要的话直接输入指导内容，不需要的话直接输入`不需要`",
+        }
+    )
+    _result = user_guidance["result"]
+
+    return Command(goto="__end__", update={"user_guidance": _result})
+
+
 # architecture subgraph
-_agent = StateGraph(ArchitectureState, context_schema=Context)
+_agent = StateGraph(State, context_schema=Context)
 _agent.add_node("extract_setting", extract_setting)
 _agent.add_node("core_seed", core_seed)
 _agent.add_node("character_dynamics", character_dynamics)
 _agent.add_node("create_character_state", create_character_state)
 _agent.add_node("world_building", world_building)
 _agent.add_node("plot_arch", plot_arch)
+_agent.add_node("human_in_loop", human_in_loop)
+
 _agent.add_edge(START, "extract_setting")
+_agent.add_edge("core_seed", "human_in_loop")
+_agent.add_edge("character_dynamics", "human_in_loop")
+_agent.add_edge("world_building", "human_in_loop")
 
 checkpointer = InMemorySaver()
 ainovel_architecture_agent = _agent.compile(checkpointer=checkpointer)

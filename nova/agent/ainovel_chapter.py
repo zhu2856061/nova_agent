@@ -5,12 +5,10 @@
 import logging
 import os
 from dataclasses import dataclass, field
-from typing import Annotated, Literal
+from typing import Dict, Literal
 
 from langchain_core.messages import (
     HumanMessage,
-    MessageLikeRepresentation,
-    get_buffer_string,
 )
 from langgraph.graph import START, StateGraph
 from langgraph.runtime import Runtime
@@ -20,7 +18,6 @@ from nova.llms import get_llm_by_type
 from nova.prompts.ainovel import apply_system_prompt_template
 from nova.tools import read_file_tool, write_file_tool
 from nova.utils import (
-    override_reducer,
     set_color,
 )
 
@@ -34,20 +31,22 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(kw_only=True)
-class ChapterState:
+class State:
     err_message: str = field(
         default="",
         metadata={"description": "The error message to use for the agent."},
     )
-    chapter_messages: Annotated[list[MessageLikeRepresentation], override_reducer]
-    number_of_chapters: int = field(
-        default=0,
-        metadata={"description": "The number of chapters in the novel."},
-    )
-    # 1 章节目录生成
-    chapter_blueprint_result: str = field(
+    # chapter_messages: Annotated[list[MessageLikeRepresentation], override_reducer]
+
+    # 用户介入的信息
+    user_guidance: str = field(
         default="",
-        metadata={"description": "The core seed result to use for the agent."},
+        metadata={"description": "The user guidance to use for the agent."},
+    )
+
+    middle_result: Dict = field(
+        default_factory=dict,
+        metadata={"description": "The middle result to use for the agent."},
     )
 
 
@@ -67,11 +66,11 @@ class Context:
         metadata={"description": "The name of llm to use for the agent. "},
     )
     chunk_size: int = field(
-        default=5,
+        default=2,
         metadata={"description": "The chunk size to use for the agent."},
     )
     max_chapter_length: int = field(
-        default=10,
+        default=5,
         metadata={"description": "The max chapter length to use for the agent."},
     )
 
@@ -82,12 +81,14 @@ class Context:
 
 # 章节处理路由选择
 async def route_chapter_blueprint(
-    state: ChapterState, runtime: Runtime[Context]
+    state: State, runtime: Runtime[Context]
 ) -> Command[Literal["chapter_blueprint", "chunk_chapter_blueprint"]]:
     # 变量
     _trace_id = runtime.context.trace_id
-    _number_of_chapters = state.number_of_chapters
     _max_chapter_length = runtime.context.max_chapter_length
+    _middle_result = state.middle_result
+    _number_of_chapters: int = _middle_result.get("number_of_chapters", 3)
+
     if _number_of_chapters <= _max_chapter_length:
         logger.info(
             set_color(
@@ -108,15 +109,16 @@ async def route_chapter_blueprint(
 
 # 章节目录
 async def chapter_blueprint(
-    state: ChapterState, runtime: Runtime[Context]
+    state: State, runtime: Runtime[Context]
 ) -> Command[Literal["save_chapter_blueprint", "__end__"]]:
     try:
         # 变量
         _trace_id = runtime.context.trace_id
         _model_name = runtime.context.chapter_model
         _work_dir = os.path.join(runtime.context.task_dir, _trace_id)
-        _messages = state.chapter_messages
-        _number_of_chapters = state.number_of_chapters
+        _user_guidance = state.user_guidance
+        _middle_result = state.middle_result
+        _number_of_chapters: int = _middle_result.get("number_of_chapters", 3)
 
         #
         if os.path.exists(f"{_work_dir}/novel_architecture.md"):
@@ -135,9 +137,9 @@ async def chapter_blueprint(
             )
 
         # 提示词
-        def _assemble_prompt(messages):
+        def _assemble_prompt():
             tmp = {
-                "user_guidance": get_buffer_string(messages),
+                "user_guidance": _user_guidance,
                 "novel_architecture": _novel_architecture,
                 "number_of_chapters": _number_of_chapters,
             }
@@ -151,7 +153,7 @@ async def chapter_blueprint(
         def _get_llm():
             return get_llm_by_type(_model_name)
 
-        response = await _get_llm().ainvoke(_assemble_prompt(_messages))
+        response = await _get_llm().ainvoke(_assemble_prompt())
         logger.info(
             set_color(
                 f"trace_id={_trace_id} | node=chapter_blueprint | message={response}",
@@ -159,11 +161,11 @@ async def chapter_blueprint(
             )
         )
 
+        _middle_result = {**_middle_result, "chapter_blueprint": response.content}
+
         return Command(
             goto="save_chapter_blueprint",
-            update={
-                "chapter_blueprint_result": response.content,
-            },
+            update={"middle_result": _middle_result},
         )
 
     except Exception as e:
@@ -182,15 +184,16 @@ async def chapter_blueprint(
 
 # 递归单章节目录
 async def chunk_chapter_blueprint(
-    state: ChapterState, runtime: Runtime[Context]
+    state: State, runtime: Runtime[Context]
 ) -> Command[Literal["save_chapter_blueprint", "__end__"]]:
     try:
         # 变量
         _trace_id = runtime.context.trace_id
         _model_name = runtime.context.chapter_model
         _work_dir = os.path.join(runtime.context.task_dir, _trace_id)
-        _messages = state.chapter_messages
-        _number_of_chapters = state.number_of_chapters
+        _user_guidance = state.user_guidance
+        _middle_result = state.middle_result
+        _number_of_chapters: int = _middle_result.get("number_of_chapters", 3)
         _chunk_size = runtime.context.chunk_size
 
         #
@@ -210,9 +213,9 @@ async def chunk_chapter_blueprint(
             )
 
         # 提示词
-        def _assemble_prompt(messages, chapter_list, start, end):
+        def _assemble_prompt(chapter_list, start, end):
             tmp = {
-                "user_guidance": get_buffer_string(messages),
+                "user_guidance": _user_guidance,
                 "novel_architecture": _novel_architecture,
                 "number_of_chapters": _number_of_chapters,
                 "chapter_list": chapter_list,
@@ -239,7 +242,7 @@ async def chunk_chapter_blueprint(
             chapter_list = "\n\n".join(final_chapter_blueprint[-200:])
 
             response = await _get_llm().ainvoke(
-                _assemble_prompt(_messages, chapter_list, current_start, current_end)
+                _assemble_prompt(chapter_list, current_start, current_end)
             )
             final_chapter_blueprint.append(response.content)
 
@@ -251,13 +254,14 @@ async def chunk_chapter_blueprint(
             )
             current_start = current_end + 1
 
-        final_chapter_blueprint = "\n\n".join(final_chapter_blueprint)
+        _middle_result = {
+            **_middle_result,
+            "chapter_blueprint": "\n\n".join(final_chapter_blueprint),
+        }
 
         return Command(
             goto="save_chapter_blueprint",
-            update={
-                "chapter_blueprint_result": final_chapter_blueprint,
-            },
+            update={"middle_result": _middle_result},
         )
 
     except Exception as e:
@@ -276,19 +280,19 @@ async def chunk_chapter_blueprint(
 
 # 保存目录数据
 async def save_chapter_blueprint(
-    state: ChapterState, runtime: Runtime[Context]
+    state: State, runtime: Runtime[Context]
 ) -> Command[Literal["__end__"]]:
     try:
         # 变量
         _trace_id = runtime.context.trace_id
         _work_dir = os.path.join(runtime.context.task_dir, _trace_id)
-        _chapter_blueprint_result = state.chapter_blueprint_result
+        _middle_result = state.middle_result
 
         #
         await write_file_tool.arun(
             {
                 "file_path": f"{_work_dir}/novel_chapter_blueprint.md",
-                "text": _chapter_blueprint_result,
+                "text": _middle_result["chapter_blueprint"],
             }
         )
 
@@ -316,7 +320,7 @@ async def save_chapter_blueprint(
 
 
 # chapter subgraph
-_agent = StateGraph(ChapterState, context_schema=Context)
+_agent = StateGraph(State, context_schema=Context)
 _agent.add_node("route_chapter_blueprint", route_chapter_blueprint)
 _agent.add_node("chapter_blueprint", chapter_blueprint)
 _agent.add_node("chunk_chapter_blueprint", chunk_chapter_blueprint)

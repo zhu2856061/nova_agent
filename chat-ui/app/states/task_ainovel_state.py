@@ -7,7 +7,11 @@ from typing import Any
 
 import reflex as rx
 
-from app.api.task_api import STREAM_TASK_AINOVEL_BACKEND_URL, get_task_api
+from app.api.task_api import (
+    HUMAN_IN_LOOP_BACKEND_URL,
+    STREAM_TASK_AINOVEL_BACKEND_URL,
+    get_task_api,
+)
 from app.states.state import _SELECTED_MODELS, Message, Parameters, State
 
 logger = logging.getLogger(__name__)
@@ -51,6 +55,8 @@ class TaskAiNovelState(State):
     _chat2messages: dict[str, list[Message]] = {
         _default_name: [Message(role="assistant", content=_default_introduction)]
     }
+
+    _is_human_in_loop = False
 
     @rx.event
     def update_params_fields(self, form_data: dict[str, Any]):
@@ -136,11 +142,18 @@ class TaskAiNovelState(State):
         full_response = ""
         _content_len = 0
 
+        _url = STREAM_TASK_AINOVEL_BACKEND_URL
+        if self._is_human_in_loop:
+            _url = HUMAN_IN_LOOP_BACKEND_URL
+
+        self._is_human_in_loop = False
+
         async for item in get_task_api(
-            STREAM_TASK_AINOVEL_BACKEND_URL,
+            _url,
             self.current_chat,
             {"messages": messages},
             config,
+            {"result": question},
         ):  # type: ignore
             content = item["content"]
             full_response += str(content)  # 累加完整响应
@@ -197,6 +210,11 @@ class TaskAiNovelState(State):
             elif item["type"] == "thought":
                 self._chat2messages[self.current_chat][-1].content += content
                 _content_len += len(content)
+
+            elif item["type"] == "human_in_loop":
+                self._chat2messages[self.current_chat][-1].content += content
+                _content_len += len(content)
+                self._is_human_in_loop = True
 
             yield
 

@@ -72,11 +72,6 @@ class State(rx.State):
                     icon="bot-message-square",
                     tobe="/agent/wechat_researcher",
                 ),
-                FunctionMenu(
-                    title="theme_slicer",
-                    icon="bot-message-square",
-                    tobe="/agent/theme_slicer",
-                ),
             ],
         ),
         FunctionMenu(

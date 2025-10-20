@@ -134,6 +134,7 @@ class AgentWeChatResearcherState(State):
             self.current_chat,
             {"wechat_researcher_messages": messages},
             config,
+            {},
         ):  # type: ignore
             content = item["content"]
             full_response += str(content)  # 累加完整响应
