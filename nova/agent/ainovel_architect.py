@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 
 from nova.llms import get_llm_by_type
 from nova.prompts.ainovel import apply_system_prompt_template
-from nova.tools import write_file_tool
+from nova.tools import read_file_tool, write_file_tool
 from nova.utils import (
     set_color,
 )
@@ -399,6 +399,126 @@ async def plot_arch(
         )
 
 
+# 章节目录
+async def chapter_blueprint(
+    state: State, runtime: Runtime[Context]
+) -> Command[Literal["human_in_loop_agree", "__end__"]]:
+    try:
+        # 变量
+        _trace_id = runtime.context.trace_id
+        _model_name = runtime.context.architecture_model
+        _user_guidance = state.user_guidance
+        _middle_result = state.middle_result
+        _number_of_chapters: int = _middle_result["number_of_chapters"]
+
+        _work_dir = os.path.join(runtime.context.task_dir, _trace_id)
+
+        #
+        if os.path.exists(f"{_work_dir}/novel_architecture.md"):
+            _novel_architecture = await read_file_tool.arun(
+                {"file_path": f"{_work_dir}/novel_architecture.md"}
+            )
+        else:
+            _novel_architecture = ""
+        if _novel_architecture is None:
+            return Command(
+                goto="__end__",
+                update={
+                    "err_message": f"trace_id={_trace_id} | node=chapter_blueprint | error=novel_architecture is None"
+                },
+            )
+
+        # 提示词
+        def _assemble_overall_prompt():
+            tmp = {
+                "user_guidance": _user_guidance,
+                "novel_architecture": _novel_architecture,
+                "number_of_chapters": _number_of_chapters,
+            }
+            return [
+                HumanMessage(
+                    content=apply_system_prompt_template("chapter_blueprint", tmp)
+                )
+            ]
+
+        def _assemble_chunk_prompt(chapter_list, start, end):
+            tmp = {
+                "user_guidance": _user_guidance,
+                "novel_architecture": _novel_architecture,
+                "number_of_chapters": _number_of_chapters,
+                "chapter_list": chapter_list,
+                "start": start,
+                "end": end,
+            }
+            return [
+                HumanMessage(
+                    content=apply_system_prompt_template(
+                        "chunked_chapter_blueprint", tmp
+                    )
+                )
+            ]
+
+        # LLM
+        def _get_llm():
+            return get_llm_by_type(_model_name)
+
+        if _number_of_chapters <= 10:  # 小于10章的一次性产出
+            response = await _get_llm().ainvoke(_assemble_overall_prompt())
+            logger.info(
+                set_color(
+                    f"trace_id={_trace_id} | node=chapter_blueprint | message={response}",
+                    "pink",
+                )
+            )
+
+            _middle_result = {**_middle_result, "chapter_blueprint": response.content}
+        else:
+            current_start = 1
+            final_chapter_blueprint = []
+            while current_start <= _number_of_chapters:
+                current_end = min(current_start + 10, _number_of_chapters)
+                chapter_list = "\n\n".join(final_chapter_blueprint[-200:])
+
+                response = await _get_llm().ainvoke(
+                    _assemble_chunk_prompt(chapter_list, current_start, current_end)
+                )
+                final_chapter_blueprint.append(response.content)
+
+                logger.info(
+                    set_color(
+                        f"trace_id={_trace_id} | node=chunk_chapter_blueprint | current_start={current_start} | current_end={current_end} | message={response}",
+                        "pink",
+                    )
+                )
+                current_start = current_end + 1
+
+            _middle_result = {
+                **_middle_result,
+                "chapter_blueprint": "\n\n".join(final_chapter_blueprint),
+            }
+
+        return Command(
+            goto=["human_in_loop_agree"],
+            update={
+                "middle_result": _middle_result,
+                "human_in_loop_node": "chapter_blueprint",
+            },
+        )
+
+    except Exception as e:
+        logger.error(
+            set_color(
+                f"trace_id={_trace_id} | node=chapter_blueprint | error={e}", "red"
+            )
+        )
+        return Command(
+            goto="__end__",
+            update={
+                "err_message": f"trace_id={_trace_id} | node=chapter_blueprint | error={e}"
+            },
+        )
+
+
 async def summarize_architecture(
     state: State, runtime: Runtime[Context]
 ) -> Command[Literal["__end__"]]:
@@ -436,6 +556,19 @@ async def summarize_architecture(
             )
         )
 
+        await write_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/novel_chapter_blueprint.md",
+                "text": _middle_result["chapter_blueprint"],
+            }
+        )
+        logger.info(
+            set_color(
+                f"trace_id={_trace_id} | node=save_chapter_blueprint | message=save to {_work_dir}/novel_chapter_blueprint.md",
+                "pink",
+            )
+        )
+
         return Command(
             goto=["__end__"],
             update={
@@ -461,11 +594,18 @@ async def summarize_architecture(
 async def human_in_loop_guidance(
     state: State, runtime: Runtime[Context]
 ) -> Command[
-    Literal["core_seed", "character_dynamics", "world_building", "plot_arch", "__end__"]
+    Literal[
+        "core_seed",
+        "character_dynamics",
+        "world_building",
+        "plot_arch",
+        "chapter_blueprint",
+        "__end__",
+    ]
 ]:
     _trace_id = runtime.context.trace_id
-    _human_in_loop_to_next_node = state.human_in_loop_node
-    if _human_in_loop_to_next_node == "core_seed":
+    _human_in_loop_node = state.human_in_loop_node
+    if _human_in_loop_node == "core_seed":
         user_guidance = interrupt(
             {
                 "message_id": _trace_id,
@@ -475,7 +615,7 @@ async def human_in_loop_guidance(
         _result = user_guidance["result"]
         return Command(goto="core_seed", update={"user_guidance": _result})
 
-    elif _human_in_loop_to_next_node == "character_dynamics":
+    elif _human_in_loop_node == "character_dynamics":
         user_guidance = interrupt(
             {
                 "message_id": _trace_id,
@@ -485,7 +625,7 @@ async def human_in_loop_guidance(
         _result = user_guidance["result"]
         return Command(goto="character_dynamics", update={"user_guidance": _result})
 
-    elif _human_in_loop_to_next_node == "world_building":
+    elif _human_in_loop_node == "world_building":
         user_guidance = interrupt(
             {
                 "message_id": _trace_id,
@@ -495,7 +635,7 @@ async def human_in_loop_guidance(
         _result = user_guidance["result"]
         return Command(goto="world_building", update={"user_guidance": _result})
 
-    elif _human_in_loop_to_next_node == "plot_arch":
+    elif _human_in_loop_node == "plot_arch":
         user_guidance = interrupt(
             {
                 "message_id": _trace_id,
@@ -504,6 +644,16 @@ async def human_in_loop_guidance(
         )
         _result = user_guidance["result"]
         return Command(goto="plot_arch", update={"user_guidance": _result})
+
+    elif _human_in_loop_node == "chapter_blueprint":
+        user_guidance = interrupt(
+            {
+                "message_id": _trace_id,
+                "content": "基于上述生成信息准备开始`构建章节蓝图`，是否需要人工指导，需要的话直接输入指导内容，不需要的话直接输入`不需要`",
+            }
+        )
+        _result = user_guidance["result"]
+        return Command(goto="chapter_blueprint", update={"user_guidance": _result})
 
     else:
         return Command(goto="__end__")
@@ -520,6 +670,7 @@ async def human_in_loop_agree(
         "human_in_loop_guidance",
         "world_building",
         "plot_arch",
+        "chapter_blueprint",
         "summarize_architecture",
         "__end__",
     ]
@@ -646,7 +797,7 @@ async def human_in_loop_agree(
         _result = user_guidance["result"]
         if _result == "满意":
             return Command(
-                goto="summarize_architecture",
+                goto="chapter_blueprint",
                 update={
                     "user_guidance": _result,
                     "human_in_loop_node": "plot_arch",
@@ -663,6 +814,33 @@ async def human_in_loop_agree(
                 },
             )
 
+    elif _human_in_loop_node == "chapter_blueprint":
+        user_guidance = interrupt(
+            {
+                "message_id": _trace_id,
+                "content": "对于上述`构建章节蓝图`是否满意，不满意的话，可以输入修改建议，若是满意的话，可以输入`满意`",
+            }
+        )
+        _result = user_guidance["result"]
+        if _result == "满意":
+            return Command(
+                goto="summarize_architecture",
+                update={
+                    "user_guidance": _result,
+                    "human_in_loop_node": "chapter_blueprint",
+                },
+            )
+        else:
+            tmp = _middle_result["chapter_blueprint"]
+            _result = f"<上一次生成的结果>\n\n{tmp}\n\n</上一次生成的结果>\n\n<用户修改建议>\n\n{_result}\n\n</用户修改建议>"
+
+            return Command(
+                goto="chapter_blueprint",
+                update={
+                    "user_guidance": _result,
+                },
+            )
+
     else:
         return Command(goto="__end__")
 
@@ -674,6 +852,7 @@ _agent.add_node("core_seed", core_seed)
 _agent.add_node("character_dynamics", character_dynamics)
 _agent.add_node("world_building", world_building)
 _agent.add_node("plot_arch", plot_arch)
+_agent.add_node("chapter_blueprint", chapter_blueprint)
 _agent.add_node("summarize_architecture", summarize_architecture)
 
 _agent.add_node("human_in_loop_guidance", human_in_loop_guidance)
@@ -684,5 +863,5 @@ _agent.add_edge(START, "extract_setting")
 
 ainovel_architecture_agent = _agent.compile()
 
-# png_bytes = ainovel_architecture_agent.get_graph(xray=True).draw_mermaid()
-# logger.info(png_bytes)
+png_bytes = ainovel_architecture_agent.get_graph(xray=True).draw_mermaid()
+logger.info(png_bytes)

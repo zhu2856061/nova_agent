@@ -12,7 +12,7 @@ from langchain_core.messages import (
 )
 from langgraph.graph import START, StateGraph
 from langgraph.runtime import Runtime
-from langgraph.types import Command
+from langgraph.types import Command, interrupt
 
 from nova.llms import get_llm_by_type
 from nova.prompts.ainovel import apply_system_prompt_template
@@ -47,6 +47,10 @@ class State:
     middle_result: Dict = field(
         default_factory=dict,
         metadata={"description": "The middle result to use for the agent."},
+    )
+    human_in_loop_node: str = field(
+        default="",
+        metadata={"description": "The next node to use for the agent."},
     )
 
 
@@ -87,7 +91,7 @@ async def route_chapter_blueprint(
     _trace_id = runtime.context.trace_id
     _max_chapter_length = runtime.context.max_chapter_length
     _middle_result = state.middle_result
-    _number_of_chapters: int = _middle_result.get("number_of_chapters", 3)
+    _number_of_chapters: int = _middle_result.get("number_of_chapters", 2)
 
     if _number_of_chapters <= _max_chapter_length:
         logger.info(
@@ -127,7 +131,6 @@ async def chapter_blueprint(
             )
         else:
             _novel_architecture = ""
-
         if _novel_architecture is None:
             return Command(
                 goto="__end__",
