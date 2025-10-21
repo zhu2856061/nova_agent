@@ -15,6 +15,7 @@ from langchain_core.messages import (
     ToolMessage,
     get_buffer_string,
 )
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import START, MessagesState, StateGraph
 from langgraph.runtime import Runtime
 from langgraph.types import Command
@@ -508,5 +509,6 @@ graph_builder.add_node("final_report_generation", final_report_generation)
 graph_builder.add_edge(START, "clarify_with_user")
 graph_builder.add_edge("research_supervisor", "final_report_generation")
 
-
+# checkpointer = InMemorySaver()
+# deepresearcher = graph_builder.compile(checkpointer=checkpointer)
 deepresearcher = graph_builder.compile()

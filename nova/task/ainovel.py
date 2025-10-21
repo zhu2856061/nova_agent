@@ -125,6 +125,7 @@ async def clarify_with_user(
         def _get_llm():
             return get_llm_by_type(_model_name).with_structured_output(ClarifyWithUser)
 
+        # 执行
         response = await _get_llm().ainvoke(_assemble_prompt(_messages))
         logger.info(
             set_color(
@@ -132,6 +133,8 @@ async def clarify_with_user(
                 "pink",
             )
         )
+
+        # 路由
         if response.need_clarification:  # type: ignore
             return Command(
                 goto="__end__",
@@ -169,7 +172,15 @@ graph_builder.add_node("architecture", ainovel_architecture_agent)
 graph_builder.add_node("chapter", ainovel_chapter_agent)
 graph_builder.add_node("chapter_draft", ainovel_chapter_draft_agent)
 graph_builder.add_edge(START, "clarify_with_user")
-graph_builder.add_edge("architecture", "chapter")
-graph_builder.add_edge("chapter", "chapter_draft")
+# graph_builder.add_edge("architecture", "chapter")
+# graph_builder.add_edge("chapter", "chapter_draft")
+
 checkpointer = InMemorySaver()
 ainovel = graph_builder.compile(checkpointer=checkpointer)
+# ainovel = graph_builder.compile()
+
+# png_bytes = ainovel.get_graph(xray=True).draw_mermaid()
+# logger.info(png_bytes)
+# 将二进制数据写入文件（指定保存路径和文件名）
+# with open("./logs/ainovel_graph.png", "wb") as f:
+#     f.write(png_bytes)

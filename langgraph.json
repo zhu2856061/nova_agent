@@ -3,9 +3,8 @@
     ".."
   ],
   "graphs": {
-    "memorizer_graph": "../nova/core/agent/memorizer.py:memorizer_agent",
-    "researcher_graph": "../nova/core/agent/researcher.py:researcher_agent",
-    "deepresearcher_graph": "../nova/core/task/deepresearcher.py:deepresearcher"
+    "ainovel_graph": "../nova/task/ainovel.py:ainovel",
+    "deepresearcher_graph": "../nova/task/deepresearcher.py:deepresearcher"
   },
   "store": {
     "ttl": {

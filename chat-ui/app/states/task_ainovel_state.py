@@ -153,7 +153,7 @@ class TaskAiNovelState(State):
             self.current_chat,
             {"messages": messages},
             config,
-            {"result": question},
+            {"task_name": "ai_novel", "result": question},
         ):  # type: ignore
             content = item["content"]
             full_response += str(content)  # 累加完整响应
@@ -212,7 +212,9 @@ class TaskAiNovelState(State):
                 _content_len += len(content)
 
             elif item["type"] == "human_in_loop":
-                self._chat2messages[self.current_chat][-1].content += content
+                self._chat2messages[self.current_chat][
+                    -1
+                ].content += f"<span style='color:yellow'>{content}</span>"
                 _content_len += len(content)
                 self._is_human_in_loop = True
 

@@ -2,6 +2,7 @@
 # @Time   : 2025/10/09 10:24
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
+import json
 import logging
 import os
 from dataclasses import dataclass, field
@@ -12,7 +13,6 @@ from langchain_core.messages import (
     MessageLikeRepresentation,
     get_buffer_string,
 )
-from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import START, StateGraph, add_messages
 from langgraph.runtime import Runtime
 from langgraph.types import Command, interrupt
@@ -50,6 +50,10 @@ class State:
     middle_result: Dict = field(
         default_factory=dict,
         metadata={"description": "The middle result to use for the agent."},
+    )
+    human_in_loop_node: str = field(
+        default="",
+        metadata={"description": "The next node to use for the agent."},
     )
 
 
@@ -93,16 +97,20 @@ class ExtractSetting(BaseModel):
 # 抽取设定
 async def extract_setting(
     state: State, runtime: Runtime[Context]
-) -> Command[Literal["core_seed", "__end__"]]:
+) -> Command[Literal["human_in_loop_agree", "__end__"]]:
     try:
         # 变量
         _trace_id = runtime.context.trace_id
         _model_name = runtime.context.architecture_model
         _messages = state.architecture_messages
+        _user_guidance = state.user_guidance
 
         # 提示词
         def _assemble_prompt(messages):
-            tmp = {"messages": get_buffer_string(messages)}
+            tmp = {
+                "messages": get_buffer_string(messages),
+                "user_guidance": _user_guidance,
+            }
             return [
                 HumanMessage(
                     content=apply_system_prompt_template("extract_setting", tmp)
@@ -128,7 +136,13 @@ async def extract_setting(
             "word_number": response.word_number,  # type: ignore
         }
 
-        return Command(goto="core_seed", update={"middle_result": _middle_result})
+        return Command(
+            goto="human_in_loop_agree",
+            update={
+                "middle_result": _middle_result,
+                "human_in_loop_node": "extract_setting",
+            },
+        )
 
     except Exception as e:
         logger.error(
@@ -145,7 +159,7 @@ async def extract_setting(
 # 核心种子
 async def core_seed(
     state: State, runtime: Runtime[Context]
-) -> Command[Literal["character_dynamics", "__end__"]]:
+) -> Command[Literal["human_in_loop_agree", "__end__"]]:
     try:
         # 变量
         _trace_id = runtime.context.trace_id
@@ -156,6 +170,7 @@ async def core_seed(
         # 提示词
         def _assemble_prompt():
             tmp = {**_middle_result, "user_guidance": _user_guidance}
+            print("===>", tmp)
             return [
                 HumanMessage(content=apply_system_prompt_template("core_seed", tmp))
             ]
@@ -175,7 +190,11 @@ async def core_seed(
         _middle_result = {**_middle_result, "core_seed": response.content}
 
         return Command(
-            goto="character_dynamics", update={"middle_result": _middle_result}
+            goto=["human_in_loop_agree"],
+            update={
+                "middle_result": _middle_result,
+                "human_in_loop_node": "core_seed",
+            },
         )
 
     except Exception as e:
@@ -193,13 +212,17 @@ async def core_seed(
 # 角色动力学
 async def character_dynamics(
     state: State, runtime: Runtime[Context]
-) -> Command[Literal["create_character_state", "__end__"]]:
+) -> Command[Literal["human_in_loop_agree", "__end__"]]:
     try:
         # 变量
         _trace_id = runtime.context.trace_id
         _model_name = runtime.context.architecture_model
         _middle_result = state.middle_result
         _user_guidance = state.user_guidance
+        _task_dir = runtime.context.task_dir
+
+        _work_dir = os.path.join(_task_dir, _trace_id)
+        os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
         def _assemble_prompt():
@@ -207,6 +230,13 @@ async def character_dynamics(
             return [
                 HumanMessage(
                     content=apply_system_prompt_template("character_dynamics", tmp)
+                )
+            ]
+
+        def _assemble_character_state_prompt(tmp):
+            return [
+                HumanMessage(
+                    content=apply_system_prompt_template("create_character_state", tmp)
                 )
             ]
 
@@ -224,8 +254,29 @@ async def character_dynamics(
 
         _middle_result = {**_middle_result, "character_dynamics": response.content}
 
+        response = await _get_llm().ainvoke(
+            _assemble_character_state_prompt(_middle_result)
+        )
+        logger.info(
+            set_color(
+                f"trace_id={_trace_id} | node=character_dynamics | message={response}",
+                "pink",
+            )
+        )
+
+        await write_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/character_state.md",
+                "text": response.content,
+            }
+        )
+
         return Command(
-            goto="create_character_state", update={"middle_result": _middle_result}
+            goto=["human_in_loop_agree"],
+            update={
+                "middle_result": _middle_result,
+                "human_in_loop_node": "character_dynamics",
+            },
         )
 
     except Exception as e:
@@ -242,68 +293,10 @@ async def character_dynamics(
         )
 
 
-# 初始化角色状态
-async def create_character_state(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["world_building", "__end__"]]:
-    try:
-        # 变量
-        _trace_id = runtime.context.trace_id
-        _model_name = runtime.context.architecture_model
-        _task_dir = runtime.context.task_dir
-        _middle_result = state.middle_result
-
-        _work_dir = os.path.join(_task_dir, _trace_id)
-        os.makedirs(_work_dir, exist_ok=True)
-
-        # 提示词
-        def _assemble_prompt():
-            tmp = {**_middle_result}
-            return [
-                HumanMessage(
-                    content=apply_system_prompt_template("create_character_state", tmp)
-                )
-            ]
-
-        # LLM
-        def _get_llm():
-            return get_llm_by_type(_model_name)
-
-        response = await _get_llm().ainvoke(_assemble_prompt())
-        logger.info(
-            set_color(
-                f"trace_id={_trace_id} | node=create_character_state | message={response}",
-                "pink",
-            )
-        )
-
-        await write_file_tool.arun(
-            {
-                "file_path": f"{_work_dir}/character_state.md",
-                "text": response.content,
-            }
-        )
-
-        return Command(goto="world_building")
-
-    except Exception as e:
-        logger.error(
-            set_color(
-                f"trace_id={_trace_id} | node=create_character_state | error={e}", "red"
-            )
-        )
-        return Command(
-            goto="__end__",
-            update={
-                "err_message": f"trace_id={_trace_id} | node=create_character_state | error={e}"
-            },
-        )
-
-
 # 世界观
 async def world_building(
     state: State, runtime: Runtime[Context]
-) -> Command[Literal["plot_arch", "__end__"]]:
+) -> Command[Literal["human_in_loop_agree", "__end__"]]:
     try:
         # 变量
         _trace_id = runtime.context.trace_id
@@ -334,7 +327,13 @@ async def world_building(
 
         _middle_result = {**_middle_result, "world_building": response.content}
 
-        return Command(goto="plot_arch", update={"middle_result": _middle_result})
+        return Command(
+            goto=["human_in_loop_agree"],
+            update={
+                "middle_result": _middle_result,
+                "human_in_loop_node": "world_building",
+            },
+        )
 
     except Exception as e:
         logger.error(
@@ -351,17 +350,13 @@ async def world_building(
 # 三幕式情节架构
 async def plot_arch(
     state: State, runtime: Runtime[Context]
-) -> Command[Literal["__end__"]]:
+) -> Command[Literal["human_in_loop_agree", "__end__"]]:
     try:
         # 变量
         _trace_id = runtime.context.trace_id
         _model_name = runtime.context.architecture_model
-        _task_dir = runtime.context.task_dir
         _middle_result = state.middle_result
         _user_guidance = state.user_guidance
-
-        _work_dir = os.path.join(_task_dir, _trace_id)
-        os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
         def _assemble_prompt():
@@ -382,28 +377,14 @@ async def plot_arch(
             )
         )
 
-        final_content = (
-            "#=== 0) 小说设定 ===\n"
-            f"主题：{_middle_result['topic']},类型：{_middle_result['genre']},篇幅：约{_middle_result['number_of_chapters']}章（每章{_middle_result['word_number']}字）\n\n"
-            "#=== 1) 核心种子 ===\n"
-            f"{_middle_result['core_seed']}\n\n"
-            "#=== 2) 角色动力学 ===\n"
-            f"{_middle_result['character_dynamics']}\n\n"
-            "#=== 3) 世界观 ===\n"
-            f"{_middle_result['world_building']}\n\n"
-            "#=== 4) 三幕式情节架构 ===\n"
-            f"{response.content}\n"
-        )
-        await write_file_tool.arun(
-            {
-                "file_path": f"{_work_dir}/novel_architecture.md",
-                "text": final_content,
-            }
-        )
+        _middle_result = {**_middle_result, "plot_arch": response.content}
 
         return Command(
-            goto="__end__",
-            update={"architecture_messages": final_content},
+            goto=["human_in_loop_agree"],
+            update={
+                "middle_result": _middle_result,
+                "human_in_loop_node": "plot_arch",
+            },
         )
 
     except Exception as e:
@@ -418,20 +399,272 @@ async def plot_arch(
         )
 
 
-# 人工指导
-async def human_in_loop(
+async def summarize_architecture(
     state: State, runtime: Runtime[Context]
 ) -> Command[Literal["__end__"]]:
-    _trace_id = runtime.context.trace_id
-    user_guidance = interrupt(
-        {
-            "message_id": _trace_id,
-            "content": "基础上述生成信息，是否需要人工指导，需要的话直接输入指导内容，不需要的话直接输入`不需要`",
-        }
-    )
-    _result = user_guidance["result"]
+    try:
+        # 变量
+        _trace_id = runtime.context.trace_id
+        _task_dir = runtime.context.task_dir
+        _middle_result = state.middle_result
 
-    return Command(goto="__end__", update={"user_guidance": _result})
+        _work_dir = os.path.join(_task_dir, _trace_id)
+        os.makedirs(_work_dir, exist_ok=True)
+
+        final_content = (
+            "#=== 0) 小说设定 ===\n"
+            f"主题：{_middle_result['topic']},类型：{_middle_result['genre']},篇幅：约{_middle_result['number_of_chapters']}章（每章{_middle_result['word_number']}字）\n\n"
+            "#=== 1) 核心种子 ===\n"
+            f"{_middle_result['core_seed']}\n\n"
+            "#=== 2) 角色动力学 ===\n"
+            f"{_middle_result['character_dynamics']}\n\n"
+            "#=== 3) 世界观 ===\n"
+            f"{_middle_result['world_building']}\n\n"
+            "#=== 4) 三幕式情节架构 ===\n"
+            f"{_middle_result['plot_arch']}\n"
+        )
+        await write_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/novel_architecture.md",
+                "text": final_content,
+            }
+        )
+        logger.info(
+            set_color(
+                f"trace_id={_trace_id} | node=summarize_architecture | message=save to {_work_dir}/novel_architecture.md",
+                "pink",
+            )
+        )
+
+        return Command(
+            goto=["__end__"],
+            update={
+                "architecture_messages": final_content,
+            },
+        )
+
+    except Exception as e:
+        logger.error(
+            set_color(
+                f"trace_id={_trace_id} | node=summarize_architecture | error={e}", "red"
+            )
+        )
+        return Command(
+            goto="__end__",
+            update={
+                "err_message": f"trace_id={_trace_id} | node=summarize_architecture | error={e}"
+            },
+        )
+
+
+# 人工指导
+async def human_in_loop_guidance(
+    state: State, runtime: Runtime[Context]
+) -> Command[
+    Literal["core_seed", "character_dynamics", "world_building", "plot_arch", "__end__"]
+]:
+    _trace_id = runtime.context.trace_id
+    _human_in_loop_to_next_node = state.human_in_loop_node
+    if _human_in_loop_to_next_node == "core_seed":
+        user_guidance = interrupt(
+            {
+                "message_id": _trace_id,
+                "content": "基于上述生成信息准备开始`构建核心种子`，是否需要人工指导，需要的话直接输入指导内容，不需要的话直接输入`不需要`",
+            }
+        )
+        _result = user_guidance["result"]
+        return Command(goto="core_seed", update={"user_guidance": _result})
+
+    elif _human_in_loop_to_next_node == "character_dynamics":
+        user_guidance = interrupt(
+            {
+                "message_id": _trace_id,
+                "content": "基于上述生成信息准备开始`构建角色`，是否需要人工指导，需要的话直接输入指导内容，不需要的话直接输入`不需要`",
+            }
+        )
+        _result = user_guidance["result"]
+        return Command(goto="character_dynamics", update={"user_guidance": _result})
+
+    elif _human_in_loop_to_next_node == "world_building":
+        user_guidance = interrupt(
+            {
+                "message_id": _trace_id,
+                "content": "基于上述生成信息准备开始`构建世界观`，是否需要人工指导，需要的话直接输入指导内容，不需要的话直接输入`不需要`",
+            }
+        )
+        _result = user_guidance["result"]
+        return Command(goto="world_building", update={"user_guidance": _result})
+
+    elif _human_in_loop_to_next_node == "plot_arch":
+        user_guidance = interrupt(
+            {
+                "message_id": _trace_id,
+                "content": "基于上述生成信息准备开始`构建三幕式情节`，是否需要人工指导，需要的话直接输入指导内容，不需要的话直接输入`不需要`",
+            }
+        )
+        _result = user_guidance["result"]
+        return Command(goto="plot_arch", update={"user_guidance": _result})
+
+    else:
+        return Command(goto="__end__")
+
+
+# 人工指导
+async def human_in_loop_agree(
+    state: State, runtime: Runtime[Context]
+) -> Command[
+    Literal[
+        "extract_setting",
+        "core_seed",
+        "character_dynamics",
+        "human_in_loop_guidance",
+        "world_building",
+        "plot_arch",
+        "summarize_architecture",
+        "__end__",
+    ]
+]:
+    _trace_id = runtime.context.trace_id
+    _human_in_loop_node = state.human_in_loop_node
+    _middle_result = state.middle_result
+
+    if _human_in_loop_node == "extract_setting":
+        user_guidance = interrupt(
+            {
+                "message_id": _trace_id,
+                "content": "对于上述`抽取的信息`是否满意，不满意的话，可以输入修改建议，若是满意的话，可以输入`满意`",
+            }
+        )
+        _result = user_guidance["result"]
+        if _result == "满意":
+            return Command(
+                goto="human_in_loop_guidance",
+                update={
+                    "user_guidance": _result,
+                    "human_in_loop_node": "core_seed",
+                },
+            )
+        else:
+            tmp = json.dumps(_middle_result, ensure_ascii=False)
+            _result = f"<上一次生成的结果>\n\n{tmp}\n\n</上一次生成的结果>\n\n<用户修改建议>\n\n{_result}\n\n</用户修改建议>"
+
+            return Command(
+                goto="extract_setting",
+                update={
+                    "user_guidance": _result,
+                },
+            )
+
+    elif _human_in_loop_node == "core_seed":
+        user_guidance = interrupt(
+            {
+                "message_id": _trace_id,
+                "content": "对于上述`核心种子`是否满意，不满意的话，可以输入修改建议，若是满意的话，可以输入`满意`",
+            }
+        )
+        _result = user_guidance["result"]
+        if _result == "满意":
+            return Command(
+                goto="human_in_loop_guidance",
+                update={
+                    "user_guidance": _result,
+                    "human_in_loop_node": "character_dynamics",
+                },
+            )
+        else:
+            tmp = _middle_result["core_seed"]
+            _result = f"<上一次生成的结果>\n\n{tmp}\n\n</上一次生成的结果>\n\n<用户修改建议>\n\n{_result}\n\n</用户修改建议>"
+
+            return Command(
+                goto="core_seed",
+                update={
+                    "user_guidance": _result,
+                },
+            )
+
+    elif _human_in_loop_node == "character_dynamics":
+        user_guidance = interrupt(
+            {
+                "message_id": _trace_id,
+                "content": "对于上述`角色信息`是否满意，不满意的话，可以输入修改建议，若是满意的话，可以输入`满意`",
+            }
+        )
+        _result = user_guidance["result"]
+        if _result == "满意":
+            return Command(
+                goto="human_in_loop_guidance",
+                update={
+                    "user_guidance": _result,
+                    "human_in_loop_node": "world_building",
+                },
+            )
+        else:
+            tmp = _middle_result["character_dynamics"]
+            _result = f"<上一次生成的结果>\n\n{tmp}\n\n</上一次生成的结果>\n\n<用户修改建议>\n\n{_result}\n\n</用户修改建议>"
+
+            return Command(
+                goto="character_dynamics",
+                update={
+                    "user_guidance": _result,
+                },
+            )
+
+    elif _human_in_loop_node == "world_building":
+        user_guidance = interrupt(
+            {
+                "message_id": _trace_id,
+                "content": "对于上述`世界观`是否满意，不满意的话，可以输入修改建议，若是满意的话，可以输入`满意`",
+            }
+        )
+        _result = user_guidance["result"]
+        if _result == "满意":
+            return Command(
+                goto="human_in_loop_guidance",
+                update={
+                    "user_guidance": _result,
+                    "human_in_loop_node": "plot_arch",
+                },
+            )
+        else:
+            tmp = _middle_result["world_building"]
+            _result = f"<上一次生成的结果>\n\n{tmp}\n\n</上一次生成的结果>\n\n<用户修改建议>\n\n{_result}\n\n</用户修改建议>"
+
+            return Command(
+                goto="world_building",
+                update={
+                    "user_guidance": _result,
+                },
+            )
+
+    elif _human_in_loop_node == "plot_arch":
+        user_guidance = interrupt(
+            {
+                "message_id": _trace_id,
+                "content": "对于上述`三幕式情节架构`是否满意，不满意的话，可以输入修改建议，若是满意的话，可以输入`满意`",
+            }
+        )
+        _result = user_guidance["result"]
+        if _result == "满意":
+            return Command(
+                goto="summarize_architecture",
+                update={
+                    "user_guidance": _result,
+                    "human_in_loop_node": "plot_arch",
+                },
+            )
+        else:
+            tmp = _middle_result["plot_arch"]
+            _result = f"<上一次生成的结果>\n\n{tmp}\n\n</上一次生成的结果>\n\n<用户修改建议>\n\n{_result}\n\n</用户修改建议>"
+
+            return Command(
+                goto="plot_arch",
+                update={
+                    "user_guidance": _result,
+                },
+            )
+
+    else:
+        return Command(goto="__end__")
 
 
 # architecture subgraph
@@ -439,15 +672,17 @@ _agent = StateGraph(State, context_schema=Context)
 _agent.add_node("extract_setting", extract_setting)
 _agent.add_node("core_seed", core_seed)
 _agent.add_node("character_dynamics", character_dynamics)
-_agent.add_node("create_character_state", create_character_state)
 _agent.add_node("world_building", world_building)
 _agent.add_node("plot_arch", plot_arch)
-_agent.add_node("human_in_loop", human_in_loop)
+_agent.add_node("summarize_architecture", summarize_architecture)
+
+_agent.add_node("human_in_loop_guidance", human_in_loop_guidance)
+_agent.add_node("human_in_loop_agree", human_in_loop_agree)
 
 _agent.add_edge(START, "extract_setting")
-_agent.add_edge("core_seed", "human_in_loop")
-_agent.add_edge("character_dynamics", "human_in_loop")
-_agent.add_edge("world_building", "human_in_loop")
 
-checkpointer = InMemorySaver()
-ainovel_architecture_agent = _agent.compile(checkpointer=checkpointer)
+
+ainovel_architecture_agent = _agent.compile()
+
+# png_bytes = ainovel_architecture_agent.get_graph(xray=True).draw_mermaid()
+# logger.info(png_bytes)
