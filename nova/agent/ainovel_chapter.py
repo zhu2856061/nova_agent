@@ -1188,7 +1188,7 @@ async def human_in_loop_agree(
             return Command(
                 goto="chapter_supervisor",
                 update={
-                    "user_guidance": _result,
+                    "overall": _overall + 1,
                 },
             )
         else:

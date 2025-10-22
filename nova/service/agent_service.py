@@ -143,10 +143,10 @@ async def human_in_loop(request: AgentRequest):
 
         if agent_name == "ainovel_architect":
             agent_workflow = ainovel_architecture_agent
-        if agent_name == "ainovel_chapter":
+        elif agent_name == "ainovel_chapter":
             agent_workflow = ainovel_chapter_agent
         else:
-            raise HTTPException(status_code=2, detail="task_name is not supported")
+            raise HTTPException(status_code=2, detail="agent_name is not supported")
 
         async def async_service(trace_id, user_guidance, context) -> AsyncGenerator:
             session = None

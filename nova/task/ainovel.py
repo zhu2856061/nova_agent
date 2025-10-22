@@ -74,6 +74,10 @@ class Context:
         default="basic",
         metadata={"description": "The name of llm to use for the agent. "},
     )
+    number_of_creative_chapters: int = field(
+        default=1,
+        metadata={"description": "The end chapter number to use for the agent."},
+    )
 
 
 # clarify_with_user uses this
@@ -160,10 +164,9 @@ async def clarify_with_user(
 graph_builder = StateGraph(State, context_schema=Context)
 graph_builder.add_node("clarify_with_user", clarify_with_user)
 graph_builder.add_node("architecture", ainovel_architecture_agent)
-graph_builder.add_node("chapter_draft", ainovel_chapter_agent)
+graph_builder.add_node("chapter", ainovel_chapter_agent)
 graph_builder.add_edge(START, "clarify_with_user")
-# graph_builder.add_edge("architecture", "chapter")
-# graph_builder.add_edge("chapter", "chapter_draft")
+graph_builder.add_edge("architecture", "chapter")
 
 checkpointer = InMemorySaver()
 ainovel = graph_builder.compile(checkpointer=checkpointer)

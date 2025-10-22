@@ -245,13 +245,6 @@ async def character_dynamics(
                 )
             ]
 
-        def _assemble_character_state_prompt(tmp):
-            return [
-                HumanMessage(
-                    content=apply_system_prompt_template("create_character_state", tmp)
-                )
-            ]
-
         # LLM
         def _get_llm():
             return get_llm_by_type(_model_name)
@@ -265,23 +258,6 @@ async def character_dynamics(
         )
 
         _middle_result = {**_middle_result, "character_dynamics": response.content}
-
-        response = await _get_llm().ainvoke(
-            _assemble_character_state_prompt(_middle_result)
-        )
-        logger.info(
-            set_color(
-                f"trace_id={_trace_id} | node=character_dynamics | message={response}",
-                "pink",
-            )
-        )
-
-        await write_file_tool.arun(
-            {
-                "file_path": f"{_work_dir}/character_state.md",
-                "text": response.content,
-            }
-        )
 
         return Command(
             goto=["human_in_loop_agree"],
