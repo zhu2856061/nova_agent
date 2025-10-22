@@ -4,6 +4,8 @@
 # @Moto   : Knowledge comes from decomposition
 import reflex as rx
 
+from app.pages.agent_ainovel_architect_page import agent_ainovel_architect_page
+from app.pages.agent_ainovel_chapter_page import agent_ainovel_chapter_page
 from app.pages.agent_memorizer_page import agent_memorizer_page
 from app.pages.agent_researcher_page import agent_researcher_page
 from app.pages.agent_wechat_researcher_page import agent_wechat_researcher_page
@@ -66,21 +68,30 @@ app.add_page(
     route="/agent/memorizer",
     image="novaait.png",
 )
-
 app.add_page(
     component=agent_researcher_page,
     title="Nova Agent",
     route="/agent/researcher",
     image="novaait.png",
 )
-
 app.add_page(
     component=agent_wechat_researcher_page,
     title="Nova Agent",
     route="/agent/wechat_researcher",
     image="novaait.png",
 )
-
+app.add_page(
+    component=agent_ainovel_architect_page,
+    title="Nova Agent",
+    route="/agent/ainovel_architect",
+    image="novaait.png",
+)
+app.add_page(
+    component=agent_ainovel_chapter_page,
+    title="Nova Agent",
+    route="/agent/ainovel_chapter",
+    image="novaait.png",
+)
 
 app.add_page(
     component=task_deepresearcher_page,
@@ -88,7 +99,6 @@ app.add_page(
     route="/task/deepresearcher",
     image="novaait.png",
 )
-
 app.add_page(
     component=task_ainovel_page,
     title="Nova Task",

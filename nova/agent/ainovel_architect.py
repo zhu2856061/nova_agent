@@ -13,6 +13,7 @@ from langchain_core.messages import (
     MessageLikeRepresentation,
     get_buffer_string,
 )
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import START, StateGraph, add_messages
 from langgraph.runtime import Runtime
 from langgraph.types import Command, interrupt
@@ -101,9 +102,13 @@ async def extract_setting(
     try:
         # 变量
         _trace_id = runtime.context.trace_id
+        _task_dir = runtime.context.task_dir
         _model_name = runtime.context.architecture_model
         _messages = state.architecture_messages
         _user_guidance = state.user_guidance
+
+        _work_dir = os.path.join(_task_dir, _trace_id)
+        os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
         def _assemble_prompt(messages):
@@ -135,6 +140,13 @@ async def extract_setting(
             "number_of_chapters": response.number_of_chapters,  # type: ignore
             "word_number": response.word_number,  # type: ignore
         }
+
+        await write_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/novel_architecture_setting.md",
+                "text": json.dumps(_middle_result, ensure_ascii=False),
+            }
+        )
 
         return Command(
             goto="human_in_loop_agree",
@@ -519,6 +531,7 @@ async def chapter_blueprint(
         )
 
 
+# 结果保存
 async def summarize_architecture(
     state: State, runtime: Runtime[Context]
 ) -> Command[Literal["__end__"]]:
@@ -861,7 +874,8 @@ _agent.add_node("human_in_loop_agree", human_in_loop_agree)
 _agent.add_edge(START, "extract_setting")
 
 
-ainovel_architecture_agent = _agent.compile()
+checkpointer = InMemorySaver()
+ainovel_architecture_agent = _agent.compile(checkpointer=checkpointer)
 
 png_bytes = ainovel_architecture_agent.get_graph(xray=True).draw_mermaid()
-logger.info(png_bytes)
+logger.info(f"ainovel_architecture_agent: \n\n{png_bytes}")

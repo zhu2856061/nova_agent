@@ -9,7 +9,7 @@ sys.path.append("..")
 import os
 
 os.environ["CONFIG_PATH"] = "../config.yaml"
-from nova.agent.ainovel_chapter_draft import ainovel_chapter_agent
+from nova.agent.ainovel_chapter import ainovel_chapter_agent
 
 inputs = {"word_number": 2000, "current_chapter_id": 1, "number_of_chapters": 6}
 

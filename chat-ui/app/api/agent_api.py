@@ -15,6 +15,12 @@ STREAM_AGENT_RESEARCHER_BACKEND_URL = (
 STREAM_AGENT_WECHATRESEARCHER_BACKEND_URL = (
     "http://0.0.0.0:2021/agent/wechat_researcher"  # 需根据实际修改
 )
+STREAM_AGENT_AINOVEL_ARCHITECT_BACKEND_URL = (
+    "http://0.0.0.0:2021/agent/ainovel_architect"  # 需根据实际修改
+)
+STREAM_AGENT_AINOVEL_CHAPTER_BACKEND_URL = (
+    "http://0.0.0.0:2021/agent/ainovel_chapter"  # 需根据实际修改
+)
 
 HUMAN_IN_LOOP_BACKEND_URL = "http://0.0.0.0:2021/agent/human_in_loop"
 

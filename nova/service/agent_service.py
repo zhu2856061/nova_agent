@@ -13,9 +13,9 @@ from langgraph.types import Command
 from pydantic import BaseModel, Field
 
 from nova.agent.ainovel_architect import ainovel_architecture_agent
+from nova.agent.ainovel_chapter import ainovel_chapter_agent
 from nova.agent.memorizer import memorizer_agent
 from nova.agent.researcher import researcher_agent
-from nova.agent.theme_slicer import theme_slicer_agent
 from nova.agent.wechat_researcher import wechat_researcher_agent
 from nova.utils import handle_event
 
@@ -119,6 +119,11 @@ async def ainovel_architect_service(request: AgentRequest):
     return await service(ainovel_architecture_agent, request)
 
 
+@agent_router.post("/ainovel_chapter")
+async def ainovel_chapter_service(request: AgentRequest):
+    return await service(ainovel_chapter_agent, request)
+
+
 @agent_router.post("/human_in_loop")
 async def human_in_loop(request: AgentRequest):
     """LLM Server"""
@@ -129,12 +134,25 @@ async def human_in_loop(request: AgentRequest):
         user_guidance = request.user_guidance
         context = {**request.context, "trace_id": request.trace_id}
         config: RunnableConfig = {"configurable": {"thread_id": request.trace_id}}
+        if not user_guidance:
+            raise HTTPException(status_code=1, detail="user_guidance is None")
+
+        agent_name = user_guidance.get("agent_name")
+        if not agent_name:
+            raise HTTPException(status_code=1, detail="agent_name is None")
+
+        if agent_name == "ainovel_architect":
+            agent_workflow = ainovel_architecture_agent
+        if agent_name == "ainovel_chapter":
+            agent_workflow = ainovel_chapter_agent
+        else:
+            raise HTTPException(status_code=2, detail="task_name is not supported")
 
         async def async_service(trace_id, user_guidance, context) -> AsyncGenerator:
             session = None
             try:
                 session = aiohttp.ClientSession()  # 创建会话
-                async for event in theme_slicer_agent.astream_events(
+                async for event in agent_workflow.astream_events(
                     Command(resume=user_guidance),
                     config=config,
                     context=context,

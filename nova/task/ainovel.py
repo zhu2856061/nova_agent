@@ -20,7 +20,6 @@ from pydantic import BaseModel, Field
 
 from nova.agent.ainovel_architect import ainovel_architecture_agent
 from nova.agent.ainovel_chapter import ainovel_chapter_agent
-from nova.agent.ainovel_chapter_draft import ainovel_chapter_draft_agent
 from nova.llms import get_llm_by_type
 from nova.prompts.ainovel import apply_system_prompt_template
 from nova.utils import (
@@ -74,14 +73,6 @@ class Context:
     chapter_model: str = field(
         default="basic",
         metadata={"description": "The name of llm to use for the agent. "},
-    )
-    chunk_size: int = field(
-        default=5,
-        metadata={"description": "The chunk size to use for the agent."},
-    )
-    max_chapter_length: int = field(
-        default=10,
-        metadata={"description": "The max chapter length to use for the agent."},
     )
 
 
@@ -169,7 +160,7 @@ async def clarify_with_user(
 graph_builder = StateGraph(State, context_schema=Context)
 graph_builder.add_node("clarify_with_user", clarify_with_user)
 graph_builder.add_node("architecture", ainovel_architecture_agent)
-# graph_builder.add_node("chapter_draft", ainovel_chapter_draft_agent)
+graph_builder.add_node("chapter_draft", ainovel_chapter_agent)
 graph_builder.add_edge(START, "clarify_with_user")
 # graph_builder.add_edge("architecture", "chapter")
 # graph_builder.add_edge("chapter", "chapter_draft")

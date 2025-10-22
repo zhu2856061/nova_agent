@@ -72,6 +72,16 @@ class State(rx.State):
                     icon="bot-message-square",
                     tobe="/agent/wechat_researcher",
                 ),
+                FunctionMenu(
+                    title="ainovel_architect",
+                    icon="bot-message-square",
+                    tobe="/agent/ainovel_architect",
+                ),
+                FunctionMenu(
+                    title="ainovel_chapter",
+                    icon="bot-message-square",
+                    tobe="/agent/ainovel_chapter",
+                ),
             ],
         ),
         FunctionMenu(
