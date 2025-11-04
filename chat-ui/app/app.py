@@ -10,6 +10,7 @@ from app.pages.agent_memorizer_page import agent_memorizer_page
 from app.pages.agent_researcher_page import agent_researcher_page
 from app.pages.agent_wechat_researcher_page import agent_wechat_researcher_page
 from app.pages.chat_page import chat_page
+from app.pages.interact_ainovel_architect_page import interact_ainovel_architect_page
 from app.pages.task_ainovel_page import task_ainovel_page
 from app.pages.task_deepresearcher_page import task_deepresearcher_page
 
@@ -41,7 +42,7 @@ def redirect_component():
             height="100vh",
             background_color=rx.color("mauve", 3),
         ),
-        on_mount=lambda: rx.redirect("/chat"),
+        on_mount=lambda: rx.redirect("/chat/llm"),
     )
 
 
@@ -55,13 +56,15 @@ app.add_page(
     image="novaait.png",
 )
 
+# chat模式
 app.add_page(
     component=chat_page,
     title="Nova chat",
-    route="/chat",
+    route="/chat/llm",
     image="novaait.png",
 )
 
+# agent 模式
 app.add_page(
     component=agent_memorizer_page,
     title="Nova Agent",
@@ -93,6 +96,14 @@ app.add_page(
     image="novaait.png",
 )
 
+app.add_page(
+    component=interact_ainovel_architect_page,
+    title="Nova Interact",
+    route="/interact/ainovel",
+    image="novaait.png",
+)
+
+# task 模式
 app.add_page(
     component=task_deepresearcher_page,
     title="Nova Task",

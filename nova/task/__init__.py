@@ -1,3 +1,4 @@
+from .ainovel import ainovel
 from .deepresearcher import deepresearcher
 
-__all__ = ["deepresearcher"]
+__all__ = ["deepresearcher", "ainovel"]

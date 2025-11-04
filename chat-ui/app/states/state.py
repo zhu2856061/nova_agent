@@ -50,12 +50,17 @@ class State(rx.State):
         FunctionMenu(
             title="Chat",
             icon="message-circle-more",
-            tobe="/chat",
+            children=[
+                FunctionMenu(
+                    title="llm",
+                    icon="message-circle-more",
+                    tobe="/chat/llm",
+                ),
+            ],
         ),
         FunctionMenu(
             title="Agent",
             icon="bot-message-square",
-            tobe="/agent/researcher",
             children=[
                 FunctionMenu(
                     title="memorizer",
@@ -63,12 +68,12 @@ class State(rx.State):
                     tobe="/agent/memorizer",
                 ),
                 FunctionMenu(
-                    title="researcher",
+                    title="web_searcher",
                     icon="bot-message-square",
                     tobe="/agent/researcher",
                 ),
                 FunctionMenu(
-                    title="wechat_researcher",
+                    title="wechat_searcher",
                     icon="bot-message-square",
                     tobe="/agent/wechat_researcher",
                 ),
@@ -87,7 +92,6 @@ class State(rx.State):
         FunctionMenu(
             title="Task",
             icon="clipboard-list",
-            tobe="/task/deepresearcher",
             children=[
                 FunctionMenu(
                     title="deepresearcher",
@@ -98,6 +102,17 @@ class State(rx.State):
                     title="ainovel",
                     icon="clipboard-list",
                     tobe="/task/ainovel",
+                ),
+            ],
+        ),
+        FunctionMenu(
+            title="Interact",
+            icon="layout-dashboard",
+            children=[
+                FunctionMenu(
+                    title="ainovel",
+                    icon="layout-dashboard",
+                    tobe="/interact/ainovel",
                 ),
             ],
         ),
