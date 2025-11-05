@@ -4,7 +4,7 @@
 # @Moto   : Knowledge comes from decomposition
 import reflex as rx
 
-from app.components import novel_footer, novel_headbar, sidebar
+from app.components import novel_footer, novel_headbar, novel_workspace, sidebar
 from app.states.interact_ainovel_state import InteractAiNovelState
 
 
@@ -18,14 +18,11 @@ def interact_ainovel_architect_page() -> rx.Component:
         rx.vstack(
             # 5. 主内容区顶部：导航栏组件，同样传入状态类（状态透传）
             novel_headbar(InteractAiNovelState),
-            # rx.box(
-            #     # 这里放小说内容组件
-            #     overflow="auto",  # 超出部分滚动
-            #     flex_grow=1,  # 占满vstack剩余高度
-            # ),
-            # 6. 主内容区底部：页脚组件（当前需要固定在最下方）
+            # 6. 主内容区中间：调用自定义组件novel_workspace，传入状态类（状态透传）
+            novel_workspace(InteractAiNovelState),
+            # 7. 主内容区底部：页脚组件（当前需要固定在最下方）
             novel_footer(InteractAiNovelState),
-            # 7. 主内容区（rx.vstack）样式配置
+            # 8. 主内容区（rx.vstack）样式配置
             background_color=rx.color(
                 "mauve", 1
             ),  # 背景色：mauve（淡紫色）色系1号（浅淡）

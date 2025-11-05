@@ -15,7 +15,7 @@ class SidebarStyle:
 
     # 尺寸相关
     EXPANDED_WIDTH = "16em"  # 展开宽度（比原15em更宽松）
-    COLLAPSED_WIDTH = "4.5em"  # 收起宽度（保留图标，而非完全隐藏）
+    COLLAPSED_WIDTH = "0"  # 收起宽度（保留图标，而非完全隐藏）
     BRAND_MARGIN_BOTTOM = "1.5em"  # 品牌区底部间距（原0.5em太拥挤）
     BRAND_FONT_SIZE = "6"  # 品牌名称字体大小
     ICON_CONTAINER_SIZE = "2rem"  # 图标容器固定尺寸（适配16px图标，留足边距）
@@ -139,7 +139,7 @@ def sidebar(state) -> rx.Component:
             SidebarStyle.EXPANDED_WIDTH,
             SidebarStyle.COLLAPSED_WIDTH,
         ),
-        opacity=rx.cond(state.sidebar_visible, 1, 0.95),  # 收起时轻微透明，不完全隐藏
+        opacity=rx.cond(state.sidebar_visible, 1, 0),  # 收起时轻微透明，不完全隐藏
         height="100%",
         padding=rx.cond(
             state.sidebar_visible,
