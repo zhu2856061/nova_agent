@@ -5,7 +5,7 @@ SYSTEM:
 
   log_dir: "./logs"
   env_path: "./env"
-  task_dir: "./tasks"
+  task_dir: "../merlin"
   cache_dir: "./cache"
 
 LLM:

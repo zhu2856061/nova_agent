@@ -24,11 +24,19 @@ STREAM_AGENT_AINOVEL_CHAPTER_BACKEND_URL = (
 
 HUMAN_IN_LOOP_BACKEND_URL = "http://0.0.0.0:2021/agent/human_in_loop"
 
+AGENT_AINOVEL_EXTRACT_SETTING_BACKEND_URL = (
+    "http://0.0.0.0:2021/agent/ainovel_extract_setting"  # 需根据实际修改
+)
 logger = logging.getLogger(__name__)
 
 
 async def get_agent_api(
-    url: str, trace_id: str, state: dict, context: dict, user_guidance: dict
+    url: str,
+    trace_id: str,
+    state: dict,  # {"memorizer_messages": messages}
+    context: dict,
+    user_guidance: dict,
+    stream=True,
 ):
     trace_id = trace_id or str(uuid.uuid4())
 
@@ -37,6 +45,7 @@ async def get_agent_api(
         "context": context,
         "state": state,  # {"memorizer_messages": messages}
         "user_guidance": user_guidance,
+        "stream": stream,
     }
 
     current_answer_message_id = None

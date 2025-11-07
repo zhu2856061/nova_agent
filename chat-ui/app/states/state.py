@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 _DEFAULT_NAME = "Nova"
 _INTRODUCTION = "Hi! I'm **Nova**, a helpful assistant."
 _SELECTED_MODELS = ["basic", "reasoning", "basic_no_thinking", "deepseek", "gemini"]
+_TASK_DIR = "../merlin"
 
 
 @dataclass(kw_only=True)

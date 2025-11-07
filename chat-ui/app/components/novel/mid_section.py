@@ -2,9 +2,12 @@
 # @Time   : 2025/09/24 10:24
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
-from typing import List, Optional
-
 import reflex as rx
+from app.components.novel.core_interact_section import (
+    editor_component_form,
+    settings_component,
+)
+from app.states.interact_ainovel_state import NovelStepMenu
 
 
 # 1. 提取样式常量（统一维护）--------------------------
@@ -32,19 +35,8 @@ class NovelWorkspaceStyle:
     TRANSITION_DURATION = "0.2s"  # 过渡动画时长
 
 
-# 2. 定义标签项模型（支持动态配置）--------------------------
-class TabItem(rx.Base):
-    """标签项数据模型"""
-
-    value: str  # 标签唯一标识（用于切换）
-    label: str  # 标签显示文本
-    content: rx.Component  # 标签对应的内容组件（延迟渲染）
-    disabled: bool = False  # 是否禁用标签
-    icon: Optional[str] = None  # 标签图标（可选）
-
-
 # 3. 生成标签触发按钮（统一样式）--------------------------
-def tab_trigger(tab: TabItem, state: rx.State) -> rx.Component:
+def tab_trigger(tab: NovelStepMenu) -> rx.Component:
     """生成标签触发按钮（含图标、文字、状态样式）"""
     return rx.tabs.trigger(
         # 图标（可选）
@@ -70,12 +62,20 @@ def tab_trigger(tab: TabItem, state: rx.State) -> rx.Component:
 
 
 # 4. 生成标签内容（延迟渲染）--------------------------
-def tab_content(tab: TabItem) -> rx.Component:
+def tab_content(tab: NovelStepMenu, state) -> rx.Component:
     """生成标签内容区（支持自定义组件）"""
     return rx.tabs.content(
         # 内容容器（添加样式优化）
         rx.box(
-            tab.content,  # 执行content函数渲染内容（延迟加载）
+            rx.cond(
+                tab.content == "editor",
+                editor_component_form(tab, state),
+                rx.cond(
+                    tab.content == "settings",
+                    settings_component(tab, state),
+                    rx.box(),  # 无内容时占位，避免布局抖动
+                ),
+            ),
             width="100%",
             height="100%",
             min_height="30em",  # 最小高度（避免内容过短时布局塌陷）
@@ -90,93 +90,14 @@ def tab_content(tab: TabItem) -> rx.Component:
     )
 
 
-# 5. 示例：标签内容组件（需根据实际业务实现）--------------------------
-def chat_component(state) -> rx.Component:
-    """聊天交互标签内容（复用之前优化的chat组件）"""
-
-    return rx.text("小说编辑器", font_size="1.5em", weight="bold", margin_bottom="1em")
-
-
-def editor_component(state) -> rx.Component:
-    """小说编辑标签内容（示例实现）"""
-    return rx.vstack(
-        rx.text("小说编辑器", font_size="1.5em", weight="bold", margin_bottom="1em"),
-        rx.text_area(
-            placeholder="在这里编辑小说内容...",
-            value="state.novel_content",
-            width="100%",
-            height="25em",
-            border_radius="8px",
-            border=f"1px solid {NovelWorkspaceStyle.BORDER_COLOR}",
-            padding="1em",
-            font_size="1.05em",
-            resize="vertical",
-        ),
-        rx.button(
-            "保存内容",
-            # on_click=state.save_novel_content,
-            background_color=rx.color("accent", 6),
-            _hover={"background_color": rx.color("accent", 7)},
-            margin_top="1em",
-        ),
-        width="100%",
-        height="100%",
-        align_items="flex-start",
-        gap="1em",
-    )
-
-
-def settings_component(state) -> rx.Component:
-    """设置标签内容（示例实现）"""
-    return rx.vstack(
-        rx.text("工作区设置", font_size="1.5em", weight="bold", margin_bottom="1.5em"),
-        rx.box(
-            rx.text("主题颜色："),
-            rx.select(
-                ["默认（Mauve）", "蓝色（Blue）", "绿色（Green）", "深色（Dark）"],
-                value="蓝色（Blue）",
-                width="20em",
-                margin_top="0.5em",
-            ),
-            margin_bottom="1.5em",
-        ),
-        width="100%",
-        height="100%",
-        align_items="flex-start",
-        gap="1em",
-    )
-
-
 # 6. 工作区主组件（核心逻辑）--------------------------
 def novel_workspace(state) -> rx.Component:
     """小说工作区（优化后的垂直标签页组件）"""
     # 1. 定义标签列表（可动态从state读取，此处示例静态配置）
-    tabs: List[TabItem] = [
-        TabItem(
-            value="chat",
-            label="聊天交互",
-            icon="message-square",  # 图标（Reflex内置图标名）
-            content=chat_component(state),  # 聊天组件（需实现）
-        ),
-        TabItem(
-            value="novel_editor",
-            label="小说编辑",
-            icon="edit-3",
-            content=editor_component(state),  # 编辑器组件（需实现）
-        ),
-        TabItem(
-            value="settings",
-            label="设置",
-            icon="settings",
-            disabled=False,  # 可设置为True禁用标签
-            content=settings_component(state),  # 设置组件（需实现）
-        ),
-    ]
-
     return rx.tabs.root(
         # 标签列表（垂直布局）
         rx.tabs.list(
-            rx.foreach(tabs, lambda tab: tab_trigger(tab, state)),
+            rx.foreach(state.novel_tabs, tab_trigger),
             width=NovelWorkspaceStyle.TABS_LIST_WIDTH,
             height=NovelWorkspaceStyle.TABS_LIST_HEIGHT,
             background_color=NovelWorkspaceStyle.TABS_LIST_BG,
@@ -186,7 +107,7 @@ def novel_workspace(state) -> rx.Component:
             flex_direction="column",  # 垂直排列
         ),
         # 标签内容区
-        rx.foreach(tabs, tab_content),
+        rx.foreach(state.novel_tabs, lambda _: tab_content(_, state)),
         # rx.box(
         #     rx.foreach(tabs, tab_content),
         #     flex="1",  # 占满剩余宽度

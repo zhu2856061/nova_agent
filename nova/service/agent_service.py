@@ -12,8 +12,10 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 from pydantic import BaseModel, Field
 
+from nova import CONF
 from nova.agent.ainovel_architect import ainovel_architecture_agent
 from nova.agent.ainovel_chapter import ainovel_chapter_agent
+from nova.agent.ainovel_interact import core_seed_agent, extract_setting_agent
 from nova.agent.memorizer import memorizer_agent
 from nova.agent.researcher import researcher_agent
 from nova.agent.wechat_researcher import wechat_researcher_agent
@@ -49,7 +51,11 @@ async def service(Task, request: AgentRequest):
 
     try:
         state = request.state
-        context = {**request.context, "trace_id": request.trace_id}
+        context = {
+            **request.context,
+            "trace_id": request.trace_id,
+            "task_dir": CONF["SYSTEM"]["task_dir"],
+        }
         config = {"configurable": {"thread_id": request.trace_id}}
         stream = request.stream
 
@@ -122,6 +128,16 @@ async def ainovel_architect_service(request: AgentRequest):
 @agent_router.post("/ainovel_chapter")
 async def ainovel_chapter_service(request: AgentRequest):
     return await service(ainovel_chapter_agent, request)
+
+
+@agent_router.post("/ainovel_extract_setting")
+async def ainovel_extract_setting_service(request: AgentRequest):
+    return await service(extract_setting_agent, request)
+
+
+@agent_router.post("/ainovel_core_seed")
+async def ainovel_core_seed_service(request: AgentRequest):
+    return await service(core_seed_agent, request)
 
 
 @agent_router.post("/human_in_loop")

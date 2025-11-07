@@ -119,15 +119,26 @@ def sidebar(state) -> rx.Component:
                 width="100%",
             ),
             # 功能菜单区域（优化折叠面板样式）
-            rx.accordion.root(
-                rx.foreach(state.function_menu, lambda item: accordion_item(item)),
-                collapsible=True,
-                type="multiple",
+            rx.scroll_area(
+                rx.accordion.root(
+                    rx.foreach(state.function_menu, lambda item: accordion_item(item)),
+                    collapsible=True,
+                    type="multiple",
+                    width="100%",
+                    style={"--accordion-border-width": "0px"},
+                ),
+                height="calc(100% - 8em)",  # 减去品牌区高度，避免滚动区域溢出
                 width="100%",
-                align_items="stretch",
-                # 折叠面板边框移除，更美观
-                style={"--accordion-border-width": "0px"},
             ),
+            # rx.accordion.root(
+            #     rx.foreach(state.function_menu, lambda item: accordion_item(item)),
+            #     collapsible=True,
+            #     type="multiple",
+            #     width="100%",
+            #     align_items="stretch",
+            #     # 折叠面板边框移除，更美观
+            #     style={"--accordion-border-width": "0px"},
+            # ),
             width="100%",
             height="100%",
             justify_content="flex-start",  # 内容顶部对齐
@@ -139,8 +150,12 @@ def sidebar(state) -> rx.Component:
             SidebarStyle.EXPANDED_WIDTH,
             SidebarStyle.COLLAPSED_WIDTH,
         ),
+        height="100vh",
+        # 固定定位（如果需要侧边栏不随页面滚动）
+        position="sticky",
+        top="0",
         opacity=rx.cond(state.sidebar_visible, 1, 0),  # 收起时轻微透明，不完全隐藏
-        height="100%",
+        display="flex",
         padding=rx.cond(
             state.sidebar_visible,
             SidebarStyle.PADDING_EXPANDED,
@@ -153,38 +168,3 @@ def sidebar(state) -> rx.Component:
         box_shadow="0 0 10px rgba(0,0,0,0.05)",  # 轻微阴影，提升层次感
         border_radius="0 8px 8px 0",  # 右侧圆角（如果侧边栏在左侧）
     )
-
-
-# def sidebar(State) -> rx.Component:
-#     return rx.box(
-#         # 侧边栏内容
-#         rx.vstack(
-#             # 品牌标识区域
-#             rx.hstack(
-#                 rx.avatar(name="NovaAI", src="../novaai.png"),
-#                 rx.text("NovaAI", size="6", weight="bold"),
-#                 justify_content="center",
-#                 align_items="center",
-#                 margin_bottom="0.5em",
-#             ),
-#             # 功能菜单区域
-#             rx.accordion.root(
-#                 rx.foreach(State.function_menu, lambda item: accordion_item(item)),
-#                 collapsible=True,
-#                 type="multiple",
-#                 width="100%",
-#                 align_items="stretch",
-#             ),
-#             width="100%",
-#             height="100%",
-#         ),
-#         # # 动态宽度：展开时15em，收起时4em
-#         width=rx.cond(State.sidebar_visible, "15em", "0"),
-#         opacity=rx.cond(State.sidebar_visible, "1", "0"),
-#         height="100%",
-#         padding=rx.cond(State.sidebar_visible, "0.5em", "0"),
-#         background_color=rx.color("mauve", 3),
-#         transition="all 0.3s ease",  # 平滑过渡动画
-#         overflow="hidden",  # 防止内容溢出
-#         z_index="5",
-#     )

@@ -3,44 +3,86 @@
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
 import logging
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Optional
 
 import reflex as rx
 
-from app.api.task_api import (
-    HUMAN_IN_LOOP_BACKEND_URL,
-    STREAM_TASK_AINOVEL_BACKEND_URL,
-    get_task_api,
+from app.api.agent_api import (
+    AGENT_AINOVEL_EXTRACT_SETTING_BACKEND_URL,
+    get_agent_api,
 )
-from app.states.state import _SELECTED_MODELS, Message, Parameters, State
+from app.states.state import (
+    _DEFAULT_NAME,
+    _SELECTED_MODELS,
+    _TASK_DIR,
+    Parameters,
+    State,
+)
 
 logger = logging.getLogger(__name__)
 
-_INTRODUCTION = "Hi! I'm **Nova Interact AiNovel**, a helpful assistant."
-MAX_TOTAL_CHARS = 150000  # 总字符保护限制
-_DEFAULT_NAME = "Nova"
+
+@dataclass(kw_only=True)
+class NovelStepMenu:
+    value: str  # 标签唯一标识（用于切换）
+    label: str  # 标签显示文本
+    content: str  # 标签对应的内容组件（延迟渲染）
+    disabled: bool = False  # 是否禁用标签
+    icon: Optional[str] = None  # 标签图标（可选）
+    component: Optional[rx.Component] = None
 
 
 class InteractAiNovelState(State):
     unique_id = "Interact - AiNovel"
-    _default_introduction = _INTRODUCTION
     _default_name = _DEFAULT_NAME
 
+    novel_tabs: list[NovelStepMenu] = [
+        NovelStepMenu(
+            value="extract_setting",
+            label="抽取设定",
+            icon="brain",  # 图标（Reflex内置图标名）
+            content="editor",  # 聊天组件（需实现）
+        ),
+        NovelStepMenu(
+            value="core_seed",
+            label="核心种子",
+            icon="gpu",  # 图标（Reflex内置图标名）
+            content="editor",  # 聊天组件（需实现）
+        ),
+        NovelStepMenu(
+            value="character_dynamics",
+            label="角色设定",
+            icon="bike",  # 图标（Reflex内置图标名）
+            content="editor",  # 聊天组件（需实现）
+        ),
+        NovelStepMenu(
+            value="world_building",
+            label="世界观构建",
+            icon="earth",  # 图标（Reflex内置图标名）
+            content="editor",  # 聊天组件（需实现）
+        ),
+        NovelStepMenu(
+            value="plot_arch",
+            label="情节架构",
+            icon="layout-list",  # 图标（Reflex内置图标名）
+            content="editor",  # 聊天组件（需实现）
+        ),
+        NovelStepMenu(
+            value="chapter_blueprint",
+            label="章节目录",
+            icon="list-tree",  # 图标（Reflex内置图标名）
+            content="editor",  # 聊天组件（需实现）
+        ),
+        NovelStepMenu(
+            value="chapter_draft",
+            label="章节内容",
+            icon="clipboard-pen-line",  # 图标（Reflex内置图标名）
+            content="editor",  # 聊天组件（需实现）
+        ),
+    ]
+
     params_fields: list[Parameters] = [
-        Parameters(
-            mkey="task_dir",
-            mtype="text",
-            mvalue="merlin",
-            mvaluetype="str",
-            mselected=None,
-        ),
-        Parameters(
-            mkey="clarify_model",
-            mtype="select",
-            mvalue="reasoning",
-            mvaluetype="str",
-            mselected=_SELECTED_MODELS,
-        ),
         Parameters(
             mkey="architecture_model",
             mtype="select",
@@ -50,13 +92,16 @@ class InteractAiNovelState(State):
         ),
     ]
 
+    _workspace = {
+        _default_name: {"input_content": "", "output_content": ""}
+    }  # 存储每个工作区的内容
+
+    # 状态变量
     current_chat = _default_name
-
-    _chat2messages: dict[str, list[Message]] = {
-        _default_name: [Message(role="assistant", content=_default_introduction)]
-    }
-
-    _is_human_in_loop = False
+    input_content = ""
+    output_content = ""
+    final_content = ""
+    saving: bool = False
 
     @rx.event
     def update_params_fields(self, form_data: dict[str, Any]):
@@ -77,44 +122,54 @@ class InteractAiNovelState(State):
         # Add the new chat to the list of chats.
         new_chat_name = form_data["new_chat_name"]
         self.current_chat = new_chat_name
-        self._chat2messages[new_chat_name] = [
-            Message(role="assistant", content=self._default_introduction)
-        ]
+        self._workspace[new_chat_name] = {"input_content": "", "output_content": ""}
 
         self.is_new_chat_modal_open = False
-
-    @rx.var
-    def show_chat_content(self) -> list[Message]:
-        return (
-            self._chat2messages[self.current_chat]
-            if self.current_chat in self._chat2messages
-            else []
-        )
 
     @rx.event
     def delete_chat(self, name: str):
         """Delete the current chat."""
-        if name not in self._chat2messages:
+        if name not in self._workspace:
             return
-        del self._chat2messages[name]
+        del self._workspace[name]
 
-        if len(self._chat2messages) == 0:
-            self._chat2messages = {
-                self._default_name: [
-                    Message(role="assistant", content=self._default_introduction)
-                ],
+        if len(self._workspace) == 0:
+            self._workspace = {
+                self._default_name: {"input_content": "", "output_content": ""},
             }
 
-        if self.current_chat not in self._chat2messages:
-            self.current_chat = list(self._chat2messages.keys())[0]
+        if self.current_chat not in self._workspace:
+            self.current_chat = list(self._workspace.keys())[0]
 
     @rx.event
     def set_chat_name(self, name: str):
         self.current_chat = name
+        self.input_content = self._workspace[self.current_chat]["input_content"]
+        self.output_content = self._workspace[self.current_chat]["output_content"]
 
     @rx.var
     def get_chat_names(self) -> list[str]:
-        return list(self._chat2messages.keys())
+        return list(self._workspace.keys())
+
+    # 保存输出内容
+    @rx.event
+    def save_final_content(self, form_data: dict[str, Any]):
+        """保存输出内容的逻辑"""
+        self.saving = True
+        # 示例：保存到本地存储（或提交到后端）
+        answer = form_data["answer"]
+        _event_name = "novel_architecture_setting"
+        if answer:
+            # 这里可以替换为实际保存逻辑（如API调用、数据库存储等）
+            #
+            # 获取输出内容
+            self.final_content = answer
+            with open(f"{_TASK_DIR}/{self.current_chat}/{_event_name}.md", "w") as f:
+                f.write(answer)
+            yield rx.toast("内容已成功保存")
+        else:
+            yield rx.toast("没有可保存的内容", status="warning")
+        self.saving = False
 
     @rx.event
     async def process_question(self, form_data: dict[str, Any]):
@@ -125,30 +180,22 @@ class InteractAiNovelState(State):
         for item in self.params_fields:
             config[item.mkey] = item.mvalue
 
-        self._chat2messages[self.current_chat].append(
-            Message(role="user", content=question)
-        )
-
         self.processing = True
 
-        # Build the messages.
-        messages = []
-        for message in self._chat2messages[self.current_chat]:
-            messages.append({"role": message.role, "content": message.content})
-
         # 初始化
-        self._chat2messages[self.current_chat].append(Message(role="assistant"))
+        messages = {"role": "user", "content": question}
+        self.input_content = question
+        self.output_content = ""
+        self._workspace[self.current_chat] = {
+            "input_content": question,
+            "output_content": "",
+        }
 
-        full_response = ""
         _content_len = 0
+        _url = AGENT_AINOVEL_EXTRACT_SETTING_BACKEND_URL
+        _event_name = "novel_architecture_setting"
 
-        _url = STREAM_TASK_AINOVEL_BACKEND_URL
-        if self._is_human_in_loop:
-            _url = HUMAN_IN_LOOP_BACKEND_URL
-
-        self._is_human_in_loop = False
-
-        async for item in get_task_api(
+        async for item in get_agent_api(
             _url,
             self.current_chat,
             {"messages": messages},
@@ -156,23 +203,17 @@ class InteractAiNovelState(State):
             {"task_name": "ai_novel", "result": question},
         ):  # type: ignore
             content = item["content"]
-            full_response += str(content)  # 累加完整响应
-            if len(full_response) >= MAX_TOTAL_CHARS:
-                full_response += "\n\n⚠️ 已达到最大字符限制，后续内容已截断。"
-                continue  # 终止流式处理
 
             # 🔹 处理 System 消息（如任务状态、工具调用）
             if item["type"] in ["system", "error"]:
                 if item["type"] == "error":
-                    self._chat2messages[self.current_chat][
-                        -1
-                    ].content += f"<span style='color:red'>{content}</span>"
+                    self.output_content += f"<span style='color:red'>{content}</span>"
 
                 else:
-                    self._chat2messages[self.current_chat][-1].content += content
+                    self.output_content += content
 
             elif item["type"] == "chat_start":
-                self._chat2messages[self.current_chat][-1].content += content
+                self.output_content += content
 
             elif item["type"] == "chat_end":
                 if isinstance(content, dict):
@@ -181,44 +222,50 @@ class InteractAiNovelState(State):
                     _tool_calls = content["tool_calls"]
 
                     if _content_len > 0:
-                        self._chat2messages[self.current_chat][
-                            -1
-                        ].content = self._chat2messages[self.current_chat][-1].content[
-                            :-_content_len
-                        ]
+                        self.output_content = self.output_content[:-_content_len]
                         _content_len = 0
 
                     if _reasoning_content:
-                        self._chat2messages[self.current_chat][
-                            -1
-                        ].content += f"📝 思考过程\n\n{_reasoning_content}\n\n"
+                        self.output_content += (
+                            f"📝 思考过程\n\n{_reasoning_content}\n\n"
+                        )
 
                     if _tool_calls:
-                        self._chat2messages[self.current_chat][
-                            -1
-                        ].content += f"📝 工具入参\n\n{_tool_calls}\n\n"
+                        self.output_content += f"📝 工具入参\n\n{_tool_calls}\n\n"
 
                     if _content.strip():
-                        self._chat2messages[self.current_chat][
-                            -1
-                        ].content += f"📘 【Answer】\n\n{_content} \n\n"
+                        self.output_content += f"📘 【Answer】\n\n{_content} \n\n"
 
             elif item["type"] == "answer":
-                self._chat2messages[self.current_chat][-1].content += content
+                self.output_content += content
                 _content_len += len(content)
 
             elif item["type"] == "thought":
-                self._chat2messages[self.current_chat][-1].content += content
+                self.output_content += content
                 _content_len += len(content)
-
-            elif item["type"] == "human_in_loop":
-                self._chat2messages[self.current_chat][
-                    -1
-                ].content += f"<span style='color:yellow'>{content}</span>"
-                _content_len += len(content)
-                self._is_human_in_loop = True
 
             yield
 
+        self._workspace[self.current_chat] = {
+            "input_content": question,
+            "output_content": self.output_content,
+        }
+
+        # 获取输出内容
+        with open(f"{_TASK_DIR}/{self.current_chat}/{_event_name}.md", "r") as f:
+            self.final_content = f.read()
+
         # Toggle the processing flag.
         self.processing = False
+
+    @rx.event
+    async def process_diagnose(self):
+        pass
+
+    @rx.event
+    async def process_feedback(self):
+        pass
+
+    @rx.event
+    async def process_one_click(self):
+        pass
