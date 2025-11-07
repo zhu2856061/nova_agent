@@ -178,8 +178,10 @@ plot_arch_prompt = """\
 chapter_blueprint_prompt = """\
 基于以下元素：
 - 内容指导：{user_guidance}
-- 小说架构：
-{novel_architecture}
+- 核心种子：{core_seed}
+- 角色体系：{character_dynamics}
+- 世界观：{world_building}
+- 三幕式情节架构: {plot_arch}
 
 设计{number_of_chapters}章的节奏分布：
 1. 章节集群划分：

@@ -28,13 +28,6 @@ class AgentAiNovelChapterState(State):
 
     params_fields: list[Parameters] = [
         Parameters(
-            mkey="task_dir",
-            mtype="text",
-            mvalue="merlin",
-            mvaluetype="str",
-            mselected=None,
-        ),
-        Parameters(
             mkey="chapter_model",
             mtype="select",
             mvalue="basic_no_thinking",

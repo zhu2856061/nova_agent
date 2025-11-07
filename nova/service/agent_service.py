@@ -148,7 +148,11 @@ async def human_in_loop(request: AgentRequest):
 
     try:
         user_guidance = request.user_guidance
-        context = {**request.context, "trace_id": request.trace_id}
+        context = {
+            **request.context,
+            "trace_id": request.trace_id,
+            "task_dir": CONF["SYSTEM"]["task_dir"],
+        }
         config: RunnableConfig = {"configurable": {"thread_id": request.trace_id}}
         if not user_guidance:
             raise HTTPException(status_code=1, detail="user_guidance is None")

@@ -12,6 +12,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
 from pydantic import BaseModel, Field
 
+from nova import CONF
 from nova.task.ainovel import ainovel
 from nova.task.deepresearcher import deepresearcher
 from nova.utils import handle_event
@@ -46,7 +47,11 @@ async def service(Task, request: TaskRequest):
 
     try:
         state = request.state
-        context = {**request.context, "trace_id": request.trace_id}
+        context = {
+            **request.context,
+            "trace_id": request.trace_id,
+            "task_dir": CONF["SYSTEM"]["task_dir"],
+        }
         config = {"configurable": {"thread_id": request.trace_id}}
         stream = request.stream
 
@@ -115,7 +120,11 @@ async def human_in_loop(request: TaskRequest):
 
     try:
         user_guidance = request.user_guidance
-        context = {**request.context, "trace_id": request.trace_id}
+        context = {
+            **request.context,
+            "trace_id": request.trace_id,
+            "task_dir": CONF["SYSTEM"]["task_dir"],
+        }
         config: RunnableConfig = {"configurable": {"thread_id": request.trace_id}}
         if not user_guidance:
             raise HTTPException(status_code=1, detail="user_guidance is None")

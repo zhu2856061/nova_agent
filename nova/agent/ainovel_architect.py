@@ -182,7 +182,6 @@ async def core_seed(
         # 提示词
         def _assemble_prompt():
             tmp = {**_middle_result, "user_guidance": _user_guidance}
-            print("===>", tmp)
             return [
                 HumanMessage(content=apply_system_prompt_template("core_seed", tmp))
             ]
@@ -418,11 +417,7 @@ async def chapter_blueprint(
 
         # 提示词
         def _assemble_overall_prompt():
-            tmp = {
-                "user_guidance": _user_guidance,
-                "novel_architecture": _novel_architecture,
-                "number_of_chapters": _number_of_chapters,
-            }
+            tmp = {**_middle_result, "user_guidance": _user_guidance}
             return [
                 HumanMessage(
                     content=apply_system_prompt_template("chapter_blueprint", tmp)
@@ -431,9 +426,8 @@ async def chapter_blueprint(
 
         def _assemble_chunk_prompt(chapter_list, start, end):
             tmp = {
+                **_middle_result,
                 "user_guidance": _user_guidance,
-                "novel_architecture": _novel_architecture,
-                "number_of_chapters": _number_of_chapters,
                 "chapter_list": chapter_list,
                 "start": start,
                 "end": end,
