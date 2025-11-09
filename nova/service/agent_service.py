@@ -15,7 +15,15 @@ from pydantic import BaseModel, Field
 from nova import CONF
 from nova.agent.ainovel_architect import ainovel_architecture_agent
 from nova.agent.ainovel_chapter import ainovel_chapter_agent
-from nova.agent.ainovel_interact import core_seed_agent, extract_setting_agent
+from nova.agent.ainovel_interact import (
+    chapter_blueprint_agent,
+    character_dynamics_agent,
+    core_seed_agent,
+    extract_setting_agent,
+    plot_arch_agent,
+    summarize_architecture_agent,
+    world_building_agent,
+)
 from nova.agent.memorizer import memorizer_agent
 from nova.agent.researcher import researcher_agent
 from nova.agent.wechat_researcher import wechat_researcher_agent
@@ -138,6 +146,31 @@ async def ainovel_extract_setting_service(request: AgentRequest):
 @agent_router.post("/ainovel_core_seed")
 async def ainovel_core_seed_service(request: AgentRequest):
     return await service(core_seed_agent, request)
+
+
+@agent_router.post("/ainovel_character_dynamics")
+async def ainovel_character_dynamics_service(request: AgentRequest):
+    return await service(character_dynamics_agent, request)
+
+
+@agent_router.post("/ainovel_world_building")
+async def ainovel_world_building_service(request: AgentRequest):
+    return await service(world_building_agent, request)
+
+
+@agent_router.post("/ainovel_plot_arch")
+async def ainovel_plot_arch_service(request: AgentRequest):
+    return await service(plot_arch_agent, request)
+
+
+@agent_router.post("/ainovel_chapter_blueprint")
+async def ainovel_chapter_blueprint_service(request: AgentRequest):
+    return await service(chapter_blueprint_agent, request)
+
+
+@agent_router.post("/ainovel_summarize_architecture")
+async def ainovel_summarize_architecture_service(request: AgentRequest):
+    return await service(summarize_architecture_agent, request)
 
 
 @agent_router.post("/human_in_loop")

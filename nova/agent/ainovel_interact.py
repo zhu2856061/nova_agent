@@ -136,7 +136,7 @@ async def extract_setting(
 
         await write_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_architecture_setting.md",
+                "file_path": f"{_work_dir}/novel_extract_setting.md",
                 "text": _middle_result_txt,
             }
         )
@@ -175,6 +175,7 @@ async def core_seed(
                 **_extract_setting_result,
                 "user_guidance": _user_guidance,
             }
+            print("====>", tmp)
             return [
                 HumanMessage(content=apply_system_prompt_template("core_seed", tmp))
             ]
@@ -185,10 +186,11 @@ async def core_seed(
 
         _extract_setting_result = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_architecture_setting.md",
+                "file_path": f"{_work_dir}/novel_extract_setting.md",
             }
         )
         _extract_setting_result = json.loads(_extract_setting_result)
+        print("====>", _extract_setting_result)
 
         response = await _get_llm().ainvoke(_assemble_prompt(_extract_setting_result))
         logger.info(
@@ -202,7 +204,7 @@ async def core_seed(
         _middle_result_txt = json.dumps(_middle_result, ensure_ascii=False)
         await write_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_architecture_core_seed.md",
+                "file_path": f"{_work_dir}/novel_core_seed.md",
                 "text": _middle_result_txt,
             }
         )
@@ -250,7 +252,7 @@ async def character_dynamics(
 
         _core_seed_result = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_architecture_core_seed.md",
+                "file_path": f"{_work_dir}/novel_core_seed.md",
             }
         )
         _core_seed_result = json.loads(_core_seed_result)
@@ -267,7 +269,7 @@ async def character_dynamics(
         _middle_result_txt = json.dumps(_middle_result, ensure_ascii=False)
         await write_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_architecture_character_dynamics.md",
+                "file_path": f"{_work_dir}/novel_character_dynamics.md",
                 "text": _middle_result_txt,
             }
         )
@@ -317,7 +319,7 @@ async def world_building(
 
         _character_dynamics_result = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_architecture_character_dynamics.md",
+                "file_path": f"{_work_dir}/novel_character_dynamics.md",
             }
         )
         _character_dynamics_result = json.loads(_character_dynamics_result)
@@ -339,7 +341,7 @@ async def world_building(
         _middle_result_txt = json.dumps(_middle_result, ensure_ascii=False)
         await write_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_architecture_world_building.md",
+                "file_path": f"{_work_dir}/novel_world_building.md",
                 "text": _middle_result_txt,
             }
         )
@@ -385,7 +387,7 @@ async def plot_arch(
 
         _world_building_result = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_architecture_world_building.md",
+                "file_path": f"{_work_dir}/novel_world_building.md",
             }
         )
         _world_building_result = json.loads(_world_building_result)
@@ -402,7 +404,7 @@ async def plot_arch(
         _middle_result_txt = json.dumps(_middle_result, ensure_ascii=False)
         await write_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_architecture_plot_arch.md",
+                "file_path": f"{_work_dir}/novel_plot_arch.md",
                 "text": _middle_result_txt,
             }
         )
@@ -473,7 +475,7 @@ async def chapter_blueprint(
 
         _plot_arch_result = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_architecture_plot_arch.md",
+                "file_path": f"{_work_dir}/novel_plot_arch.md",
             }
         )
         _plot_arch_result = json.loads(_plot_arch_result)
@@ -530,7 +532,7 @@ async def chapter_blueprint(
         _middle_result_txt = json.dumps(_middle_result, ensure_ascii=False)
         await write_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_architecture_chapter_blueprint.md",
+                "file_path": f"{_work_dir}/novel_chapter_blueprint.md",
                 "text": _middle_result_txt,
             }
         )
@@ -565,7 +567,7 @@ async def summarize_architecture(
 
         _middle_result = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_architecture_chapter_blueprint.md",
+                "file_path": f"{_work_dir}/novel_chapter_blueprint.md",
             }
         )
         _middle_result = json.loads(_middle_result)
@@ -624,15 +626,49 @@ async def summarize_architecture(
         )
 
 
-# extract_setting subgraph
+# 抽取设定 subgraph
 _extract_setting = StateGraph(State, context_schema=Context)
 _extract_setting.add_node("extract_setting", extract_setting)
 _extract_setting.add_edge(START, "extract_setting")
 extract_setting_agent = _extract_setting.compile()
 
 
-# core_seed subgraph
+# 核心种子 subgraph
 _core_seed = StateGraph(State, context_schema=Context)
 _core_seed.add_node("core_seed", core_seed)
 _core_seed.add_edge(START, "core_seed")
-core_seed_agent = _extract_setting.compile()
+core_seed_agent = _core_seed.compile()
+
+
+# 角色动力学 subgraph
+_character_dynamics = StateGraph(State, context_schema=Context)
+_character_dynamics.add_node("character_dynamics", character_dynamics)
+_character_dynamics.add_edge(START, "character_dynamics")
+character_dynamics_agent = _character_dynamics.compile()
+
+
+# 世界观 subgraph
+_world_building = StateGraph(State, context_schema=Context)
+_world_building.add_node("world_building", world_building)
+_world_building.add_edge(START, "world_building")
+world_building_agent = _world_building.compile()
+
+
+# 三幕式情节架构 subgraph
+_plot_arch = StateGraph(State, context_schema=Context)
+_plot_arch.add_node("plot_arch", plot_arch)
+_plot_arch.add_edge(START, "plot_arch")
+plot_arch_agent = _plot_arch.compile()
+
+
+# 章节目录 subgraph
+_chapter_blueprint = StateGraph(State, context_schema=Context)
+_chapter_blueprint.add_node("chapter_blueprint", chapter_blueprint)
+_chapter_blueprint.add_edge(START, "chapter_blueprint")
+chapter_blueprint_agent = _chapter_blueprint.compile()
+
+# 组织结果 subgraph
+_summarize_architecture = StateGraph(State, context_schema=Context)
+_summarize_architecture.add_node("summarize_architecture", summarize_architecture)
+_summarize_architecture.add_edge(START, "summarize_architecture")
+summarize_architecture_agent = _summarize_architecture.compile()

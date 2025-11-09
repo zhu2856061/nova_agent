@@ -42,7 +42,8 @@ def editor_component_form(tab: NovelStepMenu, State) -> rx.Component:
             rx.vstack(
                 rx.text_area(
                     placeholder="在这里输入你的要求...",
-                    default_value=State.input_content,
+                    value=State.get_input_content,
+                    on_change=State.set_input_content,
                     width="100%",
                     height="5em",
                     border_radius="5px",
@@ -110,7 +111,7 @@ def editor_component_form(tab: NovelStepMenu, State) -> rx.Component:
         rx.hstack(
             rx.text_area(
                 placeholder="生成过程展示...",
-                value=State.output_content,
+                value=State.get_output_content,
                 width="100%",
                 height="100%",
                 border_radius="5px",
@@ -128,7 +129,8 @@ def editor_component_form(tab: NovelStepMenu, State) -> rx.Component:
                 rx.vstack(
                     rx.text_area(
                         placeholder="生成最终结果展示...",
-                        default_value=State.final_content,
+                        value=State.get_final_content,
+                        on_change=State.set_final_content,  # 保存最终结果逻辑
                         width="100%",
                         height="100%",
                         border_radius="5px",
@@ -145,7 +147,8 @@ def editor_component_form(tab: NovelStepMenu, State) -> rx.Component:
                     rx.button(
                         "保存",
                         loading=State.saving,  # 建议单独设置保存状态变量，避免与processing冲突
-                        disabled=State.saving | ~State.final_content,  # 内容为空时禁用
+                        disabled=State.saving
+                        | ~State.get_final_content,  # 内容为空时禁用
                         type="submit",
                         width="100%",  # 按钮占满宽度，与文本框对齐
                         bg=rx.color("blue", 4),

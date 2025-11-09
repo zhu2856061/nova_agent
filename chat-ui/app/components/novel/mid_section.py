@@ -113,10 +113,9 @@ def novel_workspace(state) -> rx.Component:
         #     flex="1",  # 占满剩余宽度
         #     padding="0.8em",
         # ),
+        on_change=state.change_tab_value,
         # 标签页核心配置
-        default_value="chat",  # 默认选中第一个标签
-        # value=state.current_chat,  # 关联状态（同步选中标签）
-        # on_change=rx.set_value(state, "current_chat"),  # 标签切换时更新状态
+        default_value=state.current_tab,  # 默认选中第一个标签
         orientation="vertical",  # 垂直布局
         width=NovelWorkspaceStyle.TABS_ROOT_WIDTH,
         height="100%",

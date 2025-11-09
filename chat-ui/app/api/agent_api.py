@@ -27,6 +27,30 @@ HUMAN_IN_LOOP_BACKEND_URL = "http://0.0.0.0:2021/agent/human_in_loop"
 AGENT_AINOVEL_EXTRACT_SETTING_BACKEND_URL = (
     "http://0.0.0.0:2021/agent/ainovel_extract_setting"  # 需根据实际修改
 )
+AGENT_AINOVEL_CORE_SEED_BACKEND_URL = (
+    "http://0.0.0.0:2021/agent/ainovel_core_seed"  # 需根据实际修改
+)
+
+AGENT_AINOVEL_CHARATER_DYNAMICS_BACKEND_URL = (
+    "http://0.0.0.0:2021/agent/ainovel_character_dynamics"  # 需根据实际修改
+)
+
+AGENT_AINOVEL_WORLD_BUILDING_BACKEND_URL = (
+    "http://0.0.0.0:2021/agent/ainovel_world_building"  # 需根据实际修改
+)
+
+AGENT_AINOVEL_PLOT_ARCH_BACKEND_URL = (
+    "http://0.0.0.0:2021/agent/ainovel_plot_arch"  # 需根据实际修改
+)
+
+AGENT_AINOVEL_CHAPTER_BLUEPRINT_BACKEND_URL = (
+    "http://0.0.0.0:2021/agent/ainovel_chapter_blueprint"  # 需根据实际修改
+)
+
+AGENT_AINOVEL_SUMMARIZE_ACRHITECTURE_BACKEND_URL = (
+    "http://0.0.0.0:2021/agent/ainovel_summarize_architecture"  # 需根据实际修改
+)
+
 logger = logging.getLogger(__name__)
 
 
