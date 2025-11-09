@@ -69,6 +69,12 @@ async def service(Task, request: AgentRequest):
 
         if not stream:
             result = await Task.ainvoke(state, context=context, config=config)  # type: ignore
+            if result.get("err_message"):
+                return AgentResponse(
+                    code=1,
+                    messages={"err": result.get("err_message")},
+                )
+
             content = result.get("messages")[-1].content  # type: ignore
             return AgentResponse(
                 code=0,

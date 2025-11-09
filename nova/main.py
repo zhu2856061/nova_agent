@@ -54,9 +54,6 @@ app.include_router(chat_router)
 app.include_router(agent_router)
 app.include_router(task_router)
 
-# Mount the frontend under /app to not conflict with the LangGraph API routes
-# app.mount("/app", create_frontend_router(), name="frontend")
-
 
 if __name__ == "__main__":
     import uvicorn

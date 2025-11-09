@@ -91,7 +91,13 @@ async def get_agent_api(
                         line_data = json.loads(chunk.decode("utf-8"))
 
                         if line_data.get("code", 1) != 0:
-                            error_msg = f"❌ 后端错误: {line_data.get('message', '未知错误')}(code={line_data.get('code')})"
+                            error_msg = f"❌ 后端错误: {line_data.get('message', '未知错误')}(code={line_data.get('code')}, msg={line_data.get('messages')})"
+                            logger.error(f"{error_msg} (trace_id: {trace_id})")
+                            yield {"type": "error", "content": error_msg}
+                            return
+
+                        if line_data.get("code", 1) != 0:
+                            error_msg = f"❌ 后端错误: {line_data.get('message', '未知错误')}(code={line_data.get('code')}, msg={line_data.get('messages')})"
                             logger.error(f"{error_msg} (trace_id: {trace_id})")
                             yield {"type": "error", "content": error_msg}
                             return

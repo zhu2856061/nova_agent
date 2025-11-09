@@ -228,118 +228,123 @@ class InteractAiNovelState(State):
 
     @rx.event
     async def process_question(self, form_data: dict[str, Any]):
-        question = form_data["question"]
-        if not question:
-            return
-        config = {}
-        for item in self.params_fields:
-            config[item.mkey] = item.mvalue
+        try:
+            question = form_data["question"]
+            if not question:
+                question = ""
+            config = {}
+            for item in self.params_fields:
+                config[item.mkey] = item.mvalue
 
-        self.processing = True
+            self.processing = True
 
-        # 初始化
-        messages = {"role": "user", "content": question}
+            # 初始化
+            messages = {"role": "user", "content": question}
 
-        _content_len = 0
-        if self.current_tab == "extract_setting":
-            _url = AGENT_AINOVEL_EXTRACT_SETTING_BACKEND_URL
-            _event_name = "novel_extract_setting"
-        elif self.current_tab == "core_seed":
-            _url = AGENT_AINOVEL_CORE_SEED_BACKEND_URL
-            _event_name = "novel_core_seed"
-        elif self.current_tab == "character_dynamics":
-            _url = AGENT_AINOVEL_CHARATER_DYNAMICS_BACKEND_URL
-            _event_name = "novel_character_dynamics"
-        elif self.current_tab == "world_building":
-            _url = AGENT_AINOVEL_WORLD_BUILDING_BACKEND_URL
-            _event_name = "novel_world_building"
-        elif self.current_tab == "plot_arch":
-            _url = AGENT_AINOVEL_PLOT_ARCH_BACKEND_URL
-            _event_name = "novel_plot_arch"
-        elif self.current_tab == "chapter_blueprint":
-            _url = AGENT_AINOVEL_CHAPTER_BLUEPRINT_BACKEND_URL
-            _event_name = "novel_chapter_blueprint"
-        elif self.current_tab == "summarize_architecture":
-            _url = AGENT_AINOVEL_SUMMARIZE_ACRHITECTURE_BACKEND_URL
-            _event_name = "novel_summarize_architecture"
+            _content_len = 0
+            if self.current_tab == "extract_setting":
+                _url = AGENT_AINOVEL_EXTRACT_SETTING_BACKEND_URL
+                _event_name = "novel_extract_setting"
+            elif self.current_tab == "core_seed":
+                _url = AGENT_AINOVEL_CORE_SEED_BACKEND_URL
+                _event_name = "novel_core_seed"
+            elif self.current_tab == "character_dynamics":
+                _url = AGENT_AINOVEL_CHARATER_DYNAMICS_BACKEND_URL
+                _event_name = "novel_character_dynamics"
+            elif self.current_tab == "world_building":
+                _url = AGENT_AINOVEL_WORLD_BUILDING_BACKEND_URL
+                _event_name = "novel_world_building"
+            elif self.current_tab == "plot_arch":
+                _url = AGENT_AINOVEL_PLOT_ARCH_BACKEND_URL
+                _event_name = "novel_plot_arch"
+            elif self.current_tab == "chapter_blueprint":
+                _url = AGENT_AINOVEL_CHAPTER_BLUEPRINT_BACKEND_URL
+                _event_name = "novel_chapter_blueprint"
+            elif self.current_tab == "summarize_architecture":
+                _url = AGENT_AINOVEL_SUMMARIZE_ACRHITECTURE_BACKEND_URL
+                _event_name = "novel_summarize_architecture"
 
-        async for item in get_agent_api(
-            _url,
-            self.current_chat,
-            {"messages": messages, "user_guidance": question},
-            config,
-            {"task_name": "ai_novel", "result": question},
-        ):  # type: ignore
-            content = item["content"]
+            async for item in get_agent_api(
+                _url,
+                self.current_chat,
+                {"messages": messages, "user_guidance": question},
+                config,
+                {"task_name": "ai_novel", "result": question},
+            ):  # type: ignore
+                content = item["content"]
 
-            # 🔹 处理 System 消息（如任务状态、工具调用）
-            if item["type"] in ["system", "error"]:
-                if item["type"] == "error":
-                    self._workspace[self.current_chat][self.current_tab][
-                        "output_content"
-                    ] += f"<span style='color:red'>{content}</span>"
+                # 🔹 处理 System 消息（如任务状态、工具调用）
+                if item["type"] in ["system", "error"]:
+                    if item["type"] == "error":
+                        self._workspace[self.current_chat][self.current_tab][
+                            "output_content"
+                        ] += f"<span style='color:red'>{content}</span>"
 
-                else:
+                    else:
+                        self._workspace[self.current_chat][self.current_tab][
+                            "output_content"
+                        ] += content
+
+                elif item["type"] == "chat_start":
                     self._workspace[self.current_chat][self.current_tab][
                         "output_content"
                     ] += content
 
-            elif item["type"] == "chat_start":
+                elif item["type"] == "chat_end":
+                    if isinstance(content, dict):
+                        _reasoning_content = content["reasoning_content"]
+                        _content = content["content"]
+                        _tool_calls = content["tool_calls"]
+
+                        if _content_len > 0:
+                            self._workspace[self.current_chat][self.current_tab][
+                                "output_content"
+                            ] = self._workspace[self.current_chat][self.current_tab][
+                                "output_content"
+                            ][:-_content_len]
+                            _content_len = 0
+
+                        if _reasoning_content:
+                            self._workspace[self.current_chat][self.current_tab][
+                                "output_content"
+                            ] += f"📝 思考过程\n\n{_reasoning_content}\n\n"
+
+                        if _tool_calls:
+                            self._workspace[self.current_chat][self.current_tab][
+                                "output_content"
+                            ] += f"📝 工具入参\n\n{_tool_calls}\n\n"
+
+                        if _content.strip():
+                            self._workspace[self.current_chat][self.current_tab][
+                                "output_content"
+                            ] += f"📘 【Answer】\n\n{_content} \n\n"
+
+                elif item["type"] == "answer":
+                    self._workspace[self.current_chat][self.current_tab][
+                        "output_content"
+                    ] += content
+                    _content_len += len(content)
+
+                elif item["type"] == "thought":
+                    self._workspace[self.current_chat][self.current_tab][
+                        "output_content"
+                    ] += content
+                    _content_len += len(content)
+
+                yield
+
+            # 获取输出内容
+            with open(f"{_TASK_DIR}/{self.current_chat}/{_event_name}.md", "r") as f:
                 self._workspace[self.current_chat][self.current_tab][
-                    "output_content"
-                ] += content
+                    "final_content"
+                ] = f.read()
 
-            elif item["type"] == "chat_end":
-                if isinstance(content, dict):
-                    _reasoning_content = content["reasoning_content"]
-                    _content = content["content"]
-                    _tool_calls = content["tool_calls"]
-
-                    if _content_len > 0:
-                        self._workspace[self.current_chat][self.current_tab][
-                            "output_content"
-                        ] = self._workspace[self.current_chat][self.current_tab][
-                            "output_content"
-                        ][:-_content_len]
-                        _content_len = 0
-
-                    if _reasoning_content:
-                        self._workspace[self.current_chat][self.current_tab][
-                            "output_content"
-                        ] += f"📝 思考过程\n\n{_reasoning_content}\n\n"
-
-                    if _tool_calls:
-                        self._workspace[self.current_chat][self.current_tab][
-                            "output_content"
-                        ] += f"📝 工具入参\n\n{_tool_calls}\n\n"
-
-                    if _content.strip():
-                        self._workspace[self.current_chat][self.current_tab][
-                            "output_content"
-                        ] += f"📘 【Answer】\n\n{_content} \n\n"
-
-            elif item["type"] == "answer":
-                self._workspace[self.current_chat][self.current_tab][
-                    "output_content"
-                ] += content
-                _content_len += len(content)
-
-            elif item["type"] == "thought":
-                self._workspace[self.current_chat][self.current_tab][
-                    "output_content"
-                ] += content
-                _content_len += len(content)
-
-            yield
-
-        # 获取输出内容
-        with open(f"{_TASK_DIR}/{self.current_chat}/{_event_name}.md", "r") as f:
-            self._workspace[self.current_chat][self.current_tab]["final_content"] = (
-                f.read()
-            )
-
-        # Toggle the processing flag.
-        self.processing = False
+            # Toggle the processing flag.
+            self.processing = False
+        except Exception as e:
+            logger.error(e)
+            self.processing = False
+            yield rx.toast("处理失败", status="error")
 
     @rx.event
     async def process_diagnose(self):

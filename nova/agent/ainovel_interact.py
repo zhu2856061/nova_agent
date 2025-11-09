@@ -96,7 +96,6 @@ async def extract_setting(
         _task_dir = runtime.context.task_dir
         _model_name = runtime.context.architecture_model
         _messages = state.messages
-        _user_guidance = state.user_guidance
 
         _work_dir = os.path.join(_task_dir, _trace_id)
         os.makedirs(_work_dir, exist_ok=True)
@@ -105,7 +104,7 @@ async def extract_setting(
         def _assemble_prompt(messages):
             tmp = {
                 "messages": get_buffer_string(messages),
-                "user_guidance": _user_guidance,
+                "user_guidance": "",
             }
             return [
                 HumanMessage(
@@ -438,25 +437,18 @@ async def chapter_blueprint(
         os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
-        def _assemble_overall_prompt(_novel_architecture, _number_of_chapters):
-            tmp = {
-                "user_guidance": _user_guidance,
-                "novel_architecture": _novel_architecture,
-                "number_of_chapters": _number_of_chapters,
-            }
+        def _assemble_overall_prompt(_plot_arch_result):
+            tmp = {**_plot_arch_result, "user_guidance": _user_guidance}
             return [
                 HumanMessage(
                     content=apply_system_prompt_template("chapter_blueprint", tmp)
                 )
             ]
 
-        def _assemble_chunk_prompt(
-            _novel_architecture, _number_of_chapters, chapter_list, start, end
-        ):
+        def _assemble_chunk_prompt(_plot_arch_result, chapter_list, start, end):
             tmp = {
+                **_plot_arch_result,
                 "user_guidance": _user_guidance,
-                "novel_architecture": _novel_architecture,
-                "number_of_chapters": _number_of_chapters,
                 "chapter_list": chapter_list,
                 "start": start,
                 "end": end,
@@ -481,11 +473,10 @@ async def chapter_blueprint(
         _plot_arch_result = json.loads(_plot_arch_result)
 
         _number_of_chapters = _plot_arch_result["number_of_chapters"]
-        _novel_architecture = _plot_arch_result["plot_arch"]
 
         if _number_of_chapters <= 10:  # 小于10章的一次性产出
             response = await _get_llm().ainvoke(
-                _assemble_overall_prompt(_number_of_chapters, _novel_architecture)
+                _assemble_overall_prompt(_plot_arch_result)
             )
             logger.info(
                 set_color(
@@ -494,7 +485,7 @@ async def chapter_blueprint(
                 )
             )
 
-            _plot_arch_result = {
+            _middle_result = {
                 **_plot_arch_result,
                 "chapter_blueprint": response.content,
             }
@@ -507,8 +498,7 @@ async def chapter_blueprint(
 
                 response = await _get_llm().ainvoke(
                     _assemble_chunk_prompt(
-                        _number_of_chapters,
-                        _novel_architecture,
+                        _plot_arch_result,
                         chapter_list,
                         current_start,
                         current_end,
