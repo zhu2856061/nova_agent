@@ -17,6 +17,7 @@ from nova.agent.ainovel_architect import ainovel_architecture_agent
 from nova.agent.ainovel_chapter import ainovel_chapter_agent
 from nova.agent.ainovel_interact import (
     chapter_blueprint_agent,
+    chapter_draft_agent,
     character_dynamics_agent,
     core_seed_agent,
     extract_setting_agent,
@@ -177,6 +178,11 @@ async def ainovel_chapter_blueprint_service(request: AgentRequest):
 @agent_router.post("/ainovel_summarize_architecture")
 async def ainovel_summarize_architecture_service(request: AgentRequest):
     return await service(summarize_architecture_agent, request)
+
+
+@agent_router.post("/ainovel_chapter_draft")
+async def ainovel_chapter_draft_service(request: AgentRequest):
+    return await service(chapter_draft_agent, request)
 
 
 @agent_router.post("/human_in_loop")

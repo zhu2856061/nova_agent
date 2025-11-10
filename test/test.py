@@ -8,7 +8,7 @@ def send_chat_request():
         "Authorization": "Bearer lx-ai-1234",
     }
     payload = {
-        "model": "Qwen3-32B",
+        "model": "Qwen3-235B-A22B",
         "messages": [{"role": "user", "content": "Hello!"}],
     }
 

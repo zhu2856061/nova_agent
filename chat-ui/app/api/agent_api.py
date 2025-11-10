@@ -51,6 +51,9 @@ AGENT_AINOVEL_SUMMARIZE_ACRHITECTURE_BACKEND_URL = (
     "http://0.0.0.0:2021/agent/ainovel_summarize_architecture"  # 需根据实际修改
 )
 
+AGENT_AINOVEL_CHAPTER_DRAFT_BACKEND_URL = (
+    "http://0.0.0.0:2021/agent/ainovel_chapter_draft"  # 需根据实际修改
+)
 logger = logging.getLogger(__name__)
 
 

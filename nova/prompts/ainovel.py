@@ -45,8 +45,6 @@ extract_setting_prompt = """\
 <消息>
 {messages}
 </消息>
-- 内容指导：
-{user_guidance}
 
 您将返回用于指导小说的**关键设置**。
 

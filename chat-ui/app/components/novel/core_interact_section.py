@@ -41,7 +41,7 @@ def editor_component_form(tab: NovelStepMenu, State) -> rx.Component:
         rx.form(
             rx.vstack(
                 rx.text_area(
-                    placeholder="在这里输入你的要求...",
+                    placeholder="(可选项)在这里输入你的要求...",
                     value=State.get_input_content,
                     on_change=State.set_input_content,
                     width="100%",
@@ -144,16 +144,29 @@ def editor_component_form(tab: NovelStepMenu, State) -> rx.Component:
                             "overflow-x": "hidden",  # 禁止水平滚动（避免文本过长导致横向滚动）
                         },
                     ),
-                    rx.button(
-                        "保存",
-                        loading=State.saving,  # 建议单独设置保存状态变量，避免与processing冲突
-                        disabled=State.saving
-                        | ~State.get_final_content,  # 内容为空时禁用
-                        type="submit",
-                        width="100%",  # 按钮占满宽度，与文本框对齐
-                        bg=rx.color("blue", 4),
-                        color="white",
-                        _hover={"bg": rx.color("blue", 7)},
+                    rx.hstack(
+                        rx.button(
+                            "展示",
+                            # width="100%",  # 按钮占满宽度，与文本框对齐
+                            on_click=State.final_show,  # 展示逻辑
+                            bg=rx.color("blue", 4),
+                            color="white",
+                            _hover={"bg": rx.color("blue", 7)},
+                            type="button",  # 显式设置为普通按钮
+                        ),
+                        rx.spacer(),
+                        rx.button(
+                            "保存",
+                            loading=State.saving,  # 建议单独设置保存状态变量，避免与processing冲突
+                            disabled=State.saving
+                            | ~State.get_final_content,  # 内容为空时禁用
+                            type="submit",
+                            # width="100%",  # 按钮占满宽度，与文本框对齐
+                            bg=rx.color("blue", 4),
+                            color="white",
+                            _hover={"bg": rx.color("blue", 7)},
+                        ),
+                        width="100%",
                     ),
                     width="100%",
                     height="100%",

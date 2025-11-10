@@ -5,17 +5,13 @@
 import json
 import logging
 import os
+import re
 from dataclasses import dataclass, field
-from typing import Annotated, Literal
+from pathlib import Path
 
-from langchain_core.messages import (
-    HumanMessage,
-    MessageLikeRepresentation,
-    get_buffer_string,
-)
-from langgraph.graph import START, StateGraph, add_messages
+from langchain_core.messages import HumanMessage
+from langgraph.graph import START, StateGraph
 from langgraph.runtime import Runtime
-from langgraph.types import Command
 from pydantic import BaseModel, Field
 
 from nova.llms import get_llm_by_type
@@ -36,12 +32,14 @@ logger = logging.getLogger(__name__)
 
 @dataclass(kw_only=True)
 class State:
+    code: int = field(
+        default=0,
+        metadata={"description": "The code to use for the agent."},
+    )
     err_message: str = field(
         default="",
         metadata={"description": "The error message to use for the agent."},
     )
-    messages: Annotated[list[MessageLikeRepresentation], add_messages]
-
     # 用户介入的信息
     user_guidance: str = field(
         default="",
@@ -60,7 +58,7 @@ class Context:
         metadata={"description": "The task directory to use for the agent."},
     )
 
-    architecture_model: str = field(
+    novel_model: str = field(
         default="basic",
         metadata={"description": "The name of llm to use for the agent. "},
     )
@@ -87,25 +85,24 @@ class ExtractSetting(BaseModel):
 
 
 # 抽取设定
-async def extract_setting(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["__end__"]]:
+async def extract_setting(state: State, runtime: Runtime[Context]):
     try:
         # 变量
         _trace_id = runtime.context.trace_id
         _task_dir = runtime.context.task_dir
-        _model_name = runtime.context.architecture_model
-        _messages = state.messages
+        _model_name = runtime.context.novel_model
+        _user_guidance = state.user_guidance
 
         _work_dir = os.path.join(_task_dir, _trace_id)
         os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
-        def _assemble_prompt(messages):
+        def _assemble_prompt():
             tmp = {
-                "messages": get_buffer_string(messages),
+                "messages": _user_guidance,
                 "user_guidance": "",
             }
+
             return [
                 HumanMessage(
                     content=apply_system_prompt_template("extract_setting", tmp)
@@ -116,7 +113,7 @@ async def extract_setting(
         def _get_llm():
             return get_llm_by_type(_model_name).with_structured_output(ExtractSetting)
 
-        response = await _get_llm().ainvoke(_assemble_prompt(_messages))
+        response = await _get_llm().ainvoke(_assemble_prompt())
         logger.info(
             set_color(
                 f"trace_id={_trace_id} | node=extract_setting | message={response}",
@@ -140,29 +137,21 @@ async def extract_setting(
             }
         )
 
-        return Command(goto="__end__")
+        return {"code": 0, "err_message": "ok"}
 
     except Exception as e:
-        logger.error(
-            set_color(f"trace_id={_trace_id} | node=extract_setting | error={e}", "red")
-        )
-        return Command(
-            goto="__end__",
-            update={
-                "err_message": f"trace_id={_trace_id} | node=extract_setting | error={e}"
-            },
-        )
+        err_message = f"trace_id={_trace_id} | node=extract_setting | error={e}"
+        logger.error(set_color(err_message, "red"))
+        return {"code": 1, "err_message": err_message}
 
 
 # 核心种子
-async def core_seed(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["__end__"]]:
+async def core_seed(state: State, runtime: Runtime[Context]):
     try:
         # 变量
         _trace_id = runtime.context.trace_id
         _task_dir = runtime.context.task_dir
-        _model_name = runtime.context.architecture_model
+        _model_name = runtime.context.novel_model
         _user_guidance = state.user_guidance
 
         _work_dir = os.path.join(_task_dir, _trace_id)
@@ -174,7 +163,6 @@ async def core_seed(
                 **_extract_setting_result,
                 "user_guidance": _user_guidance,
             }
-            print("====>", tmp)
             return [
                 HumanMessage(content=apply_system_prompt_template("core_seed", tmp))
             ]
@@ -189,7 +177,6 @@ async def core_seed(
             }
         )
         _extract_setting_result = json.loads(_extract_setting_result)
-        print("====>", _extract_setting_result)
 
         response = await _get_llm().ainvoke(_assemble_prompt(_extract_setting_result))
         logger.info(
@@ -208,29 +195,21 @@ async def core_seed(
             }
         )
 
-        return Command(goto="__end__")
+        return {"code": 0, "err_message": "ok"}
 
     except Exception as e:
-        logger.error(
-            set_color(f"trace_id={_trace_id} | node=core_seed | error={e}", "red")
-        )
-        return Command(
-            goto="__end__",
-            update={
-                "err_message": f"trace_id={_trace_id} | node=core_seed | error={e}"
-            },
-        )
+        err_message = f"trace_id={_trace_id} | node=core_seed | error={e}"
+        logger.error(set_color(err_message, "red"))
+        return {"code": 1, "err_message": err_message}
 
 
 # 角色动力学
-async def character_dynamics(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["__end__"]]:
+async def character_dynamics(state: State, runtime: Runtime[Context]):
     try:
         # 变量
         _trace_id = runtime.context.trace_id
         _task_dir = runtime.context.task_dir
-        _model_name = runtime.context.architecture_model
+        _model_name = runtime.context.novel_model
         _user_guidance = state.user_guidance
 
         _work_dir = os.path.join(_task_dir, _trace_id)
@@ -273,31 +252,21 @@ async def character_dynamics(
             }
         )
 
-        return Command(goto="__end__")
+        return {"code": 0, "err_message": "ok"}
 
     except Exception as e:
-        logger.error(
-            set_color(
-                f"trace_id={_trace_id} | node=character_dynamics | error={e}", "red"
-            )
-        )
-        return Command(
-            goto="__end__",
-            update={
-                "err_message": f"trace_id={_trace_id} | node=character_dynamics | error={e}"
-            },
-        )
+        err_message = f"trace_id={_trace_id} | node=character_dynamics | error={e}"
+        logger.error(set_color(err_message, "red"))
+        return {"code": 1, "err_message": err_message}
 
 
 # 世界观
-async def world_building(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["__end__"]]:
+async def world_building(state: State, runtime: Runtime[Context]):
     try:
         # 变量
         _trace_id = runtime.context.trace_id
         _task_dir = runtime.context.task_dir
-        _model_name = runtime.context.architecture_model
+        _model_name = runtime.context.novel_model
         _user_guidance = state.user_guidance
 
         _work_dir = os.path.join(_task_dir, _trace_id)
@@ -345,29 +314,20 @@ async def world_building(
             }
         )
 
-        return Command(goto="__end__")
-
+        return {"code": 0, "err_message": "ok"}
     except Exception as e:
-        logger.error(
-            set_color(f"trace_id={_trace_id} | node=world_building | error={e}", "red")
-        )
-        return Command(
-            goto="__end__",
-            update={
-                "err_message": f"trace_id={_trace_id} | node=world_building | error={e}"
-            },
-        )
+        err_message = f"trace_id={_trace_id} | node=world_building | error={e}"
+        logger.error(set_color(err_message, "red"))
+        return {"code": 1, "err_message": err_message}
 
 
 # 三幕式情节架构
-async def plot_arch(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["__end__"]]:
+async def plot_arch(state: State, runtime: Runtime[Context]):
     try:
         # 变量
         _trace_id = runtime.context.trace_id
         _task_dir = runtime.context.task_dir
-        _model_name = runtime.context.architecture_model
+        _model_name = runtime.context.novel_model
         _user_guidance = state.user_guidance
 
         _work_dir = os.path.join(_task_dir, _trace_id)
@@ -408,29 +368,21 @@ async def plot_arch(
             }
         )
 
-        return Command(goto="__end__")
+        return {"code": 0, "err_message": "ok"}
 
     except Exception as e:
-        logger.error(
-            set_color(f"trace_id={_trace_id} | node=plot_arch | error={e}", "red")
-        )
-        return Command(
-            goto="__end__",
-            update={
-                "err_message": f"trace_id={_trace_id} | node=plot_arch | error={e}"
-            },
-        )
+        err_message = f"trace_id={_trace_id} | node=plot_arch | error={e}"
+        logger.error(set_color(err_message, "red"))
+        return {"code": 1, "err_message": err_message}
 
 
 # 章节目录
-async def chapter_blueprint(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["__end__"]]:
+async def chapter_blueprint(state: State, runtime: Runtime[Context]):
     try:
         # 变量
         _trace_id = runtime.context.trace_id
         _task_dir = runtime.context.task_dir
-        _model_name = runtime.context.architecture_model
+        _model_name = runtime.context.novel_model
         _user_guidance = state.user_guidance
 
         _work_dir = os.path.join(_task_dir, _trace_id)
@@ -522,31 +474,21 @@ async def chapter_blueprint(
         _middle_result_txt = json.dumps(_middle_result, ensure_ascii=False)
         await write_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_chapter_blueprint.md",
+                "file_path": f"{_work_dir}/novel_blueprint.md",
                 "text": _middle_result_txt,
             }
         )
 
-        return Command(goto="__end__")
+        return {"code": 0, "err_message": "ok"}
 
     except Exception as e:
-        logger.error(
-            set_color(
-                f"trace_id={_trace_id} | node=chapter_blueprint | error={e}", "red"
-            )
-        )
-        return Command(
-            goto="__end__",
-            update={
-                "err_message": f"trace_id={_trace_id} | node=chapter_blueprint | error={e}"
-            },
-        )
+        err_message = f"trace_id={_trace_id} | node=chapter_blueprint | error={e}"
+        logger.error(set_color(err_message, "red"))
+        return {"code": 1, "err_message": err_message}
 
 
 # 结果保存
-async def summarize_architecture(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["__end__"]]:
+async def summarize_architecture(state: State, runtime: Runtime[Context]):
     try:
         # 变量
         _trace_id = runtime.context.trace_id
@@ -557,7 +499,7 @@ async def summarize_architecture(
 
         _middle_result = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_chapter_blueprint.md",
+                "file_path": f"{_work_dir}/novel_blueprint.md",
             }
         )
         _middle_result = json.loads(_middle_result)
@@ -600,20 +542,589 @@ async def summarize_architecture(
             )
         )
 
-        return Command(goto="__end__")
+        return {"code": 0, "err_message": "ok"}
 
     except Exception as e:
-        logger.error(
-            set_color(
-                f"trace_id={_trace_id} | node=summarize_architecture | error={e}", "red"
+        err_message = f"trace_id={_trace_id} | node=summarize_architecture | error={e}"
+        logger.error(set_color(err_message, "red"))
+        return {"code": 1, "err_message": err_message}
+
+
+def parse_chapter_blueprint(blueprint_text: str):
+    """
+    解析整份章节蓝图文本，返回一个列表，每个元素是一个 dict：
+    {
+      "chapter_number": int,
+      "chapter_title": str,
+      "chapter_role": str,       # 本章定位
+      "chapter_purpose": str,    # 核心作用
+      "suspense_level": str,     # 悬念密度
+      "foreshadowing": str,      # 伏笔操作
+      "plot_twist_level": str,   # 认知颠覆
+      "chapter_summary": str     # 本章简述
+    }
+    """
+
+    # 先按空行进行分块，以免多章之间混淆
+    chunks = re.split(r"\n\s*\n", blueprint_text.strip())
+    results = []
+
+    # 兼容是否使用方括号包裹章节标题
+    # 例如：
+    #   第1章 - 紫极光下的预兆
+    # 或
+    #   第1章 - [紫极光下的预兆]
+    chapter_number_pattern = re.compile(r"^第\s*(\d+)\s*章\s*-\s*\[?(.*?)\]?$")
+
+    role_pattern = re.compile(r"^本章定位：\s*\[?(.*)\]?$")
+    purpose_pattern = re.compile(r"^核心作用：\s*\[?(.*)\]?$")
+    suspense_pattern = re.compile(r"^悬念密度：\s*\[?(.*)\]?$")
+    foreshadow_pattern = re.compile(r"^伏笔操作：\s*\[?(.*)\]?$")
+    twist_pattern = re.compile(r"^认知颠覆：\s*\[?(.*)\]?$")
+    summary_pattern = re.compile(r"^本章简述：\s*\[?(.*)\]?$")
+
+    for chunk in chunks:
+        lines = chunk.strip().splitlines()
+        if not lines:
+            continue
+
+        chapter_number = None
+        chapter_title = ""
+        chapter_role = ""
+        chapter_purpose = ""
+        suspense_level = ""
+        foreshadowing = ""
+        plot_twist_level = ""
+        chapter_summary = ""
+
+        # 先匹配第一行（或前几行），找到章号和标题
+        header_match = chapter_number_pattern.match(lines[0].strip())
+        if not header_match:
+            # 不符合“第X章 - 标题”的格式，跳过
+            continue
+
+        chapter_number = int(header_match.group(1))
+        chapter_title = header_match.group(2).strip()
+
+        # 从后面的行匹配其他字段
+        for line in lines[1:]:
+            line_stripped = line.strip()
+            if not line_stripped:
+                continue
+
+            m_role = role_pattern.match(line_stripped)
+            if m_role:
+                chapter_role = m_role.group(1).strip()
+                continue
+
+            m_purpose = purpose_pattern.match(line_stripped)
+            if m_purpose:
+                chapter_purpose = m_purpose.group(1).strip()
+                continue
+
+            m_suspense = suspense_pattern.match(line_stripped)
+            if m_suspense:
+                suspense_level = m_suspense.group(1).strip()
+                continue
+
+            m_foreshadow = foreshadow_pattern.match(line_stripped)
+            if m_foreshadow:
+                foreshadowing = m_foreshadow.group(1).strip()
+                continue
+
+            m_twist = twist_pattern.match(line_stripped)
+            if m_twist:
+                plot_twist_level = m_twist.group(1).strip()
+                continue
+
+            m_summary = summary_pattern.match(line_stripped)
+            if m_summary:
+                chapter_summary = m_summary.group(1).strip()
+                continue
+
+        results.append(
+            {
+                "chapter_number": chapter_number,
+                "chapter_title": chapter_title,
+                "chapter_role": chapter_role,
+                "chapter_purpose": chapter_purpose,
+                "suspense_level": suspense_level,
+                "foreshadowing": foreshadowing,
+                "plot_twist_level": plot_twist_level,
+                "chapter_summary": chapter_summary,
+            }
+        )
+
+    # 按照 chapter_number 排序后返回
+    results.sort(key=lambda x: x["chapter_number"])
+    return results
+
+
+def get_chapter_info_from_blueprint(blueprint_text: str, target_chapter_number: int):
+    """
+    在已经加载好的章节蓝图文本中，找到对应章号的结构化信息，返回一个 dict。
+    若找不到则返回一个默认的结构。
+    """
+    all_chapters = parse_chapter_blueprint(blueprint_text)
+    for ch in all_chapters:
+        if ch["chapter_number"] == target_chapter_number:
+            return ch
+    # 默认返回
+    return {
+        "chapter_number": target_chapter_number,
+        "chapter_title": f"第{target_chapter_number}章",
+        "chapter_role": "",
+        "chapter_purpose": "",
+        "suspense_level": "",
+        "foreshadowing": "",
+        "plot_twist_level": "",
+        "chapter_summary": "",
+    }
+
+
+def get_last_n_chapters_text(work_dir: str, current_chapter_num: int, n: int = 3):
+    """
+    从目录 chapters_dir 中获取最近 n 章的文本内容，返回文本列表。
+    """
+    texts = []
+    start_chap = max(1, current_chapter_num - n)
+    for c in range(start_chap, current_chapter_num):
+        if os.path.exists(f"{work_dir}/chapter_{c}/第{c}章.md"):
+            chap_text = read_file_tool.run(
+                {"file_path": f"{work_dir}/chapter_{c}/第{c}章.md"}
             )
+            texts.append(chap_text)
+        else:
+            texts.append("")
+    return texts
+
+
+# 章节内容
+async def chapter_draft(state: State, runtime: Runtime[Context]):
+    try:
+        # 变量
+        _trace_id = runtime.context.trace_id
+        _task_dir = runtime.context.task_dir
+        _model_name = runtime.context.novel_model
+        _user_guidance = state.user_guidance
+
+        _work_dir = os.path.join(_task_dir, _trace_id)
+        os.makedirs(_work_dir, exist_ok=True)
+
+        if os.path.exists(f"{_work_dir}/novel_extract_setting.md"):
+            _novel_setting = await read_file_tool.arun(
+                {"file_path": f"{_work_dir}/novel_extract_setting.md"}
+            )
+            _novel_setting = json.loads(_novel_setting)
+            _word_number = _novel_setting["word_number"]
+        else:
+            err_message = f"trace_id={_trace_id} | node=chapter_draft | error=novel_setting is None"
+            logger.error(set_color(err_message, "red"))
+            return {"code": 1, "err_message": err_message}
+        #
+        if os.path.exists(f"{_work_dir}/novel_architecture.md"):
+            _novel_architecture = await read_file_tool.arun(
+                {"file_path": f"{_work_dir}/novel_architecture.md"}
+            )
+        else:
+            err_message = f"trace_id={_trace_id} | node=chapter_draft | error=novel_architecture is None"
+            logger.error(set_color(err_message, "red"))
+            return {"code": 1, "err_message": err_message}
+        if os.path.exists(f"{_work_dir}/novel_chapter_blueprint.md"):
+            _novel_chapter_blueprint = await read_file_tool.arun(
+                {"file_path": f"{_work_dir}/novel_chapter_blueprint.md"}
+            )
+        else:
+            err_message = f"trace_id={_trace_id} | node=chapter_draft | error=novel_chapter_blueprint is None"
+            logger.error(set_color(err_message, "red"))
+            return {"code": 1, "err_message": err_message}
+
+        # 提示词
+        def _assemble_prompt(
+            target,
+            current_chapter_id=1,
+            previous_chapter_text="",
+            previous_global_summary="",
+            previous_character_state="",
+            new_global_summary="",
+            new_character_state="",
+            summarize_recent_chapters="",
+            combined_text="",
+            chapter_info={},
+            next_chapter_info={},
+            characters_involved="",
+            key_items="",
+            scene_location="",
+            time_constraint="",
+        ):
+            if target == "global_summary":
+                tmp = {
+                    "previous_chapter_text": previous_chapter_text,
+                    "previous_global_summary": previous_global_summary,
+                }
+                return [
+                    HumanMessage(
+                        content=apply_system_prompt_template("global_summary", tmp)
+                    )
+                ]
+
+            elif target == "update_character_state":
+                tmp = {
+                    "previous_chapter_text": previous_chapter_text,
+                    "previous_character_state": previous_character_state,
+                }
+                return [
+                    HumanMessage(
+                        content=apply_system_prompt_template(
+                            "update_character_state", tmp
+                        )
+                    )
+                ]
+
+            elif target == "summarize_recent_chapters":
+                tmp = {
+                    "combined_text": combined_text,
+                    "novel_number": current_chapter_id,
+                    "chapter_title": chapter_info.get("chapter_title", "未命名"),
+                    "chapter_role": chapter_info.get("chapter_role", "常规章节"),
+                    "chapter_purpose": chapter_info.get("chapter_purpose", "内容推进"),
+                    "suspense_level": chapter_info.get("suspense_level", "中等"),
+                    "foreshadowing": chapter_info.get("foreshadowing", "无"),
+                    "plot_twist_level": chapter_info.get("plot_twist_level", "★☆☆☆☆"),
+                    "chapter_summary": chapter_info.get("chapter_summary", ""),
+                    "next_chapter_number": current_chapter_id + 1,
+                    "next_chapter_title": next_chapter_info.get(
+                        "chapter_title", "（未命名）"
+                    ),
+                    "next_chapter_role": next_chapter_info.get(
+                        "chapter_role", "过渡章节"
+                    ),
+                    "next_chapter_purpose": next_chapter_info.get(
+                        "chapter_purpose", "承上启下"
+                    ),
+                    "next_chapter_summary": next_chapter_info.get(
+                        "chapter_summary", "衔接过渡内容"
+                    ),
+                    "next_chapter_suspense_level": next_chapter_info.get(
+                        "suspense_level", "中等"
+                    ),
+                    "next_chapter_foreshadowing": next_chapter_info.get(
+                        "foreshadowing", "无特殊伏笔"
+                    ),
+                    "next_chapter_plot_twist_level": next_chapter_info.get(
+                        "plot_twist_level", "★☆☆☆☆"
+                    ),
+                }
+                return [
+                    HumanMessage(
+                        content=apply_system_prompt_template(
+                            "summarize_recent_chapters", tmp
+                        )
+                    )
+                ]
+
+            elif target == "create_character_state":
+                tmp = {
+                    "novel_architecture": _novel_architecture,
+                }
+                return [
+                    HumanMessage(
+                        content=apply_system_prompt_template(
+                            "create_character_state", tmp
+                        )
+                    )
+                ]
+
+            elif target == "first_chapter_draft":
+                chapter_title = chapter_info["chapter_title"]
+                chapter_role = chapter_info["chapter_role"]
+                chapter_purpose = chapter_info["chapter_purpose"]
+                suspense_level = chapter_info["suspense_level"]
+                foreshadowing = chapter_info["foreshadowing"]
+                plot_twist_level = chapter_info["plot_twist_level"]
+                chapter_summary = chapter_info["chapter_summary"]
+
+                tmp = {
+                    "novel_number": current_chapter_id,
+                    "word_number": _word_number,
+                    "chapter_title": chapter_title,
+                    "chapter_role": chapter_role,
+                    "chapter_purpose": chapter_purpose,
+                    "suspense_level": suspense_level,
+                    "foreshadowing": foreshadowing,
+                    "plot_twist_level": plot_twist_level,
+                    "chapter_summary": chapter_summary,
+                    "characters_involved": characters_involved,
+                    "key_items": key_items,
+                    "scene_location": scene_location,
+                    "time_constraint": time_constraint,
+                    "user_guidance": _user_guidance,
+                    "novel_architecture": _novel_architecture,
+                    "character_state": new_character_state,
+                }
+
+                return [
+                    HumanMessage(
+                        content=apply_system_prompt_template("first_chapter_draft", tmp)
+                    )
+                ]
+
+            elif target == "next_chapter_draft":
+                chapter_title = chapter_info["chapter_title"]
+                chapter_role = chapter_info["chapter_role"]
+                chapter_purpose = chapter_info["chapter_purpose"]
+                suspense_level = chapter_info["suspense_level"]
+                foreshadowing = chapter_info["foreshadowing"]
+                plot_twist_level = chapter_info["plot_twist_level"]
+                chapter_summary = chapter_info["chapter_summary"]
+
+                next_chapter_title = next_chapter_info.get(
+                    "chapter_title", "（未命名）"
+                )
+                next_chapter_role = next_chapter_info.get("chapter_role", "过渡章节")
+                next_chapter_purpose = next_chapter_info.get(
+                    "chapter_purpose", "承上启下"
+                )
+                next_suspense_level = next_chapter_info.get("suspense_level", "中等")
+                next_foreshadowing = next_chapter_info.get(
+                    "foreshadowing", "无特殊伏笔"
+                )
+                next_plot_twist_level = next_chapter_info.get(
+                    "plot_twist_level", "★☆☆☆☆"
+                )
+                next_chapter_summary = next_chapter_info.get(
+                    "chapter_summary", "衔接过渡内容"
+                )
+
+                # (TODO：未来加入知识库，对章节进行筛选)
+                filtered_context = ""
+
+                tmp = {
+                    "global_summary": new_global_summary,
+                    "character_state": new_character_state,
+                    "short_summary": summarize_recent_chapters,
+                    "previous_chapter_excerpt": combined_text,
+                    "novel_number": current_chapter_id,
+                    "chapter_title": chapter_title,
+                    "chapter_role": chapter_role,
+                    "chapter_purpose": chapter_purpose,
+                    "suspense_level": suspense_level,
+                    "foreshadowing": foreshadowing,
+                    "plot_twist_level": plot_twist_level,
+                    "chapter_summary": chapter_summary,
+                    "next_chapter_number": current_chapter_id + 1,
+                    "next_chapter_title": next_chapter_title,
+                    "next_chapter_role": next_chapter_role,
+                    "next_chapter_purpose": next_chapter_purpose,
+                    "next_chapter_suspense_level": next_suspense_level,
+                    "next_chapter_foreshadowing": next_foreshadowing,
+                    "next_chapter_plot_twist_level": next_plot_twist_level,
+                    "next_chapter_summary": next_chapter_summary,
+                    "filtered_context": filtered_context,
+                    "word_number": _word_number,
+                    "characters_involved": characters_involved,
+                    "key_items": key_items,
+                    "scene_location": scene_location,
+                    "time_constraint": time_constraint,
+                    "user_guidance": _user_guidance,
+                }
+
+                return [
+                    HumanMessage(
+                        content=apply_system_prompt_template("next_chapter_draft", tmp)
+                    )
+                ]
+
+            else:
+                return [HumanMessage(content="")]
+
+        # LLM
+        def _get_llm():
+            return get_llm_by_type(_model_name)
+
+        # 确定当前属于第几章
+        dir_path = Path(f"{_work_dir}")
+        file_count = sum(1 for item in dir_path.iterdir() if item.is_dir())
+        _current_chapter_id = file_count + 1
+        os.makedirs(f"{_work_dir}/chapter_{_current_chapter_id}", exist_ok=True)
+
+        # 获取历史信息
+        _previous_chapter_text = ""
+        _previous_global_summary = ""
+        _previous_character_state = ""
+
+        _new_global_summary = ""
+        _new_character_state = ""
+        _summarize_recent_chapters = ""
+
+        if os.path.exists(f"{_work_dir}/chapter_{_current_chapter_id - 1}"):
+            if os.path.exists(
+                f"{_work_dir}/chapter_{_current_chapter_id - 1}/第{_current_chapter_id - 1}章.md"
+            ):
+                _previous_chapter_text = await read_file_tool.arun(
+                    {
+                        "file_path": f"{_work_dir}/chapter_{_current_chapter_id - 1}/第{_current_chapter_id - 1}章.md"
+                    }
+                )
+            if os.path.exists(
+                f"{_work_dir}/chapter_{_current_chapter_id - 1}/global_summary.md"
+            ):
+                _previous_global_summary = await read_file_tool.arun(
+                    {
+                        "file_path": f"{_work_dir}/chapter_{_current_chapter_id - 1}/global_summary.md"
+                    }
+                )
+
+            if os.path.exists(
+                f"{_work_dir}/chapter_{_current_chapter_id - 1}/character_state.md"
+            ):
+                _previous_character_state = await read_file_tool.arun(
+                    {
+                        "file_path": f"{_work_dir}/chapter_{_current_chapter_id - 1}/character_state.md"
+                    }
+                )
+
+        # 获取章节概要信息
+        _chapter_info = get_chapter_info_from_blueprint(
+            _novel_chapter_blueprint, _current_chapter_id
         )
-        return Command(
-            goto="__end__",
-            update={
-                "err_message": f"trace_id={_trace_id} | node=summarize_architecture | error={e}"
-            },
+        # 获取下一章节概要信息
+        _next_chapter_info = get_chapter_info_from_blueprint(
+            _novel_chapter_blueprint, _current_chapter_id + 1
         )
+        # 获取前文内容和摘要
+        _recent_texts = get_last_n_chapters_text(_work_dir, _current_chapter_id, n=3)
+        _combined_text = "\n".join(_recent_texts).strip()
+        max_combined_length = 4000
+        if len(_combined_text) > max_combined_length:
+            _combined_text = _combined_text[-max_combined_length:]
+
+        if _previous_chapter_text:
+            _new_global_summary = await _get_llm().ainvoke(
+                _assemble_prompt(
+                    target="global_summary",
+                    current_chapter_id=_current_chapter_id,
+                    previous_chapter_text=_previous_chapter_text,
+                    previous_global_summary=_previous_global_summary,
+                )
+            )
+            _new_global_summary = _new_global_summary.content
+            logger.info(
+                set_color(
+                    f"trace_id={_trace_id} | node=chapter_draft | message={_new_global_summary}",
+                    "pink",
+                )
+            )
+            await write_file_tool.arun(
+                {
+                    "file_path": f"{_work_dir}/chapter_{_current_chapter_id}/global_summary.md",
+                    "text": _new_global_summary,
+                }
+            )
+
+        if _current_chapter_id == 1:
+            _new_character_state = await _get_llm().ainvoke(
+                _assemble_prompt("create_character_state")
+            )
+            _new_character_state = _new_character_state.content
+            logger.info(
+                set_color(
+                    f"trace_id={_trace_id} | node=chapter_draft | message={_new_character_state}",
+                    "pink",
+                )
+            )
+            await write_file_tool.arun(
+                {
+                    "file_path": f"{_work_dir}/chapter_{_current_chapter_id}/character_state.md",
+                    "text": _new_character_state,
+                }
+            )
+        else:
+            if _previous_chapter_text and _previous_character_state:
+                _new_character_state = await _get_llm().ainvoke(
+                    _assemble_prompt(
+                        target="update_character_state",
+                        current_chapter_id=_current_chapter_id,
+                        previous_chapter_text=_previous_chapter_text,
+                        previous_character_state=_previous_character_state,
+                    )
+                )
+                _new_character_state = _new_character_state.content
+                logger.info(
+                    set_color(
+                        f"trace_id={_trace_id} | node=chapter_draft | message={_new_character_state}",
+                        "pink",
+                    )
+                )
+                await write_file_tool.arun(
+                    {
+                        "file_path": f"{_work_dir}/chapter_{_current_chapter_id}/character_state.md",
+                        "text": _new_character_state,
+                    }
+                )
+
+        if _combined_text:
+            _summarize_recent_chapters = await _get_llm().ainvoke(
+                _assemble_prompt(
+                    target="summarize_recent_chapters",
+                    current_chapter_id=_current_chapter_id,
+                    combined_text=_combined_text,
+                    chapter_info=_chapter_info,
+                    next_chapter_info=_next_chapter_info,
+                )
+            )
+            _summarize_recent_chapters = _summarize_recent_chapters.content
+            logger.info(
+                set_color(
+                    f"trace_id={_trace_id} | node=chapter_draft | message={_summarize_recent_chapters}",
+                    "pink",
+                )
+            )
+            await write_file_tool.arun(
+                {
+                    "file_path": f"{_work_dir}/chapter_{_current_chapter_id}/summarize_recent_chapters.md",
+                    "text": _summarize_recent_chapters,
+                }
+            )
+
+        if not _new_character_state:
+            err_message = f"trace_id={_trace_id} | node=chapter_draft | error=new_character_state: is None"
+            logger.error(set_color(err_message, "red"))
+            return {"code": 1, "err_message": err_message}
+
+        if _current_chapter_id == 1:
+            response = await _get_llm().ainvoke(
+                _assemble_prompt(
+                    target="first_chapter_draft",
+                    current_chapter_id=_current_chapter_id,
+                    chapter_info=_chapter_info,
+                )
+            )
+        else:
+            response = await _get_llm().ainvoke(
+                _assemble_prompt(
+                    target="next_chapter_draft",
+                    chapter_info=_chapter_info,
+                    next_chapter_info=_next_chapter_info,
+                    new_global_summary=str(_new_global_summary),
+                    new_character_state=str(_new_character_state),
+                    summarize_recent_chapters=str(_summarize_recent_chapters),
+                )
+            )
+
+        await write_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/chapter_{_current_chapter_id}/第{_current_chapter_id}章.md",
+                "text": f"## 第{_current_chapter_id}章 {_chapter_info['chapter_title']}\n\n{response.content}",
+            }
+        )
+
+        return {"code": 0, "err_message": "ok"}
+
+    except Exception as e:
+        err_message = f"trace_id={_trace_id} | node=chapter_draft | error={e}"
+        logger.error(set_color(err_message, "red"))
+        return {"code": 1, "err_message": err_message}
 
 
 # 抽取设定 subgraph
@@ -662,3 +1173,10 @@ _summarize_architecture = StateGraph(State, context_schema=Context)
 _summarize_architecture.add_node("summarize_architecture", summarize_architecture)
 _summarize_architecture.add_edge(START, "summarize_architecture")
 summarize_architecture_agent = _summarize_architecture.compile()
+
+
+# 详细章节 subgraph
+_chapter_draft = StateGraph(State, context_schema=Context)
+_chapter_draft.add_node("chapter_draft", chapter_draft)
+_chapter_draft.add_edge(START, "chapter_draft")
+chapter_draft_agent = _chapter_draft.compile()

@@ -2,7 +2,9 @@
 # @Time   : 2025/09/24 10:24
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
+import json
 import logging
+import os
 from dataclasses import dataclass
 from typing import Any, Optional
 
@@ -10,6 +12,7 @@ import reflex as rx
 
 from app.api.agent_api import (
     AGENT_AINOVEL_CHAPTER_BLUEPRINT_BACKEND_URL,
+    AGENT_AINOVEL_CHAPTER_DRAFT_BACKEND_URL,
     AGENT_AINOVEL_CHARATER_DYNAMICS_BACKEND_URL,
     AGENT_AINOVEL_CORE_SEED_BACKEND_URL,
     AGENT_AINOVEL_EXTRACT_SETTING_BACKEND_URL,
@@ -75,9 +78,15 @@ class InteractAiNovelState(State):
             content="editor",  # 聊天组件（需实现）
         ),
         NovelStepMenu(
-            value="chapter_blueprint",
+            value="blueprint",
             label="章节目录",
             icon="list-tree",  # 图标（Reflex内置图标名）
+            content="editor",  # 聊天组件（需实现）
+        ),
+        NovelStepMenu(
+            value="architecture",
+            label="汇总骨架",
+            icon="calendar-plus",  # 图标（Reflex内置图标名）
             content="editor",  # 聊天组件（需实现）
         ),
         NovelStepMenu(
@@ -90,7 +99,7 @@ class InteractAiNovelState(State):
 
     params_fields: list[Parameters] = [
         Parameters(
-            mkey="architecture_model",
+            mkey="novel_model",
             mtype="select",
             mvalue="basic_no_thinking",
             mvaluetype="str",
@@ -210,10 +219,12 @@ class InteractAiNovelState(State):
             _event_name = "novel_world_building"
         elif self.current_tab == "plot_arch":
             _event_name = "novel_plot_arch"
-        elif self.current_tab == "chapter_blueprint":
-            _event_name = "novel_chapter_blueprint"
-        elif self.current_tab == "summarize_architecture":
-            _event_name = "novel_summarize_architecture"
+        elif self.current_tab == "blueprint":
+            _event_name = "novel_blueprint"
+        elif self.current_tab == "architecture":
+            _event_name = "novel_architecture"
+        elif self.current_tab == "architecture":
+            _event_name = "novel_chapter_draft"
 
         if answer:
             # 这里可以替换为实际保存逻辑（如API调用、数据库存储等）
@@ -225,6 +236,54 @@ class InteractAiNovelState(State):
         else:
             yield rx.toast("没有可保存的内容", status="warning")
         self.saving = False
+
+    @rx.event
+    def final_show(self):
+        if self.current_tab == "extract_setting":
+            _event_name = "novel_extract_setting"
+        elif self.current_tab == "core_seed":
+            _event_name = "novel_core_seed"
+        elif self.current_tab == "character_dynamics":
+            _event_name = "novel_character_dynamics"
+        elif self.current_tab == "world_building":
+            _event_name = "novel_world_building"
+        elif self.current_tab == "plot_arch":
+            _event_name = "novel_plot_arch"
+        elif self.current_tab == "blueprint":
+            _event_name = "novel_blueprint"
+        elif self.current_tab == "architecture":
+            _event_name = "novel_architecture"
+        elif self.current_tab == "architecture":
+            _event_name = "novel_chapter_draft"
+
+        if self.current_tab == "chapter_draft":
+            # 获取输出内容
+            with open(
+                f"{_TASK_DIR}/{self.current_chat}/novel_extract_setting.md", "r"
+            ) as f:
+                _extract_setting = f.read()
+                number_of_chapters = json.loads(_extract_setting)["number_of_chapters"]
+
+            self._workspace[self.current_chat][self.current_tab]["final_content"] = ""
+
+            for i in range(1, number_of_chapters + 1):
+                if os.path.exists(
+                    f"{_TASK_DIR}/{self.current_chat}/chapter_{i}/第{i}章.md"
+                ):
+                    with open(
+                        f"{_TASK_DIR}/{self.current_chat}/chapter_{i}/第{i}章.md",
+                        "r",
+                    ) as f:
+                        self._workspace[self.current_chat][self.current_tab][
+                            "final_content"
+                        ] += f.read() + "\n\n"
+
+        else:
+            # 获取输出内容
+            with open(f"{_TASK_DIR}/{self.current_chat}/{_event_name}.md", "r") as f:
+                self._workspace[self.current_chat][self.current_tab][
+                    "final_content"
+                ] = f.read()
 
     @rx.event
     async def process_question(self, form_data: dict[str, Any]):
@@ -244,25 +303,20 @@ class InteractAiNovelState(State):
             _content_len = 0
             if self.current_tab == "extract_setting":
                 _url = AGENT_AINOVEL_EXTRACT_SETTING_BACKEND_URL
-                _event_name = "novel_extract_setting"
             elif self.current_tab == "core_seed":
                 _url = AGENT_AINOVEL_CORE_SEED_BACKEND_URL
-                _event_name = "novel_core_seed"
             elif self.current_tab == "character_dynamics":
                 _url = AGENT_AINOVEL_CHARATER_DYNAMICS_BACKEND_URL
-                _event_name = "novel_character_dynamics"
             elif self.current_tab == "world_building":
                 _url = AGENT_AINOVEL_WORLD_BUILDING_BACKEND_URL
-                _event_name = "novel_world_building"
             elif self.current_tab == "plot_arch":
                 _url = AGENT_AINOVEL_PLOT_ARCH_BACKEND_URL
-                _event_name = "novel_plot_arch"
-            elif self.current_tab == "chapter_blueprint":
+            elif self.current_tab == "blueprint":
                 _url = AGENT_AINOVEL_CHAPTER_BLUEPRINT_BACKEND_URL
-                _event_name = "novel_chapter_blueprint"
-            elif self.current_tab == "summarize_architecture":
+            elif self.current_tab == "architecture":
                 _url = AGENT_AINOVEL_SUMMARIZE_ACRHITECTURE_BACKEND_URL
-                _event_name = "novel_summarize_architecture"
+            elif self.current_tab == "chapter_draft":
+                _url = AGENT_AINOVEL_CHAPTER_DRAFT_BACKEND_URL
 
             async for item in get_agent_api(
                 _url,
@@ -333,11 +387,7 @@ class InteractAiNovelState(State):
 
                 yield
 
-            # 获取输出内容
-            with open(f"{_TASK_DIR}/{self.current_chat}/{_event_name}.md", "r") as f:
-                self._workspace[self.current_chat][self.current_tab][
-                    "final_content"
-                ] = f.read()
+            self.final_show()
 
             # Toggle the processing flag.
             self.processing = False

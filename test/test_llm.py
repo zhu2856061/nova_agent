@@ -46,7 +46,7 @@ class ClarifyWithUser(BaseModel):
 
 
 llm_instance = get_llm_by_type(
-    "gemini"
+    "basic_no_thinking"
 )  # .with_structured_output(AnswerWithJustification)
 # llm_instance = get_llm_by_type("reasoning")
 
