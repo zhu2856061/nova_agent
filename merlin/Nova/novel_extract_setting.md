@@ -1,0 +1,1 @@
+{"topic": "民国时代上海学生运动与日寇间谍斗争", "genre": "悬疑/本格探案", "number_of_chapters": 100, "word_number": 3300}

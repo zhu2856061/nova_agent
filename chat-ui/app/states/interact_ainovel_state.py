@@ -111,6 +111,7 @@ class InteractAiNovelState(State):
     current_chat = _default_name
     current_tab = "extract_setting"
     saving: bool = False
+    is_prompt_settings_modal_open: bool = False
 
     _workspace = {current_chat: {}}  # 存储每个工作区的内容
     for item in novel_tabs:
@@ -119,6 +120,10 @@ class InteractAiNovelState(State):
             "output_content": "",
             "final_content": "",
         }
+
+    @rx.event
+    def set_is_prompt_settings_modal_open(self, is_open: bool):
+        self.is_prompt_settings_modal_open = is_open
 
     @rx.event
     def change_tab_value(self, val):

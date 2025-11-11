@@ -15,7 +15,7 @@ from langgraph.runtime import Runtime
 from pydantic import BaseModel, Field
 
 from nova.llms import get_llm_by_type
-from nova.prompts.ainovel import apply_system_prompt_template
+from nova.prompts.ainovel import PROMPT_TEMPLATE, apply_system_prompt_template
 from nova.tools import read_file_tool, write_file_tool
 from nova.utils import (
     set_color,

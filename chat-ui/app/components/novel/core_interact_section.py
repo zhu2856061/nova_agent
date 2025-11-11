@@ -32,11 +32,74 @@ class NovelWorkspaceStyle:
     TRANSITION_DURATION = "0.2s"  # 过渡动画时长
 
 
+def prompt_settings_modal(State, trigger) -> rx.Component:
+    """用于创建新聊天的模态框组件"""
+    return rx.dialog.root(  # 对话框根组件
+        rx.dialog.trigger(trigger),  # 对话框触发器，传入的参数作为触发元素
+        rx.dialog.content(  # 对话框内容区域
+            rx.dialog.title(
+                rx.hstack(
+                    rx.text(
+                        "Prompt Settings",
+                        size="4",
+                        weight="bold",
+                    ),
+                    margin_bottom="1em",
+                    gap="0.5em",
+                ),
+            ),
+            rx.text_area(
+                placeholder="在这里输入你的提示词...",
+                value=State.get_input_content,
+                on_change=State.set_input_content,
+                width="100%",
+                height="100%",
+                border_radius="5px",
+                border=f"1px solid {NovelWorkspaceStyle.BORDER_COLOR}",
+                # padding="0.2em",
+                font_size="1em",
+                resize="vertical",
+                id="question",
+                style={
+                    "overflow-y": "auto",  # 垂直溢出时显示滚动条
+                    "overflow-x": "hidden",  # 禁止水平滚动（避免文本过长导致横向滚动）
+                },
+            ),
+            background_color=rx.color("mauve", 1),  # 使用mauve色系的第1种颜色作为背景
+            border_radius="0.5em",  # 圆角边框
+            box_shadow="lg",  # 增加阴影提升层次感
+            max_width="500px",  # 限制最大宽度，提升可读性
+            height="500px",
+            padding="1.5em",  # 适当增加内边距
+            transition="all 0.2s ease-in-out",
+        ),
+        open=State.is_prompt_settings_modal_open,  # 控制模态框是否打开的状态
+        on_open_change=State.set_is_prompt_settings_modal_open,  # 模态框打开状态变化时调用的方法
+    )
+
+
 # 5. 示例：标签内容组件（需根据实际业务实现）--------------------------
 def editor_component_form(tab: NovelStepMenu, State) -> rx.Component:
+    # 滚动到底部的逻辑
+
     """小说编辑标签内容（示例实现）"""
     return rx.vstack(
-        rx.text(tab.label, font_size="0.8em", weight="bold", margin_bottom="1em"),
+        rx.hstack(
+            prompt_settings_modal(
+                State,
+                rx.icon_button("file-pen-line"),
+            ),
+            rx.text(
+                tab.label,
+                font_size="1.0em",
+                weight="bold",
+                justify_content="right",
+                font_style="italic",
+                color_scheme="pink",
+            ),
+            margin_bottom="1em",
+            align_items="center",
+        ),
         # 创建新聊天的模态框，使用消息加号图标作为触发器
         rx.vstack(
             rx.text_area(
@@ -106,20 +169,37 @@ def editor_component_form(tab: NovelStepMenu, State) -> rx.Component:
             width="100%",
         ),
         rx.hstack(
-            rx.text_area(
-                placeholder="生成过程展示...",
-                value=State.get_output_content,
+            rx.auto_scroll(
+                rx.text_area(
+                    placeholder="生成过程展示...",
+                    value=State.get_output_content,
+                    read_only=True,
+                    width="100%",
+                    height="100%",
+                    border_radius="5px",
+                    border=f"1px solid {NovelWorkspaceStyle.BORDER_COLOR}",
+                    padding="1em",
+                    font_size="1.05em",
+                    resize="vertical",
+                ),
+                threshold=80,  # 如果用户在 100px 内底部，自动滚动
+                padding="0",  # 避免额外内边距
                 width="100%",
                 height="100%",
-                border_radius="5px",
-                border=f"1px solid {NovelWorkspaceStyle.BORDER_COLOR}",
-                padding="1em",
-                font_size="1.05em",
-                resize="vertical",
-                id="process_answer",
+                # 优化滚动条样式（可选，提升桌面端体验）
                 style={
-                    "overflow-y": "auto",  # 垂直溢出时显示滚动条
-                    "overflow-x": "hidden",  # 禁止水平滚动（避免文本过长导致横向滚动）
+                    "::-webkit-scrollbar": {
+                        "width": "6px",
+                        "height": "6px",
+                    },
+                    "::-webkit-scrollbar-thumb": {
+                        "background-color": rx.color("gray", 3),
+                        "border-radius": "3px",
+                    },
+                    "::-webkit-scrollbar-track": {
+                        "background-color": rx.color("gray", 1),
+                    },
+                    "min_height": "300px",
                 },
             ),
             rx.vstack(
