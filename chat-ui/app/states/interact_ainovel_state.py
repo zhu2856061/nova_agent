@@ -119,6 +119,7 @@ class InteractAiNovelState(State):
             "input_content": "",
             "output_content": "",
             "final_content": "",
+            "prompt_content": "",
         }
 
     @rx.event
@@ -156,6 +157,7 @@ class InteractAiNovelState(State):
                 "input_content": "",
                 "output_content": "",
                 "final_content": "",
+                "prompt_content": "",
             }
 
         self.is_new_chat_modal_open = False
@@ -174,6 +176,7 @@ class InteractAiNovelState(State):
                     "input_content": "",
                     "output_content": "",
                     "final_content": "",
+                    "prompt_content": "",
                 }
 
         if self.current_chat not in self._workspace:
@@ -194,6 +197,54 @@ class InteractAiNovelState(State):
     @rx.var
     def get_input_content(self) -> str:
         return self._workspace[self.current_chat][self.current_tab]["input_content"]
+
+    @rx.event
+    def set_prompt_content(self, value: str):
+        self._workspace[self.current_chat][self.current_tab]["prompt_content"] = value
+
+    @rx.var
+    def get_prompt_content(self) -> str:
+        return self._workspace[self.current_chat][self.current_tab]["prompt_content"]
+
+    # 保存输出内容
+    @rx.event
+    def final_prompt_save(self):
+        try:
+            """保存输出内容的逻辑"""
+            self.saving = True
+            # 示例：保存到本地存储（或提交到后端）
+            if self.current_tab == "extract_setting":
+                _event_name = "novel_extract_setting"
+            elif self.current_tab == "core_seed":
+                _event_name = "novel_core_seed"
+            elif self.current_tab == "character_dynamics":
+                _event_name = "novel_character_dynamics"
+            elif self.current_tab == "world_building":
+                _event_name = "novel_world_building"
+            elif self.current_tab == "plot_arch":
+                _event_name = "novel_plot_arch"
+            elif self.current_tab == "blueprint":
+                _event_name = "novel_blueprint"
+            elif self.current_tab == "architecture":
+                _event_name = "novel_architecture"
+            elif self.current_tab == "chapter_draft":
+                _event_name = "novel_chapter_draft"
+            os.makedirs(f"{_TASK_DIR}/{self.current_chat}/prompt", exist_ok=True)
+            with open(
+                f"{_TASK_DIR}/{self.current_chat}/prompt/{_event_name}.md", "w"
+            ) as f:
+                json.dump(
+                    self._workspace[self.current_chat][self.current_tab],
+                    f,
+                    ensure_ascii=False,
+                )
+            yield rx.toast("内容已成功保存")
+
+            self.saving = False
+        except Exception as e:
+            self.saving = False
+            yield rx.toast("保存失败")
+            logger.error(e)
 
     @rx.var
     def get_output_content(self) -> str:

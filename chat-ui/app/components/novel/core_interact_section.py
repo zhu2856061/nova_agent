@@ -48,22 +48,33 @@ def prompt_settings_modal(State, trigger) -> rx.Component:
                     gap="0.5em",
                 ),
             ),
-            rx.text_area(
-                placeholder="在这里输入你的提示词...",
-                value=State.get_input_content,
-                on_change=State.set_input_content,
+            rx.vstack(
+                rx.text_area(
+                    placeholder="在这里输入你的提示词...",
+                    value=State.get_prompt_content,
+                    on_change=State.set_input_content,
+                    width="100%",
+                    height="100%",
+                    border_radius="5px",
+                    border=f"1px solid {NovelWorkspaceStyle.BORDER_COLOR}",
+                    # padding="0.2em",
+                    font_size="1em",
+                    resize="vertical",
+                    id="question",
+                    style={
+                        "overflow-y": "auto",  # 垂直溢出时显示滚动条
+                        "overflow-x": "hidden",  # 禁止水平滚动（避免文本过长导致横向滚动）
+                    },
+                ),
+                rx.button(
+                    "保存",
+                    loading=State.processing,
+                    disabled=State.processing,
+                    on_click=State.final_prompt_save,  # 一键式逻辑
+                    type="button",  # 显式设置为普通按钮
+                ),
                 width="100%",
                 height="100%",
-                border_radius="5px",
-                border=f"1px solid {NovelWorkspaceStyle.BORDER_COLOR}",
-                # padding="0.2em",
-                font_size="1em",
-                resize="vertical",
-                id="question",
-                style={
-                    "overflow-y": "auto",  # 垂直溢出时显示滚动条
-                    "overflow-x": "hidden",  # 禁止水平滚动（避免文本过长导致横向滚动）
-                },
             ),
             background_color=rx.color("mauve", 1),  # 使用mauve色系的第1种颜色作为背景
             border_radius="0.5em",  # 圆角边框
