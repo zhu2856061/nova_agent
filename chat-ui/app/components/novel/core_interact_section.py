@@ -38,75 +38,72 @@ def editor_component_form(tab: NovelStepMenu, State) -> rx.Component:
     return rx.vstack(
         rx.text(tab.label, font_size="0.8em", weight="bold", margin_bottom="1em"),
         # 创建新聊天的模态框，使用消息加号图标作为触发器
-        rx.form(
-            rx.vstack(
-                rx.text_area(
-                    placeholder="(可选项)在这里输入你的要求...",
-                    value=State.get_input_content,
-                    on_change=State.set_input_content,
-                    width="100%",
-                    height="5em",
-                    border_radius="5px",
-                    border=f"1px solid {NovelWorkspaceStyle.BORDER_COLOR}",
-                    padding="1em",
-                    font_size="1.05em",
-                    resize="vertical",
-                    id="question",
-                    style={
-                        "overflow-y": "auto",  # 垂直溢出时显示滚动条
-                        "overflow-x": "hidden",  # 禁止水平滚动（避免文本过长导致横向滚动）
-                    },
-                ),
+        rx.vstack(
+            rx.text_area(
+                placeholder="(可选项)在这里输入你的要求...",
+                value=State.get_input_content,
+                on_change=State.set_input_content,
+                width="100%",
+                height="4em",
+                border_radius="5px",
+                border=f"1px solid {NovelWorkspaceStyle.BORDER_COLOR}",
+                # padding="0.2em",
+                font_size="1em",
+                resize="vertical",
+                id="question",
+                style={
+                    "overflow-y": "auto",  # 垂直溢出时显示滚动条
+                    "overflow-x": "hidden",  # 禁止水平滚动（避免文本过长导致横向滚动）
+                },
+            ),
+            rx.hstack(
+                # 左侧按钮组（靠左）
                 rx.hstack(
-                    # 左侧按钮组（靠左）
-                    rx.hstack(
-                        settings_modal(
-                            State,
-                            rx.icon_button("settings"),
-                        ),
-                        rx.button(
-                            "生成",
-                            loading=State.processing,
-                            disabled=State.processing,
-                            type="submit",
-                        ),
-                        rx.button(
-                            "诊断",
-                            loading=State.processing,
-                            disabled=State.processing,
-                            on_click=State.process_diagnose,  # 诊断逻辑
-                            type="button",  # 显式设置为普通按钮
-                        ),
-                        rx.button(
-                            "反馈",
-                            loading=State.processing,
-                            disabled=State.processing,
-                            on_click=State.process_feedback,  # 反馈逻辑
-                            type="button",  # 显式设置为普通按钮
-                        ),
-                        # 让左侧按钮组紧凑排列
-                        spacing="1",
+                    settings_modal(
+                        State,
+                        rx.icon_button("settings"),
                     ),
-                    # 分隔符：自动占据剩余空间，将两侧按钮推开
-                    rx.spacer(),
-                    # 右侧按钮（靠右）
                     rx.button(
-                        "一键式",
+                        "生成",
                         loading=State.processing,
                         disabled=State.processing,
-                        on_click=State.process_one_click,  # 一键式逻辑
+                        on_click=State.process_question,
+                    ),
+                    rx.button(
+                        "诊断",
+                        loading=State.processing,
+                        disabled=State.processing,
+                        on_click=State.process_diagnose,  # 诊断逻辑
                         type="button",  # 显式设置为普通按钮
                     ),
-                    # 确保hstack占满宽度，否则靠右效果不明显
-                    width="100%",
-                    # 整体垂直居中对齐
-                    align_items="center",
-                    # 可选：调整整体间距
+                    rx.button(
+                        "反馈",
+                        loading=State.processing,
+                        disabled=State.processing,
+                        on_click=State.process_feedback,  # 反馈逻辑
+                        type="button",  # 显式设置为普通按钮
+                    ),
+                    # 让左侧按钮组紧凑排列
                     spacing="1",
                 ),
+                # 分隔符：自动占据剩余空间，将两侧按钮推开
+                rx.spacer(),
+                # 右侧按钮（靠右）
+                rx.button(
+                    "一键式",
+                    loading=State.processing,
+                    disabled=State.processing,
+                    on_click=State.process_one_click,  # 一键式逻辑
+                    type="button",  # 显式设置为普通按钮
+                ),
+                # 确保hstack占满宽度，否则靠右效果不明显
+                width="100%",
+                # 整体垂直居中对齐
+                align_items="center",
+                # 可选：调整整体间距
+                spacing="1",
             ),
-            reset_on_submit=True,
-            on_submit=State.process_question,
+            width="100%",
         ),
         rx.hstack(
             rx.text_area(
@@ -125,54 +122,46 @@ def editor_component_form(tab: NovelStepMenu, State) -> rx.Component:
                     "overflow-x": "hidden",  # 禁止水平滚动（避免文本过长导致横向滚动）
                 },
             ),
-            rx.form(
-                rx.vstack(
-                    rx.text_area(
-                        placeholder="生成最终结果展示...",
-                        value=State.get_final_content,
-                        on_change=State.set_final_content,  # 保存最终结果逻辑
-                        width="100%",
-                        height="100%",
-                        border_radius="5px",
-                        border=f"1px solid {NovelWorkspaceStyle.BORDER_COLOR}",
-                        padding="1em",
-                        font_size="1.05em",
-                        resize="vertical",
-                        id="answer",
-                        style={
-                            "overflow-y": "auto",  # 垂直溢出时显示滚动条
-                            "overflow-x": "hidden",  # 禁止水平滚动（避免文本过长导致横向滚动）
-                        },
-                    ),
-                    rx.hstack(
-                        rx.button(
-                            "展示",
-                            # width="100%",  # 按钮占满宽度，与文本框对齐
-                            on_click=State.final_show,  # 展示逻辑
-                            bg=rx.color("blue", 4),
-                            color="white",
-                            _hover={"bg": rx.color("blue", 7)},
-                            type="button",  # 显式设置为普通按钮
-                        ),
-                        rx.spacer(),
-                        rx.button(
-                            "保存",
-                            loading=State.saving,  # 建议单独设置保存状态变量，避免与processing冲突
-                            disabled=State.saving
-                            | ~State.get_final_content,  # 内容为空时禁用
-                            type="submit",
-                            # width="100%",  # 按钮占满宽度，与文本框对齐
-                            bg=rx.color("blue", 4),
-                            color="white",
-                            _hover={"bg": rx.color("blue", 7)},
-                        ),
-                        width="100%",
-                    ),
+            rx.vstack(
+                rx.text_area(
+                    placeholder="生成最终结果展示...",
+                    value=State.get_final_content,
+                    on_change=State.set_final_content,  # 保存最终结果逻辑
                     width="100%",
                     height="100%",
+                    border_radius="5px",
+                    border=f"1px solid {NovelWorkspaceStyle.BORDER_COLOR}",
+                    padding="1em",
+                    font_size="1.05em",
+                    resize="vertical",
+                    id="answer",
+                    style={
+                        "overflow-y": "auto",  # 垂直溢出时显示滚动条
+                        "overflow-x": "hidden",  # 禁止水平滚动（避免文本过长导致横向滚动）
+                    },
                 ),
-                reset_on_submit=True,
-                on_submit=State.save_final_content,
+                rx.hstack(
+                    rx.button(
+                        "展示",
+                        loading=State.saving,
+                        disabled=State.saving,
+                        on_click=State.final_content_show,  # 展示逻辑
+                        bg=rx.color("blue", 4),
+                        color="white",
+                        _hover={"bg": rx.color("blue", 7)},
+                    ),
+                    rx.button(
+                        "保存",
+                        loading=State.saving,  # 建议单独设置保存状态变量，避免与processing冲突
+                        disabled=State.saving
+                        | ~State.get_final_content,  # 内容为空时禁用
+                        on_click=State.final_content_save,  # 展示逻辑,
+                        # width="100%",  # 按钮占满宽度，与文本框对齐
+                        bg=rx.color("blue", 4),
+                        color="white",
+                        _hover={"bg": rx.color("blue", 7)},
+                    ),
+                ),
                 width="100%",
                 height="100%",
             ),

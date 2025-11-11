@@ -120,20 +120,9 @@ class InteractAiNovelState(State):
             "final_content": "",
         }
 
-    @rx.var
-    def get_input_content(self) -> str:
-        return self._workspace[self.current_chat][self.current_tab]["input_content"]
-
-    @rx.var
-    def get_output_content(self) -> str:
-        return self._workspace[self.current_chat][self.current_tab]["output_content"]
-
-    @rx.var
-    def get_final_content(self) -> str:
-        return self._workspace[self.current_chat][self.current_tab]["final_content"]
-
     @rx.event
     def change_tab_value(self, val):
+        self.final_content_save()
         self.current_tab = val
 
     @rx.event
@@ -197,48 +186,99 @@ class InteractAiNovelState(State):
     def set_input_content(self, value: str):
         self._workspace[self.current_chat][self.current_tab]["input_content"] = value
 
+    @rx.var
+    def get_input_content(self) -> str:
+        return self._workspace[self.current_chat][self.current_tab]["input_content"]
+
+    @rx.var
+    def get_output_content(self) -> str:
+        return self._workspace[self.current_chat][self.current_tab]["output_content"]
+
     #
     @rx.event
     def set_final_content(self, value: str):
         self._workspace[self.current_chat][self.current_tab]["final_content"] = value
 
+    @rx.var
+    def get_final_content(self) -> str:
+        return self._workspace[self.current_chat][self.current_tab]["final_content"]
+
     # 保存输出内容
     @rx.event
-    def save_final_content(self, form_data: dict[str, Any]):
-        """保存输出内容的逻辑"""
-        self.saving = True
-        # 示例：保存到本地存储（或提交到后端）
-        answer = form_data["answer"]
-        if self.current_tab == "extract_setting":
-            _event_name = "novel_extract_setting"
-        elif self.current_tab == "core_seed":
-            _event_name = "novel_core_seed"
-        elif self.current_tab == "character_dynamics":
-            _event_name = "novel_character_dynamics"
-        elif self.current_tab == "world_building":
-            _event_name = "novel_world_building"
-        elif self.current_tab == "plot_arch":
-            _event_name = "novel_plot_arch"
-        elif self.current_tab == "blueprint":
-            _event_name = "novel_blueprint"
-        elif self.current_tab == "architecture":
-            _event_name = "novel_architecture"
-        elif self.current_tab == "architecture":
-            _event_name = "novel_chapter_draft"
-
-        if answer:
-            # 这里可以替换为实际保存逻辑（如API调用、数据库存储等）
-            #
-            # 获取输出内容
-            with open(f"{_TASK_DIR}/{self.current_chat}/{_event_name}.md", "w") as f:
-                f.write(answer)
+    def final_content_save(self):
+        try:
+            """保存输出内容的逻辑"""
+            self.saving = True
+            # 示例：保存到本地存储（或提交到后端）
+            if self.current_tab == "extract_setting":
+                _event_name = "novel_extract_setting"
+            elif self.current_tab == "core_seed":
+                _event_name = "novel_core_seed"
+            elif self.current_tab == "character_dynamics":
+                _event_name = "novel_character_dynamics"
+            elif self.current_tab == "world_building":
+                _event_name = "novel_world_building"
+            elif self.current_tab == "plot_arch":
+                _event_name = "novel_plot_arch"
+            elif self.current_tab == "blueprint":
+                _event_name = "novel_blueprint"
+            elif self.current_tab == "architecture":
+                _event_name = "novel_architecture"
+            elif self.current_tab == "chapter_draft":
+                _event_name = "novel_chapter_draft"
+            os.makedirs(f"{_TASK_DIR}/{self.current_chat}/middle", exist_ok=True)
+            with open(
+                f"{_TASK_DIR}/{self.current_chat}/middle/{_event_name}.md", "w"
+            ) as f:
+                json.dump(
+                    self._workspace[self.current_chat][self.current_tab],
+                    f,
+                    ensure_ascii=False,
+                )
             yield rx.toast("内容已成功保存")
-        else:
-            yield rx.toast("没有可保存的内容", status="warning")
-        self.saving = False
+
+            self.saving = False
+        except Exception as e:
+            self.saving = False
+            yield rx.toast("保存失败")
+            logger.error(e)
 
     @rx.event
-    def final_show(self):
+    def final_content_show(self):
+        try:
+            self.saving = True
+            if self.current_tab == "extract_setting":
+                _event_name = "novel_extract_setting"
+            elif self.current_tab == "core_seed":
+                _event_name = "novel_core_seed"
+            elif self.current_tab == "character_dynamics":
+                _event_name = "novel_character_dynamics"
+            elif self.current_tab == "world_building":
+                _event_name = "novel_world_building"
+            elif self.current_tab == "plot_arch":
+                _event_name = "novel_plot_arch"
+            elif self.current_tab == "blueprint":
+                _event_name = "novel_blueprint"
+            elif self.current_tab == "architecture":
+                _event_name = "novel_architecture"
+            elif self.current_tab == "chapter_draft":
+                _event_name = "novel_chapter_draft"
+
+            # 获取输出内容
+            os.makedirs(f"{_TASK_DIR}/{self.current_chat}/middle", exist_ok=True)
+            with open(
+                f"{_TASK_DIR}/{self.current_chat}/middle/{_event_name}.md", "r"
+            ) as f:
+                self._workspace[self.current_chat][self.current_tab] = json.load(f)
+
+            self.saving = False
+
+        except Exception as e:
+            self.saving = False
+            yield rx.toast("显示失败，没有保存内容")
+            logger.error(e)
+
+    def final_result_info(self):
         if self.current_tab == "extract_setting":
             _event_name = "novel_extract_setting"
         elif self.current_tab == "core_seed":
@@ -253,7 +293,7 @@ class InteractAiNovelState(State):
             _event_name = "novel_blueprint"
         elif self.current_tab == "architecture":
             _event_name = "novel_architecture"
-        elif self.current_tab == "architecture":
+        elif self.current_tab == "chapter_draft":
             _event_name = "novel_chapter_draft"
 
         if self.current_tab == "chapter_draft":
@@ -286,9 +326,11 @@ class InteractAiNovelState(State):
                 ] = f.read()
 
     @rx.event
-    async def process_question(self, form_data: dict[str, Any]):
+    async def process_question(self):
         try:
-            question = form_data["question"]
+            question = self._workspace[self.current_chat][self.current_tab][
+                "input_content"
+            ]
             if not question:
                 question = ""
             config = {}
@@ -387,7 +429,7 @@ class InteractAiNovelState(State):
 
                 yield
 
-            self.final_show()
+            self.final_result_info()
 
             # Toggle the processing flag.
             self.processing = False

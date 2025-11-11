@@ -128,12 +128,10 @@ async def extract_setting(state: State, runtime: Runtime[Context]):
             "word_number": response.word_number,  # type: ignore
         }
 
-        _middle_result_txt = json.dumps(_middle_result, ensure_ascii=False)
-
         await write_file_tool.arun(
             {
                 "file_path": f"{_work_dir}/novel_extract_setting.md",
-                "text": _middle_result_txt,
+                "text": json.dumps(_middle_result, ensure_ascii=False),
             }
         )
 
@@ -158,9 +156,9 @@ async def core_seed(state: State, runtime: Runtime[Context]):
         os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
-        def _assemble_prompt(_extract_setting_result):
+        def _assemble_prompt(_param_result):
             tmp = {
-                **_extract_setting_result,
+                **_param_result,
                 "user_guidance": _user_guidance,
             }
             return [
@@ -171,27 +169,24 @@ async def core_seed(state: State, runtime: Runtime[Context]):
         def _get_llm():
             return get_llm_by_type(_model_name)
 
-        _extract_setting_result = await read_file_tool.arun(
+        _param_result = await read_file_tool.arun(
             {
                 "file_path": f"{_work_dir}/novel_extract_setting.md",
             }
         )
-        _extract_setting_result = json.loads(_extract_setting_result)
+        _param_result = json.loads(_param_result)
 
-        response = await _get_llm().ainvoke(_assemble_prompt(_extract_setting_result))
+        response = await _get_llm().ainvoke(_assemble_prompt(_param_result))
         logger.info(
             set_color(
                 f"trace_id={_trace_id} | node=core_seed | message={response}",
                 "pink",
             )
         )
-
-        _middle_result = {**_extract_setting_result, "core_seed": response.content}
-        _middle_result_txt = json.dumps(_middle_result, ensure_ascii=False)
         await write_file_tool.arun(
             {
                 "file_path": f"{_work_dir}/novel_core_seed.md",
-                "text": _middle_result_txt,
+                "text": response.content,
             }
         )
 
@@ -216,8 +211,8 @@ async def character_dynamics(state: State, runtime: Runtime[Context]):
         os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
-        def _assemble_prompt(_core_seed_result):
-            tmp = {**_core_seed_result, "user_guidance": _user_guidance}
+        def _assemble_prompt(_param_result):
+            tmp = {**_param_result, "user_guidance": _user_guidance}
             return [
                 HumanMessage(
                     content=apply_system_prompt_template("character_dynamics", tmp)
@@ -228,27 +223,29 @@ async def character_dynamics(state: State, runtime: Runtime[Context]):
         def _get_llm():
             return get_llm_by_type(_model_name)
 
-        _core_seed_result = await read_file_tool.arun(
+        _param_result = await read_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/novel_extract_setting.md",
+            }
+        )
+        _param_result = json.loads(_param_result)
+        _param_result["core_seed"] = await read_file_tool.arun(
             {
                 "file_path": f"{_work_dir}/novel_core_seed.md",
             }
         )
-        _core_seed_result = json.loads(_core_seed_result)
 
-        response = await _get_llm().ainvoke(_assemble_prompt(_core_seed_result))
+        response = await _get_llm().ainvoke(_assemble_prompt(_param_result))
         logger.info(
             set_color(
                 f"trace_id={_trace_id} | node=character_dynamics | message={response}",
                 "pink",
             )
         )
-
-        _middle_result = {**_core_seed_result, "character_dynamics": response.content}
-        _middle_result_txt = json.dumps(_middle_result, ensure_ascii=False)
         await write_file_tool.arun(
             {
                 "file_path": f"{_work_dir}/novel_character_dynamics.md",
-                "text": _middle_result_txt,
+                "text": response.content,
             }
         )
 
@@ -273,8 +270,8 @@ async def world_building(state: State, runtime: Runtime[Context]):
         os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
-        def _assemble_prompt(_character_dynamics_result):
-            tmp = {**_character_dynamics_result, "user_guidance": _user_guidance}
+        def _assemble_prompt(_param_result):
+            tmp = {**_param_result, "user_guidance": _user_guidance}
             return [
                 HumanMessage(
                     content=apply_system_prompt_template("world_building", tmp)
@@ -285,32 +282,29 @@ async def world_building(state: State, runtime: Runtime[Context]):
         def _get_llm():
             return get_llm_by_type(_model_name)
 
-        _character_dynamics_result = await read_file_tool.arun(
+        _param_result = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_character_dynamics.md",
+                "file_path": f"{_work_dir}/novel_extract_setting.md",
             }
         )
-        _character_dynamics_result = json.loads(_character_dynamics_result)
-
-        response = await _get_llm().ainvoke(
-            _assemble_prompt(_character_dynamics_result)
+        _param_result = json.loads(_param_result)
+        _param_result["core_seed"] = await read_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/novel_core_seed.md",
+            }
         )
+
+        response = await _get_llm().ainvoke(_assemble_prompt(_param_result))
         logger.info(
             set_color(
                 f"trace_id={_trace_id} | node=world_building | message={response}",
                 "pink",
             )
         )
-
-        _middle_result = {
-            **_character_dynamics_result,
-            "world_building": response.content,
-        }
-        _middle_result_txt = json.dumps(_middle_result, ensure_ascii=False)
         await write_file_tool.arun(
             {
                 "file_path": f"{_work_dir}/novel_world_building.md",
-                "text": _middle_result_txt,
+                "text": response.content,
             }
         )
 
@@ -334,8 +328,8 @@ async def plot_arch(state: State, runtime: Runtime[Context]):
         os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
-        def _assemble_prompt(_world_building_result):
-            tmp = {**_world_building_result, "user_guidance": _user_guidance}
+        def _assemble_prompt(_param_result):
+            tmp = {**_param_result, "user_guidance": _user_guidance}
             return [
                 HumanMessage(content=apply_system_prompt_template("plot_arch", tmp))
             ]
@@ -344,27 +338,39 @@ async def plot_arch(state: State, runtime: Runtime[Context]):
         def _get_llm():
             return get_llm_by_type(_model_name)
 
-        _world_building_result = await read_file_tool.arun(
+        _param_result = await read_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/novel_extract_setting.md",
+            }
+        )
+        _param_result = json.loads(_param_result)
+        _param_result["core_seed"] = await read_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/novel_core_seed.md",
+            }
+        )
+        _param_result["character_dynamics"] = await read_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/novel_character_dynamics.md",
+            }
+        )
+        _param_result["world_building"] = await read_file_tool.arun(
             {
                 "file_path": f"{_work_dir}/novel_world_building.md",
             }
         )
-        _world_building_result = json.loads(_world_building_result)
 
-        response = await _get_llm().ainvoke(_assemble_prompt(_world_building_result))
+        response = await _get_llm().ainvoke(_assemble_prompt(_param_result))
         logger.info(
             set_color(
                 f"trace_id={_trace_id} | node=plot_arch | message={response}",
                 "pink",
             )
         )
-
-        _middle_result = {**_world_building_result, "plot_arch": response.content}
-        _middle_result_txt = json.dumps(_middle_result, ensure_ascii=False)
         await write_file_tool.arun(
             {
                 "file_path": f"{_work_dir}/novel_plot_arch.md",
-                "text": _middle_result_txt,
+                "text": response.content,
             }
         )
 
@@ -389,17 +395,17 @@ async def chapter_blueprint(state: State, runtime: Runtime[Context]):
         os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
-        def _assemble_overall_prompt(_plot_arch_result):
-            tmp = {**_plot_arch_result, "user_guidance": _user_guidance}
+        def _assemble_overall_prompt(_param_result):
+            tmp = {**_param_result, "user_guidance": _user_guidance}
             return [
                 HumanMessage(
                     content=apply_system_prompt_template("chapter_blueprint", tmp)
                 )
             ]
 
-        def _assemble_chunk_prompt(_plot_arch_result, chapter_list, start, end):
+        def _assemble_chunk_prompt(_param_result, chapter_list, start, end):
             tmp = {
-                **_plot_arch_result,
+                **_param_result,
                 "user_guidance": _user_guidance,
                 "chapter_list": chapter_list,
                 "start": start,
@@ -417,19 +423,37 @@ async def chapter_blueprint(state: State, runtime: Runtime[Context]):
         def _get_llm():
             return get_llm_by_type(_model_name)
 
-        _plot_arch_result = await read_file_tool.arun(
+        _param_result = await read_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/novel_extract_setting.md",
+            }
+        )
+        _param_result = json.loads(_param_result)
+        _param_result["core_seed"] = await read_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/novel_core_seed.md",
+            }
+        )
+        _param_result["character_dynamics"] = await read_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/novel_character_dynamics.md",
+            }
+        )
+        _param_result["world_building"] = await read_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/novel_world_building.md",
+            }
+        )
+        _param_result["plot_arch"] = await read_file_tool.arun(
             {
                 "file_path": f"{_work_dir}/novel_plot_arch.md",
             }
         )
-        _plot_arch_result = json.loads(_plot_arch_result)
 
-        _number_of_chapters = _plot_arch_result["number_of_chapters"]
+        _number_of_chapters = _param_result["number_of_chapters"]
 
         if _number_of_chapters <= 10:  # 小于10章的一次性产出
-            response = await _get_llm().ainvoke(
-                _assemble_overall_prompt(_plot_arch_result)
-            )
+            response = await _get_llm().ainvoke(_assemble_overall_prompt(_param_result))
             logger.info(
                 set_color(
                     f"trace_id={_trace_id} | node=chapter_blueprint | message={response}",
@@ -437,10 +461,7 @@ async def chapter_blueprint(state: State, runtime: Runtime[Context]):
                 )
             )
 
-            _middle_result = {
-                **_plot_arch_result,
-                "chapter_blueprint": response.content,
-            }
+            _middle_result = response.content
         else:
             current_start = 1
             final_chapter_blueprint = []
@@ -450,7 +471,7 @@ async def chapter_blueprint(state: State, runtime: Runtime[Context]):
 
                 response = await _get_llm().ainvoke(
                     _assemble_chunk_prompt(
-                        _plot_arch_result,
+                        _param_result,
                         chapter_list,
                         current_start,
                         current_end,
@@ -466,16 +487,12 @@ async def chapter_blueprint(state: State, runtime: Runtime[Context]):
                 )
                 current_start = current_end + 1
 
-            _middle_result = {
-                **_plot_arch_result,
-                "chapter_blueprint": "\n\n".join(final_chapter_blueprint),
-            }
+            _middle_result = "\n\n".join(final_chapter_blueprint)
 
-        _middle_result_txt = json.dumps(_middle_result, ensure_ascii=False)
         await write_file_tool.arun(
             {
                 "file_path": f"{_work_dir}/novel_blueprint.md",
-                "text": _middle_result_txt,
+                "text": _middle_result,
             }
         )
 
@@ -497,24 +514,49 @@ async def summarize_architecture(state: State, runtime: Runtime[Context]):
         _work_dir = os.path.join(_task_dir, _trace_id)
         os.makedirs(_work_dir, exist_ok=True)
 
-        _middle_result = await read_file_tool.arun(
+        _param_result = await read_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/novel_extract_setting.md",
+            }
+        )
+        _param_result = json.loads(_param_result)
+        _param_result["core_seed"] = await read_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/novel_core_seed.md",
+            }
+        )
+        _param_result["character_dynamics"] = await read_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/novel_character_dynamics.md",
+            }
+        )
+        _param_result["world_building"] = await read_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/novel_world_building.md",
+            }
+        )
+        _param_result["plot_arch"] = await read_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/novel_plot_arch.md",
+            }
+        )
+        _param_result["novel_blueprint"] = await read_file_tool.arun(
             {
                 "file_path": f"{_work_dir}/novel_blueprint.md",
             }
         )
-        _middle_result = json.loads(_middle_result)
 
         final_content = (
             "#=== 0) 小说设定 ===\n"
-            f"主题：{_middle_result['topic']},类型：{_middle_result['genre']},篇幅：约{_middle_result['number_of_chapters']}章（每章{_middle_result['word_number']}字）\n\n"
+            f"主题：{_param_result['topic']},类型：{_param_result['genre']},篇幅：约{_param_result['number_of_chapters']}章（每章{_param_result['word_number']}字）\n\n"
             "#=== 1) 核心种子 ===\n"
-            f"{_middle_result['core_seed']}\n\n"
+            f"{_param_result['core_seed']}\n\n"
             "#=== 2) 角色动力学 ===\n"
-            f"{_middle_result['character_dynamics']}\n\n"
+            f"{_param_result['character_dynamics']}\n\n"
             "#=== 3) 世界观 ===\n"
-            f"{_middle_result['world_building']}\n\n"
+            f"{_param_result['world_building']}\n\n"
             "#=== 4) 三幕式情节架构 ===\n"
-            f"{_middle_result['plot_arch']}\n"
+            f"{_param_result['plot_arch']}\n"
         )
         await write_file_tool.arun(
             {
@@ -532,7 +574,7 @@ async def summarize_architecture(state: State, runtime: Runtime[Context]):
         await write_file_tool.arun(
             {
                 "file_path": f"{_work_dir}/novel_chapter_blueprint.md",
-                "text": _middle_result["chapter_blueprint"],
+                "text": _param_result["novel_blueprint"],
             }
         )
         logger.info(
@@ -944,7 +986,11 @@ async def chapter_draft(state: State, runtime: Runtime[Context]):
 
         # 确定当前属于第几章
         dir_path = Path(f"{_work_dir}")
-        file_count = sum(1 for item in dir_path.iterdir() if item.is_dir())
+        file_count = sum(
+            1
+            for item in dir_path.iterdir()
+            if item.is_dir() and item.name.startswith("chapter")
+        )
         _current_chapter_id = file_count + 1
         os.makedirs(f"{_work_dir}/chapter_{_current_chapter_id}", exist_ok=True)
 
