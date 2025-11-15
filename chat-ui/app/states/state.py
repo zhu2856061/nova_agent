@@ -15,6 +15,7 @@ _DEFAULT_NAME = "Nova"
 _INTRODUCTION = "Hi! I'm **Nova**, a helpful assistant."
 _SELECTED_MODELS = ["basic", "reasoning", "basic_no_thinking", "deepseek", "gemini"]
 _TASK_DIR = "../merlin"
+_PROMPT_DIR = "../prompts"
 
 
 @dataclass(kw_only=True)

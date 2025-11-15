@@ -6,6 +6,7 @@ import json
 import logging
 import os
 import re
+from copy import deepcopy
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -14,8 +15,9 @@ from langgraph.graph import START, StateGraph
 from langgraph.runtime import Runtime
 from pydantic import BaseModel, Field
 
+from nova import CONF
 from nova.llms import get_llm_by_type
-from nova.prompts.ainovel import PROMPT_TEMPLATE, apply_system_prompt_template
+from nova.prompts.template import apply_prompt_template
 from nova.tools import read_file_tool, write_file_tool
 from nova.utils import (
     set_color,
@@ -84,6 +86,19 @@ class ExtractSetting(BaseModel):
 # 函数
 
 
+def get_prompt(current_chat, current_tab):
+    _TASK_DIR = CONF["SYSTEM"]["task_dir"]
+    _PROMPT_DIR = CONF["SYSTEM"]["prompt_template_dir"]
+    try:
+        with open(f"{_TASK_DIR}/{current_chat}/prompt/{current_tab}.md") as f:
+            prompt_content = f.read()
+    except Exception:
+        with open(f"{_PROMPT_DIR}/ainovel/{current_tab}.md") as f:
+            prompt_content = f.read()
+
+    return prompt_content
+
+
 # 抽取设定
 async def extract_setting(state: State, runtime: Runtime[Context]):
     try:
@@ -102,12 +117,9 @@ async def extract_setting(state: State, runtime: Runtime[Context]):
                 "messages": _user_guidance,
                 "user_guidance": "",
             }
+            _prompt_tamplate = get_prompt(_work_dir, "extract_setting")
 
-            return [
-                HumanMessage(
-                    content=apply_system_prompt_template("extract_setting", tmp)
-                )
-            ]
+            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
         # LLM
         def _get_llm():
@@ -127,10 +139,10 @@ async def extract_setting(state: State, runtime: Runtime[Context]):
             "number_of_chapters": response.number_of_chapters,  # type: ignore
             "word_number": response.word_number,  # type: ignore
         }
-
+        os.makedirs(f"{_work_dir}/interact", exist_ok=True)
         await write_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_extract_setting.md",
+                "file_path": f"{_work_dir}/interact/extract_setting.md",
                 "text": json.dumps(_middle_result, ensure_ascii=False),
             }
         )
@@ -161,9 +173,9 @@ async def core_seed(state: State, runtime: Runtime[Context]):
                 **_param_result,
                 "user_guidance": _user_guidance,
             }
-            return [
-                HumanMessage(content=apply_system_prompt_template("core_seed", tmp))
-            ]
+            _prompt_tamplate = get_prompt(_work_dir, "core_seed")
+
+            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
         # LLM
         def _get_llm():
@@ -171,7 +183,7 @@ async def core_seed(state: State, runtime: Runtime[Context]):
 
         _param_result = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_extract_setting.md",
+                "file_path": f"{_work_dir}/interact/extract_setting.md",
             }
         )
         _param_result = json.loads(_param_result)
@@ -183,9 +195,11 @@ async def core_seed(state: State, runtime: Runtime[Context]):
                 "pink",
             )
         )
+
+        os.makedirs(f"{_work_dir}/interact", exist_ok=True)
         await write_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_core_seed.md",
+                "file_path": f"{_work_dir}/interact/core_seed.md",
                 "text": response.content,
             }
         )
@@ -213,11 +227,9 @@ async def character_dynamics(state: State, runtime: Runtime[Context]):
         # 提示词
         def _assemble_prompt(_param_result):
             tmp = {**_param_result, "user_guidance": _user_guidance}
-            return [
-                HumanMessage(
-                    content=apply_system_prompt_template("character_dynamics", tmp)
-                )
-            ]
+            _prompt_tamplate = get_prompt(_task_dir, "character_dynamics")
+
+            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
         # LLM
         def _get_llm():
@@ -225,13 +237,13 @@ async def character_dynamics(state: State, runtime: Runtime[Context]):
 
         _param_result = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_extract_setting.md",
+                "file_path": f"{_work_dir}/interact/extract_setting.md",
             }
         )
         _param_result = json.loads(_param_result)
         _param_result["core_seed"] = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_core_seed.md",
+                "file_path": f"{_work_dir}/interact/core_seed.md",
             }
         )
 
@@ -242,9 +254,10 @@ async def character_dynamics(state: State, runtime: Runtime[Context]):
                 "pink",
             )
         )
+        os.makedirs(f"{_work_dir}/interact", exist_ok=True)
         await write_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_character_dynamics.md",
+                "file_path": f"{_work_dir}/interact/character_dynamics.md",
                 "text": response.content,
             }
         )
@@ -272,11 +285,9 @@ async def world_building(state: State, runtime: Runtime[Context]):
         # 提示词
         def _assemble_prompt(_param_result):
             tmp = {**_param_result, "user_guidance": _user_guidance}
-            return [
-                HumanMessage(
-                    content=apply_system_prompt_template("world_building", tmp)
-                )
-            ]
+            _prompt_tamplate = get_prompt(_work_dir, "world_building")
+
+            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
         # LLM
         def _get_llm():
@@ -284,13 +295,13 @@ async def world_building(state: State, runtime: Runtime[Context]):
 
         _param_result = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_extract_setting.md",
+                "file_path": f"{_work_dir}/interact/extract_setting.md",
             }
         )
         _param_result = json.loads(_param_result)
         _param_result["core_seed"] = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_core_seed.md",
+                "file_path": f"{_work_dir}/interact/core_seed.md",
             }
         )
 
@@ -301,9 +312,10 @@ async def world_building(state: State, runtime: Runtime[Context]):
                 "pink",
             )
         )
+        os.makedirs(f"{_work_dir}/interact", exist_ok=True)
         await write_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_world_building.md",
+                "file_path": f"{_work_dir}/interact/world_building.md",
                 "text": response.content,
             }
         )
@@ -330,9 +342,9 @@ async def plot_arch(state: State, runtime: Runtime[Context]):
         # 提示词
         def _assemble_prompt(_param_result):
             tmp = {**_param_result, "user_guidance": _user_guidance}
-            return [
-                HumanMessage(content=apply_system_prompt_template("plot_arch", tmp))
-            ]
+            _prompt_tamplate = get_prompt(_work_dir, "plot_arch")
+
+            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
         # LLM
         def _get_llm():
@@ -340,23 +352,23 @@ async def plot_arch(state: State, runtime: Runtime[Context]):
 
         _param_result = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_extract_setting.md",
+                "file_path": f"{_work_dir}/interact/extract_setting.md",
             }
         )
         _param_result = json.loads(_param_result)
         _param_result["core_seed"] = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_core_seed.md",
+                "file_path": f"{_work_dir}/interact/core_seed.md",
             }
         )
         _param_result["character_dynamics"] = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_character_dynamics.md",
+                "file_path": f"{_work_dir}/interact/character_dynamics.md",
             }
         )
         _param_result["world_building"] = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_world_building.md",
+                "file_path": f"{_work_dir}/interact/world_building.md",
             }
         )
 
@@ -367,9 +379,10 @@ async def plot_arch(state: State, runtime: Runtime[Context]):
                 "pink",
             )
         )
+        os.makedirs(f"{_work_dir}/interact", exist_ok=True)
         await write_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_plot_arch.md",
+                "file_path": f"{_work_dir}/interact/plot_arch.md",
                 "text": response.content,
             }
         )
@@ -394,16 +407,7 @@ async def chapter_blueprint(state: State, runtime: Runtime[Context]):
         _work_dir = os.path.join(_task_dir, _trace_id)
         os.makedirs(_work_dir, exist_ok=True)
 
-        # 提示词
-        def _assemble_overall_prompt(_param_result):
-            tmp = {**_param_result, "user_guidance": _user_guidance}
-            return [
-                HumanMessage(
-                    content=apply_system_prompt_template("chapter_blueprint", tmp)
-                )
-            ]
-
-        def _assemble_chunk_prompt(_param_result, chapter_list, start, end):
+        def _assemble_prompt(_param_result, chapter_list, start, end):
             tmp = {
                 **_param_result,
                 "user_guidance": _user_guidance,
@@ -411,13 +415,8 @@ async def chapter_blueprint(state: State, runtime: Runtime[Context]):
                 "start": start,
                 "end": end,
             }
-            return [
-                HumanMessage(
-                    content=apply_system_prompt_template(
-                        "chunked_chapter_blueprint", tmp
-                    )
-                )
-            ]
+            _prompt_tamplate = get_prompt(_work_dir, "chapter_blueprint")
+            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
         # LLM
         def _get_llm():
@@ -425,73 +424,62 @@ async def chapter_blueprint(state: State, runtime: Runtime[Context]):
 
         _param_result = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_extract_setting.md",
+                "file_path": f"{_work_dir}/interact/extract_setting.md",
             }
         )
         _param_result = json.loads(_param_result)
         _param_result["core_seed"] = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_core_seed.md",
+                "file_path": f"{_work_dir}/interact/core_seed.md",
             }
         )
         _param_result["character_dynamics"] = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_character_dynamics.md",
+                "file_path": f"{_work_dir}/interact/character_dynamics.md",
             }
         )
         _param_result["world_building"] = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_world_building.md",
+                "file_path": f"{_work_dir}/interact/world_building.md",
             }
         )
         _param_result["plot_arch"] = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_plot_arch.md",
+                "file_path": f"{_work_dir}/interact/plot_arch.md",
             }
         )
 
         _number_of_chapters = _param_result["number_of_chapters"]
 
-        if _number_of_chapters <= 10:  # 小于10章的一次性产出
-            response = await _get_llm().ainvoke(_assemble_overall_prompt(_param_result))
+        current_start = 1
+        final_chapter_blueprint = []
+        while current_start <= _number_of_chapters:
+            current_end = min(current_start + 10, _number_of_chapters)
+            chapter_list = "\n\n".join(final_chapter_blueprint[-200:])
+            response = await _get_llm().ainvoke(
+                _assemble_prompt(
+                    _param_result,
+                    chapter_list,
+                    current_start,
+                    current_end,
+                )
+            )
+            final_chapter_blueprint.append(response.content)
+
             logger.info(
                 set_color(
-                    f"trace_id={_trace_id} | node=chapter_blueprint | message={response}",
+                    f"trace_id={_trace_id} | node=chunk_chapter_blueprint | current_start={current_start} | current_end={current_end} | message={response}",
                     "pink",
                 )
             )
+            current_start = current_end + 1
 
-            _middle_result = response.content
-        else:
-            current_start = 1
-            final_chapter_blueprint = []
-            while current_start <= _number_of_chapters:
-                current_end = min(current_start + 10, _number_of_chapters)
-                chapter_list = "\n\n".join(final_chapter_blueprint[-200:])
+        _middle_result = "\n\n".join(final_chapter_blueprint)
 
-                response = await _get_llm().ainvoke(
-                    _assemble_chunk_prompt(
-                        _param_result,
-                        chapter_list,
-                        current_start,
-                        current_end,
-                    )
-                )
-                final_chapter_blueprint.append(response.content)
-
-                logger.info(
-                    set_color(
-                        f"trace_id={_trace_id} | node=chunk_chapter_blueprint | current_start={current_start} | current_end={current_end} | message={response}",
-                        "pink",
-                    )
-                )
-                current_start = current_end + 1
-
-            _middle_result = "\n\n".join(final_chapter_blueprint)
-
+        os.makedirs(f"{_work_dir}/interact", exist_ok=True)
         await write_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_blueprint.md",
+                "file_path": f"{_work_dir}/interact/chapter_blueprint.md",
                 "text": _middle_result,
             }
         )
@@ -516,33 +504,34 @@ async def summarize_architecture(state: State, runtime: Runtime[Context]):
 
         _param_result = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_extract_setting.md",
+                "file_path": f"{_work_dir}/interact/extract_setting.md",
             }
         )
+        _extract_setting = deepcopy(_param_result)
         _param_result = json.loads(_param_result)
         _param_result["core_seed"] = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_core_seed.md",
+                "file_path": f"{_work_dir}/interact/core_seed.md",
             }
         )
         _param_result["character_dynamics"] = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_character_dynamics.md",
+                "file_path": f"{_work_dir}/interact/character_dynamics.md",
             }
         )
         _param_result["world_building"] = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_world_building.md",
+                "file_path": f"{_work_dir}/interact/world_building.md",
             }
         )
         _param_result["plot_arch"] = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_plot_arch.md",
+                "file_path": f"{_work_dir}/interact/plot_arch.md",
             }
         )
-        _param_result["novel_blueprint"] = await read_file_tool.arun(
+        _param_result["chapter_blueprint"] = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_blueprint.md",
+                "file_path": f"{_work_dir}/interact/chapter_blueprint.md",
             }
         )
 
@@ -574,12 +563,24 @@ async def summarize_architecture(state: State, runtime: Runtime[Context]):
         await write_file_tool.arun(
             {
                 "file_path": f"{_work_dir}/novel_chapter_blueprint.md",
-                "text": _param_result["novel_blueprint"],
+                "text": _param_result["chapter_blueprint"],
             }
         )
         logger.info(
             set_color(
                 f"trace_id={_trace_id} | node=save_chapter_blueprint | message=save to {_work_dir}/novel_chapter_blueprint.md",
+                "pink",
+            )
+        )
+        await write_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/novel_extract_setting.md",
+                "text": _extract_setting,
+            }
+        )
+        logger.info(
+            set_color(
+                f"trace_id={_trace_id} | node=novel_extract_setting | message=save to {_work_dir}/novel_extract_setting.md",
                 "pink",
             )
         )
@@ -804,10 +805,9 @@ async def chapter_draft(state: State, runtime: Runtime[Context]):
                     "previous_chapter_text": previous_chapter_text,
                     "previous_global_summary": previous_global_summary,
                 }
+                _prompt_tamplate = get_prompt(_work_dir, "global_summary")
                 return [
-                    HumanMessage(
-                        content=apply_system_prompt_template("global_summary", tmp)
-                    )
+                    HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))
                 ]
 
             elif target == "update_character_state":
@@ -815,12 +815,9 @@ async def chapter_draft(state: State, runtime: Runtime[Context]):
                     "previous_chapter_text": previous_chapter_text,
                     "previous_character_state": previous_character_state,
                 }
+                _prompt_tamplate = get_prompt(_work_dir, "update_character_state")
                 return [
-                    HumanMessage(
-                        content=apply_system_prompt_template(
-                            "update_character_state", tmp
-                        )
-                    )
+                    HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))
                 ]
 
             elif target == "summarize_recent_chapters":
@@ -857,24 +854,18 @@ async def chapter_draft(state: State, runtime: Runtime[Context]):
                         "plot_twist_level", "★☆☆☆☆"
                     ),
                 }
+                _prompt_tamplate = get_prompt(_work_dir, "summarize_recent_chapters")
                 return [
-                    HumanMessage(
-                        content=apply_system_prompt_template(
-                            "summarize_recent_chapters", tmp
-                        )
-                    )
+                    HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))
                 ]
 
             elif target == "create_character_state":
                 tmp = {
                     "novel_architecture": _novel_architecture,
                 }
+                _prompt_tamplate = get_prompt(_work_dir, "create_character_state")
                 return [
-                    HumanMessage(
-                        content=apply_system_prompt_template(
-                            "create_character_state", tmp
-                        )
-                    )
+                    HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))
                 ]
 
             elif target == "first_chapter_draft":
@@ -905,10 +896,9 @@ async def chapter_draft(state: State, runtime: Runtime[Context]):
                     "character_state": new_character_state,
                 }
 
+                _prompt_tamplate = get_prompt(_work_dir, "first_chapter_draft")
                 return [
-                    HumanMessage(
-                        content=apply_system_prompt_template("first_chapter_draft", tmp)
-                    )
+                    HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))
                 ]
 
             elif target == "next_chapter_draft":
@@ -971,10 +961,9 @@ async def chapter_draft(state: State, runtime: Runtime[Context]):
                     "user_guidance": _user_guidance,
                 }
 
+                _prompt_tamplate = get_prompt(_work_dir, "next_chapter_draft")
                 return [
-                    HumanMessage(
-                        content=apply_system_prompt_template("next_chapter_draft", tmp)
-                    )
+                    HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))
                 ]
 
             else:

@@ -5,8 +5,7 @@
 import json
 import logging
 import os
-from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import reflex as rx
 
@@ -21,6 +20,7 @@ from app.api.agent_api import (
     AGENT_AINOVEL_WORLD_BUILDING_BACKEND_URL,
     get_agent_api,
 )
+from app.components.common.tab_components import TabMenu
 from app.states.state import (
     _DEFAULT_NAME,
     _SELECTED_MODELS,
@@ -32,68 +32,58 @@ from app.states.state import (
 logger = logging.getLogger(__name__)
 
 
-@dataclass(kw_only=True)
-class NovelStepMenu:
-    value: str  # 标签唯一标识（用于切换）
-    label: str  # 标签显示文本
-    content: str  # 标签对应的内容组件（延迟渲染）
-    disabled: bool = False  # 是否禁用标签
-    icon: Optional[str] = None  # 标签图标（可选）
-    component: Optional[rx.Component] = None
-
-
 class InteractAiNovelState(State):
     unique_id = "Interact - AiNovel"
     _default_name = _DEFAULT_NAME
 
-    novel_tabs: list[NovelStepMenu] = [
-        NovelStepMenu(
+    novel_tabs: list[TabMenu] = [
+        TabMenu(
             value="extract_setting",
             label="抽取设定",
             icon="brain",  # 图标（Reflex内置图标名）
-            content="editor",  # 聊天组件（需实现）
+            component="editor",
         ),
-        NovelStepMenu(
+        TabMenu(
             value="core_seed",
             label="核心种子",
             icon="gpu",  # 图标（Reflex内置图标名）
-            content="editor",  # 聊天组件（需实现）
+            component="editor",
         ),
-        NovelStepMenu(
+        TabMenu(
             value="character_dynamics",
             label="角色设定",
             icon="bike",  # 图标（Reflex内置图标名）
-            content="editor",  # 聊天组件（需实现）
+            component="editor",
         ),
-        NovelStepMenu(
+        TabMenu(
             value="world_building",
             label="世界观构建",
             icon="earth",  # 图标（Reflex内置图标名）
-            content="editor",  # 聊天组件（需实现）
+            component="editor",
         ),
-        NovelStepMenu(
+        TabMenu(
             value="plot_arch",
             label="情节架构",
             icon="layout-list",  # 图标（Reflex内置图标名）
-            content="editor",  # 聊天组件（需实现）
+            component="editor",
         ),
-        NovelStepMenu(
-            value="blueprint",
+        TabMenu(
+            value="chapter_blueprint",
             label="章节目录",
             icon="list-tree",  # 图标（Reflex内置图标名）
-            content="editor",  # 聊天组件（需实现）
+            component="editor",
         ),
-        NovelStepMenu(
+        TabMenu(
             value="architecture",
             label="汇总骨架",
             icon="calendar-plus",  # 图标（Reflex内置图标名）
-            content="editor",  # 聊天组件（需实现）
+            component="editor",
         ),
-        NovelStepMenu(
+        TabMenu(
             value="chapter_draft",
             label="章节内容",
             icon="clipboard-pen-line",  # 图标（Reflex内置图标名）
-            content="editor",  # 聊天组件（需实现）
+            component="editor",
         ),
     ]
 
@@ -111,20 +101,25 @@ class InteractAiNovelState(State):
     current_chat = _default_name
     current_tab = "extract_setting"
     saving: bool = False
-    is_prompt_settings_modal_open: bool = False
 
     _workspace = {current_chat: {}}  # 存储每个工作区的内容
     for item in novel_tabs:
-        _workspace[current_chat][item.value] = {
-            "input_content": "",
-            "output_content": "",
-            "final_content": "",
-            "prompt_content": "",
-        }
+        if item.value not in _workspace[current_chat]:
+            _workspace[current_chat][item.value] = {
+                "input_content": "",
+                "output_content": "",
+                "final_content": "",
+            }
 
     @rx.event
-    def set_is_prompt_settings_modal_open(self, is_open: bool):
-        self.is_prompt_settings_modal_open = is_open
+    def on_load(self):
+        for item in self.novel_tabs:
+            if item.value not in self._workspace[self.current_chat]:
+                self._workspace[self.current_chat][item.value] = {
+                    "input_content": "",
+                    "output_content": "",
+                    "final_content": "",
+                }
 
     @rx.event
     def change_tab_value(self, val):
@@ -152,13 +147,7 @@ class InteractAiNovelState(State):
         self.current_chat = new_chat_name
 
         self._workspace[self.current_chat] = {}
-        for item in self.novel_tabs:
-            self._workspace[self.current_chat][item.value] = {
-                "input_content": "",
-                "output_content": "",
-                "final_content": "",
-                "prompt_content": "",
-            }
+        self.on_load()
 
         self.is_new_chat_modal_open = False
 
@@ -171,13 +160,7 @@ class InteractAiNovelState(State):
 
         if len(self._workspace) == 0:
             self._workspace[self._default_name] = {}
-            for item in self.novel_tabs:
-                self._workspace[self._default_name][item.value] = {
-                    "input_content": "",
-                    "output_content": "",
-                    "final_content": "",
-                    "prompt_content": "",
-                }
+            self.on_load()
 
         if self.current_chat not in self._workspace:
             self.current_chat = list(self._workspace.keys())[0]
@@ -197,54 +180,6 @@ class InteractAiNovelState(State):
     @rx.var
     def get_input_content(self) -> str:
         return self._workspace[self.current_chat][self.current_tab]["input_content"]
-
-    @rx.event
-    def set_prompt_content(self, value: str):
-        self._workspace[self.current_chat][self.current_tab]["prompt_content"] = value
-
-    @rx.var
-    def get_prompt_content(self) -> str:
-        return self._workspace[self.current_chat][self.current_tab]["prompt_content"]
-
-    # 保存输出内容
-    @rx.event
-    def final_prompt_save(self):
-        try:
-            """保存输出内容的逻辑"""
-            self.saving = True
-            # 示例：保存到本地存储（或提交到后端）
-            if self.current_tab == "extract_setting":
-                _event_name = "novel_extract_setting"
-            elif self.current_tab == "core_seed":
-                _event_name = "novel_core_seed"
-            elif self.current_tab == "character_dynamics":
-                _event_name = "novel_character_dynamics"
-            elif self.current_tab == "world_building":
-                _event_name = "novel_world_building"
-            elif self.current_tab == "plot_arch":
-                _event_name = "novel_plot_arch"
-            elif self.current_tab == "blueprint":
-                _event_name = "novel_blueprint"
-            elif self.current_tab == "architecture":
-                _event_name = "novel_architecture"
-            elif self.current_tab == "chapter_draft":
-                _event_name = "novel_chapter_draft"
-            os.makedirs(f"{_TASK_DIR}/{self.current_chat}/prompt", exist_ok=True)
-            with open(
-                f"{_TASK_DIR}/{self.current_chat}/prompt/{_event_name}.md", "w"
-            ) as f:
-                json.dump(
-                    self._workspace[self.current_chat][self.current_tab],
-                    f,
-                    ensure_ascii=False,
-                )
-            yield rx.toast("内容已成功保存")
-
-            self.saving = False
-        except Exception as e:
-            self.saving = False
-            yield rx.toast("保存失败")
-            logger.error(e)
 
     @rx.var
     def get_output_content(self) -> str:
@@ -266,30 +201,23 @@ class InteractAiNovelState(State):
             """保存输出内容的逻辑"""
             self.saving = True
             # 示例：保存到本地存储（或提交到后端）
-            if self.current_tab == "extract_setting":
-                _event_name = "novel_extract_setting"
-            elif self.current_tab == "core_seed":
-                _event_name = "novel_core_seed"
-            elif self.current_tab == "character_dynamics":
-                _event_name = "novel_character_dynamics"
-            elif self.current_tab == "world_building":
-                _event_name = "novel_world_building"
-            elif self.current_tab == "plot_arch":
-                _event_name = "novel_plot_arch"
-            elif self.current_tab == "blueprint":
-                _event_name = "novel_blueprint"
-            elif self.current_tab == "architecture":
-                _event_name = "novel_architecture"
-            elif self.current_tab == "chapter_draft":
-                _event_name = "novel_chapter_draft"
             os.makedirs(f"{_TASK_DIR}/{self.current_chat}/middle", exist_ok=True)
             with open(
-                f"{_TASK_DIR}/{self.current_chat}/middle/{_event_name}.md", "w"
+                f"{_TASK_DIR}/{self.current_chat}/middle/{self.current_tab}.md", "w"
             ) as f:
                 json.dump(
                     self._workspace[self.current_chat][self.current_tab],
                     f,
                     ensure_ascii=False,
+                )
+
+            with open(
+                f"{_TASK_DIR}/{self.current_chat}/interact/{self.current_tab}.md", "w"
+            ) as f:
+                f.write(
+                    self._workspace[self.current_chat][self.current_tab][
+                        "final_content"
+                    ]
                 )
             yield rx.toast("内容已成功保存")
 
@@ -303,27 +231,11 @@ class InteractAiNovelState(State):
     def final_content_show(self):
         try:
             self.saving = True
-            if self.current_tab == "extract_setting":
-                _event_name = "novel_extract_setting"
-            elif self.current_tab == "core_seed":
-                _event_name = "novel_core_seed"
-            elif self.current_tab == "character_dynamics":
-                _event_name = "novel_character_dynamics"
-            elif self.current_tab == "world_building":
-                _event_name = "novel_world_building"
-            elif self.current_tab == "plot_arch":
-                _event_name = "novel_plot_arch"
-            elif self.current_tab == "blueprint":
-                _event_name = "novel_blueprint"
-            elif self.current_tab == "architecture":
-                _event_name = "novel_architecture"
-            elif self.current_tab == "chapter_draft":
-                _event_name = "novel_chapter_draft"
 
             # 获取输出内容
             os.makedirs(f"{_TASK_DIR}/{self.current_chat}/middle", exist_ok=True)
             with open(
-                f"{_TASK_DIR}/{self.current_chat}/middle/{_event_name}.md", "r"
+                f"{_TASK_DIR}/{self.current_chat}/middle/{self.current_tab}.md", "r"
             ) as f:
                 self._workspace[self.current_chat][self.current_tab] = json.load(f)
 
@@ -335,27 +247,10 @@ class InteractAiNovelState(State):
             logger.error(e)
 
     def final_result_info(self):
-        if self.current_tab == "extract_setting":
-            _event_name = "novel_extract_setting"
-        elif self.current_tab == "core_seed":
-            _event_name = "novel_core_seed"
-        elif self.current_tab == "character_dynamics":
-            _event_name = "novel_character_dynamics"
-        elif self.current_tab == "world_building":
-            _event_name = "novel_world_building"
-        elif self.current_tab == "plot_arch":
-            _event_name = "novel_plot_arch"
-        elif self.current_tab == "blueprint":
-            _event_name = "novel_blueprint"
-        elif self.current_tab == "architecture":
-            _event_name = "novel_architecture"
-        elif self.current_tab == "chapter_draft":
-            _event_name = "novel_chapter_draft"
-
         if self.current_tab == "chapter_draft":
             # 获取输出内容
             with open(
-                f"{_TASK_DIR}/{self.current_chat}/novel_extract_setting.md", "r"
+                f"{_TASK_DIR}/{self.current_chat}/interact/extract_setting.md", "r"
             ) as f:
                 _extract_setting = f.read()
                 number_of_chapters = json.loads(_extract_setting)["number_of_chapters"]
@@ -374,9 +269,33 @@ class InteractAiNovelState(State):
                             "final_content"
                         ] += f.read() + "\n\n"
 
+        elif self.current_tab == "architecture":
+            # 获取输出内容
+            with open(
+                f"{_TASK_DIR}/{self.current_chat}/novel_extract_setting.md", "r"
+            ) as f:
+                self._workspace[self.current_chat][self.current_tab][
+                    "final_content"
+                ] = "【extract_setting】：\n\n" + f.read() + "\n\n"
+            # 获取输出内容
+            with open(
+                f"{_TASK_DIR}/{self.current_chat}/novel_architecture.md", "r"
+            ) as f:
+                self._workspace[self.current_chat][self.current_tab][
+                    "final_content"
+                ] += "【novel_architecture】：\n\n" + f.read() + "\n\n"
+            # 获取输出内容
+            with open(
+                f"{_TASK_DIR}/{self.current_chat}/novel_chapter_blueprint.md", "r"
+            ) as f:
+                self._workspace[self.current_chat][self.current_tab][
+                    "final_content"
+                ] += "【novel_chapter_blueprint】：\n\n" + f.read() + "\n\n"
         else:
             # 获取输出内容
-            with open(f"{_TASK_DIR}/{self.current_chat}/{_event_name}.md", "r") as f:
+            with open(
+                f"{_TASK_DIR}/{self.current_chat}/interact/{self.current_tab}.md", "r"
+            ) as f:
                 self._workspace[self.current_chat][self.current_tab][
                     "final_content"
                 ] = f.read()
@@ -409,7 +328,7 @@ class InteractAiNovelState(State):
                 _url = AGENT_AINOVEL_WORLD_BUILDING_BACKEND_URL
             elif self.current_tab == "plot_arch":
                 _url = AGENT_AINOVEL_PLOT_ARCH_BACKEND_URL
-            elif self.current_tab == "blueprint":
+            elif self.current_tab == "chapter_blueprint":
                 _url = AGENT_AINOVEL_CHAPTER_BLUEPRINT_BACKEND_URL
             elif self.current_tab == "architecture":
                 _url = AGENT_AINOVEL_SUMMARIZE_ACRHITECTURE_BACKEND_URL

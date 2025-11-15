@@ -7,6 +7,7 @@ SYSTEM:
   env_path: "./env"
   task_dir: "../merlin"
   cache_dir: "./cache"
+  prompt_template_dir: "../prompts"
 
 LLM:
   - model_name: "basic"
