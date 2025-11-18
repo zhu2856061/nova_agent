@@ -10,7 +10,6 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from nova.service.agent_service import agent_router
 from nova.service.chat_service import chat_router
-from nova.service.task_service import task_router
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +51,6 @@ async def health_check():
 # Include the LLM router
 app.include_router(chat_router)
 app.include_router(agent_router)
-app.include_router(task_router)
 
 
 if __name__ == "__main__":

@@ -5,26 +5,24 @@
 import json
 import logging
 import os
-from dataclasses import dataclass, field
-from typing import Annotated, Dict, Literal
+from typing import Literal
 
 from langchain_core.messages import (
     HumanMessage,
-    MessageLikeRepresentation,
     get_buffer_string,
 )
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.graph import START, StateGraph, add_messages
+from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import Runtime
 from langgraph.types import Command, interrupt
 from pydantic import BaseModel, Field
 
+from nova import CONF
 from nova.llms import get_llm_by_type
-from nova.prompts.ainovel import apply_system_prompt_template
-from nova.tools import read_file_tool, write_file_tool
-from nova.utils import (
-    set_color,
-)
+from nova.model.agent import Context, State
+from nova.prompts.template import apply_prompt_template
+from nova.tools import write_file_tool
+from nova.utils import set_color
 
 # ######################################################################################
 # 配置
@@ -33,46 +31,6 @@ logger = logging.getLogger(__name__)
 
 # ######################################################################################
 # 全局变量
-
-
-@dataclass(kw_only=True)
-class State:
-    err_message: str = field(
-        default="",
-        metadata={"description": "The error message to use for the agent."},
-    )
-    architecture_messages: Annotated[list[MessageLikeRepresentation], add_messages]
-
-    # 用户介入的信息
-    user_guidance: str = field(
-        default="",
-        metadata={"description": "The user guidance to use for the agent."},
-    )
-    middle_result: Dict = field(
-        default_factory=dict,
-        metadata={"description": "The middle result to use for the agent."},
-    )
-    human_in_loop_node: str = field(
-        default="",
-        metadata={"description": "The next node to use for the agent."},
-    )
-
-
-@dataclass(kw_only=True)
-class Context:
-    trace_id: str = field(
-        default="default",
-        metadata={"description": "The trace_id to use for the agent."},
-    )
-    task_dir: str = field(
-        default="merlin",
-        metadata={"description": "The task directory to use for the agent."},
-    )
-
-    architecture_model: str = field(
-        default="basic",
-        metadata={"description": "The name of llm to use for the agent. "},
-    )
 
 
 # extract_setting uses this
@@ -93,46 +51,62 @@ class ExtractSetting(BaseModel):
 
 # ######################################################################################
 # 函数
+def get_prompt(current_tab):
+    _PROMPT_DIR = CONF["SYSTEM"]["prompt_template_dir"]
+    with open(f"{_PROMPT_DIR}/ainovel/{current_tab}.md") as f:
+        prompt_content = f.read()
+    return prompt_content
+
+
+def log_info_set_color(trace_id, node, message, color="pink"):
+    logger.info(
+        set_color(
+            f"trace_id={trace_id} | node={node} | message={message}",
+            color,
+        )
+    )
+
+
+def log_error_set_color(trace_id, node, e, color="red"):
+    err_message = f"trace_id={trace_id} | node={node} | error={e}"
+    logger.info(
+        set_color(
+            f"trace_id={trace_id} | node={node} | error={e}",
+            color,
+        )
+    )
+    return err_message
 
 
 # 抽取设定
-async def extract_setting(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["human_in_loop_agree", "__end__"]]:
+async def extract_setting(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "extract_setting"
     try:
         # 变量
-        _trace_id = runtime.context.trace_id
+        _thread_id = runtime.context.thread_id
         _task_dir = runtime.context.task_dir
-        _model_name = runtime.context.architecture_model
-        _messages = state.architecture_messages
+        _model_name = runtime.context.model
         _user_guidance = state.user_guidance
+        _messages = state.messages
 
-        _work_dir = os.path.join(_task_dir, _trace_id)
+        _work_dir = os.path.join(_task_dir, _thread_id)
         os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
-        def _assemble_prompt(messages):
+        def _assemble_prompt():
             tmp = {
-                "messages": get_buffer_string(messages),
-                "user_guidance": _user_guidance,
+                "messages": get_buffer_string(_messages),  # type: ignore
+                "user_guidance": _user_guidance.get("input", ""),
             }
-            return [
-                HumanMessage(
-                    content=apply_system_prompt_template("extract_setting", tmp)
-                )
-            ]
+            _prompt_tamplate = get_prompt(_NODE_NAME)
+            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
         # LLM
         def _get_llm():
             return get_llm_by_type(_model_name).with_structured_output(ExtractSetting)
 
-        response = await _get_llm().ainvoke(_assemble_prompt(_messages))
-        logger.info(
-            set_color(
-                f"trace_id={_trace_id} | node=extract_setting | message={response}",
-                "pink",
-            )
-        )
+        response = await _get_llm().ainvoke(_assemble_prompt())
+        log_info_set_color(_thread_id, _NODE_NAME, response)
 
         _middle_result = {
             "topic": response.topic,  # type: ignore
@@ -141,390 +115,315 @@ async def extract_setting(
             "word_number": response.word_number,  # type: ignore
         }
 
+        os.makedirs(f"{_work_dir}/middle", exist_ok=True)
         await write_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_architecture_setting.md",
+                "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
                 "text": json.dumps(_middle_result, ensure_ascii=False),
             }
         )
-
-        return Command(
-            goto="human_in_loop_agree",
-            update={
-                "middle_result": _middle_result,
-                "human_in_loop_node": "extract_setting",
-            },
-        )
+        return {"code": 0, "err_message": "ok", "data": _middle_result}
 
     except Exception as e:
-        logger.error(
-            set_color(f"trace_id={_trace_id} | node=extract_setting | error={e}", "red")
-        )
-        return Command(
-            goto="__end__",
-            update={
-                "err_message": f"trace_id={_trace_id} | node=extract_setting | error={e}"
-            },
-        )
+        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
+        return {"code": 1, "err_message": _err_message}
 
 
 # 核心种子
-async def core_seed(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["human_in_loop_agree", "__end__"]]:
+async def core_seed(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "core_seed"
     try:
         # 变量
-        _trace_id = runtime.context.trace_id
-        _model_name = runtime.context.architecture_model
-        _middle_result = state.middle_result
-        _user_guidance = state.user_guidance
-
-        # 提示词
-        def _assemble_prompt():
-            tmp = {**_middle_result, "user_guidance": _user_guidance}
-            return [
-                HumanMessage(content=apply_system_prompt_template("core_seed", tmp))
-            ]
-
-        # LLM
-        def _get_llm():
-            return get_llm_by_type(_model_name)
-
-        response = await _get_llm().ainvoke(_assemble_prompt())
-        logger.info(
-            set_color(
-                f"trace_id={_trace_id} | node=core_seed | message={response}",
-                "pink",
-            )
-        )
-
-        _middle_result = {**_middle_result, "core_seed": response.content}
-
-        return Command(
-            goto=["human_in_loop_agree"],
-            update={
-                "middle_result": _middle_result,
-                "human_in_loop_node": "core_seed",
-            },
-        )
-
-    except Exception as e:
-        logger.error(
-            set_color(f"trace_id={_trace_id} | node=core_seed | error={e}", "red")
-        )
-        return Command(
-            goto="__end__",
-            update={
-                "err_message": f"trace_id={_trace_id} | node=core_seed | error={e}"
-            },
-        )
-
-
-# 角色动力学
-async def character_dynamics(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["human_in_loop_agree", "__end__"]]:
-    try:
-        # 变量
-        _trace_id = runtime.context.trace_id
-        _model_name = runtime.context.architecture_model
-        _middle_result = state.middle_result
-        _user_guidance = state.user_guidance
+        _thread_id = runtime.context.thread_id
         _task_dir = runtime.context.task_dir
+        _model_name = runtime.context.model
+        _user_guidance = state.user_guidance
+        _data = state.data
 
-        _work_dir = os.path.join(_task_dir, _trace_id)
+        _work_dir = os.path.join(_task_dir, _thread_id)
         os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
         def _assemble_prompt():
-            tmp = {**_middle_result, "user_guidance": _user_guidance}
-            return [
-                HumanMessage(
-                    content=apply_system_prompt_template("character_dynamics", tmp)
-                )
-            ]
+            tmp = {**_data, "user_guidance": _user_guidance.get("input", "")}
+            _prompt_tamplate = get_prompt(_NODE_NAME)
+            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
         # LLM
         def _get_llm():
             return get_llm_by_type(_model_name)
 
         response = await _get_llm().ainvoke(_assemble_prompt())
-        logger.info(
-            set_color(
-                f"trace_id={_trace_id} | node=character_dynamics | message={response}",
-                "pink",
-            )
-        )
+        log_info_set_color(_thread_id, _NODE_NAME, response)
 
-        _middle_result = {**_middle_result, "character_dynamics": response.content}
+        _middle_result = {_NODE_NAME: response.content}
 
-        return Command(
-            goto=["human_in_loop_agree"],
-            update={
-                "middle_result": _middle_result,
-                "human_in_loop_node": "character_dynamics",
-            },
+        os.makedirs(f"{_work_dir}/middle", exist_ok=True)
+        await write_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
+                "text": json.dumps(_middle_result, ensure_ascii=False),
+            }
         )
+        _middle_result.update(_data)
+        return {"code": 0, "err_message": "ok", "data": _middle_result}
 
     except Exception as e:
-        logger.error(
-            set_color(
-                f"trace_id={_trace_id} | node=character_dynamics | error={e}", "red"
-            )
+        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
+        return {"code": 1, "err_message": _err_message}
+
+
+# 角色动力学
+async def character_dynamics(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "character_dynamics"
+    try:
+        # 变量
+        _thread_id = runtime.context.thread_id
+        _task_dir = runtime.context.task_dir
+        _model_name = runtime.context.model
+        _user_guidance = state.user_guidance
+        _data = state.data
+
+        _work_dir = os.path.join(_task_dir, _thread_id)
+        os.makedirs(_work_dir, exist_ok=True)
+
+        # 提示词
+        def _assemble_prompt():
+            tmp = {**_data, "user_guidance": _user_guidance.get("input", "")}
+            _prompt_tamplate = get_prompt(_NODE_NAME)
+            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
+
+        # LLM
+        def _get_llm():
+            return get_llm_by_type(_model_name)
+
+        response = await _get_llm().ainvoke(_assemble_prompt())
+        log_info_set_color(_thread_id, _NODE_NAME, response)
+        _middle_result = {_NODE_NAME: response.content}
+        os.makedirs(f"{_work_dir}/middle", exist_ok=True)
+        await write_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
+                "text": json.dumps(_middle_result, ensure_ascii=False),
+            }
         )
-        return Command(
-            goto="__end__",
-            update={
-                "err_message": f"trace_id={_trace_id} | node=character_dynamics | error={e}"
-            },
-        )
+        _middle_result.update(_data)
+        return {"code": 0, "err_message": "ok", "data": _middle_result}
+
+    except Exception as e:
+        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
+        return {"code": 1, "err_message": _err_message}
 
 
 # 世界观
-async def world_building(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["human_in_loop_agree", "__end__"]]:
+async def world_building(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "world_building"
     try:
         # 变量
-        _trace_id = runtime.context.trace_id
-        _model_name = runtime.context.architecture_model
-        _middle_result = state.middle_result
+        _thread_id = runtime.context.thread_id
+        _task_dir = runtime.context.task_dir
+        _model_name = runtime.context.model
         _user_guidance = state.user_guidance
+        _data = state.data
+
+        _work_dir = os.path.join(_task_dir, _thread_id)
+        os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
         def _assemble_prompt():
-            tmp = {**_middle_result, "user_guidance": _user_guidance}
-            return [
-                HumanMessage(
-                    content=apply_system_prompt_template("world_building", tmp)
-                )
-            ]
+            tmp = {**_data, "user_guidance": _user_guidance.get("input", "")}
+            _prompt_tamplate = get_prompt(_NODE_NAME)
+            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
         # LLM
         def _get_llm():
             return get_llm_by_type(_model_name)
 
         response = await _get_llm().ainvoke(_assemble_prompt())
-        logger.info(
-            set_color(
-                f"trace_id={_trace_id} | node=world_building | message={response}",
-                "pink",
-            )
+        log_info_set_color(_thread_id, _NODE_NAME, response)
+        _middle_result = {_NODE_NAME: response.content}
+        os.makedirs(f"{_work_dir}/middle", exist_ok=True)
+        await write_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
+                "text": json.dumps(_middle_result, ensure_ascii=False),
+            }
         )
-
-        _middle_result = {**_middle_result, "world_building": response.content}
-
-        return Command(
-            goto=["human_in_loop_agree"],
-            update={
-                "middle_result": _middle_result,
-                "human_in_loop_node": "world_building",
-            },
-        )
+        _middle_result.update(_data)
+        return {"code": 0, "err_message": "ok", "data": _middle_result}
 
     except Exception as e:
-        logger.error(
-            set_color(f"trace_id={_trace_id} | node=world_building | error={e}", "red")
-        )
-        return Command(
-            goto="__end__",
-            update={
-                "err_message": f"trace_id={_trace_id} | node=world_building | error={e}"
-            },
-        )
+        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
+        return {"code": 1, "err_message": _err_message}
 
 
 # 三幕式情节架构
-async def plot_arch(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["human_in_loop_agree", "__end__"]]:
+async def plot_arch(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "plot_arch"
     try:
         # 变量
-        _trace_id = runtime.context.trace_id
-        _model_name = runtime.context.architecture_model
-        _middle_result = state.middle_result
+        _thread_id = runtime.context.thread_id
+        _task_dir = runtime.context.task_dir
+        _model_name = runtime.context.model
         _user_guidance = state.user_guidance
+        _data = state.data
+
+        _work_dir = os.path.join(_task_dir, _thread_id)
+        os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
         def _assemble_prompt():
-            tmp = {**_middle_result, "user_guidance": _user_guidance}
-            return [
-                HumanMessage(content=apply_system_prompt_template("plot_arch", tmp))
-            ]
+            tmp = {**_data, "user_guidance": _user_guidance.get("input", "")}
+            _prompt_tamplate = get_prompt(_NODE_NAME)
+            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
         # LLM
         def _get_llm():
             return get_llm_by_type(_model_name)
 
         response = await _get_llm().ainvoke(_assemble_prompt())
-        logger.info(
-            set_color(
-                f"trace_id={_trace_id} | node=plot_arch | message={response}",
-                "pink",
-            )
+        log_info_set_color(_thread_id, _NODE_NAME, response)
+        _middle_result = {_NODE_NAME: response.content}
+        os.makedirs(f"{_work_dir}/middle", exist_ok=True)
+        await write_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
+                "text": json.dumps(_middle_result, ensure_ascii=False),
+            }
         )
-
-        _middle_result = {**_middle_result, "plot_arch": response.content}
-
-        return Command(
-            goto=["human_in_loop_agree"],
-            update={
-                "middle_result": _middle_result,
-                "human_in_loop_node": "plot_arch",
-            },
-        )
+        _middle_result.update(_data)
+        return {"code": 0, "err_message": "ok", "data": _middle_result}
 
     except Exception as e:
-        logger.error(
-            set_color(f"trace_id={_trace_id} | node=plot_arch | error={e}", "red")
-        )
-        return Command(
-            goto="__end__",
-            update={
-                "err_message": f"trace_id={_trace_id} | node=plot_arch | error={e}"
-            },
-        )
+        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
+        return {"code": 1, "err_message": _err_message}
 
 
 # 章节目录
-async def chapter_blueprint(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["human_in_loop_agree", "__end__"]]:
+async def chapter_blueprint(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "chapter_blueprint"
     try:
         # 变量
-        _trace_id = runtime.context.trace_id
-        _model_name = runtime.context.architecture_model
+        _thread_id = runtime.context.thread_id
+        _task_dir = runtime.context.task_dir
+        _model_name = runtime.context.model
         _user_guidance = state.user_guidance
-        _middle_result = state.middle_result
-        _number_of_chapters: int = _middle_result["number_of_chapters"]
+        _data = state.data
 
-        _work_dir = os.path.join(runtime.context.task_dir, _trace_id)
-
-        #
-        if os.path.exists(f"{_work_dir}/novel_architecture.md"):
-            _novel_architecture = await read_file_tool.arun(
-                {"file_path": f"{_work_dir}/novel_architecture.md"}
-            )
-        else:
-            _novel_architecture = ""
-        if _novel_architecture is None:
-            return Command(
-                goto="__end__",
-                update={
-                    "err_message": f"trace_id={_trace_id} | node=chapter_blueprint | error=novel_architecture is None"
-                },
-            )
+        _work_dir = os.path.join(_task_dir, _thread_id)
+        os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
-        def _assemble_overall_prompt():
-            tmp = {**_middle_result, "user_guidance": _user_guidance}
-            return [
-                HumanMessage(
-                    content=apply_system_prompt_template("chapter_blueprint", tmp)
-                )
-            ]
+        def _assemble_prompt():
+            tmp = {**_data, "user_guidance": _user_guidance.get("input", "")}
+            _prompt_tamplate = get_prompt(_NODE_NAME)
+            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
-        def _assemble_chunk_prompt(chapter_list, start, end):
+        # LLM
+        def _get_llm():
+            return get_llm_by_type(_model_name)
+
+        response = await _get_llm().ainvoke(_assemble_prompt())
+        log_info_set_color(_thread_id, _NODE_NAME, response)
+        _middle_result = {_NODE_NAME: response.content}
+        os.makedirs(f"{_work_dir}/middle", exist_ok=True)
+        await write_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
+                "text": json.dumps(_middle_result, ensure_ascii=False),
+            }
+        )
+        _middle_result.update(_data)
+        return {"code": 0, "err_message": "ok", "data": _middle_result}
+
+    except Exception as e:
+        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
+        return {"code": 1, "err_message": _err_message}
+
+
+# 分片章节目录
+async def chunk_chapter_blueprint(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "chunk_chapter_blueprint"
+    try:
+        # 变量
+        _thread_id = runtime.context.thread_id
+        _task_dir = runtime.context.task_dir
+        _model_name = runtime.context.model
+        _user_guidance = state.user_guidance
+        _data = state.data
+
+        _work_dir = os.path.join(_task_dir, _thread_id)
+        os.makedirs(_work_dir, exist_ok=True)
+        _number_of_chapters = _data["number_of_chapters"]
+
+        # 提示词
+        def _assemble_prompt(chapter_list, start, end):
             tmp = {
-                **_middle_result,
-                "user_guidance": _user_guidance,
+                **_data,
+                "user_guidance": _user_guidance.get("input", ""),
                 "chapter_list": chapter_list,
                 "start": start,
                 "end": end,
             }
-            return [
-                HumanMessage(
-                    content=apply_system_prompt_template(
-                        "chunked_chapter_blueprint", tmp
-                    )
-                )
-            ]
+            _prompt_tamplate = get_prompt(_NODE_NAME)
+            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
         # LLM
         def _get_llm():
             return get_llm_by_type(_model_name)
 
-        if _number_of_chapters <= 10:  # 小于10章的一次性产出
-            response = await _get_llm().ainvoke(_assemble_overall_prompt())
-            logger.info(
-                set_color(
-                    f"trace_id={_trace_id} | node=chapter_blueprint | message={response}",
-                    "pink",
-                )
+        current_start = 1
+        final_chapter_blueprint = []
+        while current_start <= _number_of_chapters:
+            current_end = min(current_start + 10, _number_of_chapters)
+            chapter_list = "\n\n".join(final_chapter_blueprint[-200:])
+            response = await _get_llm().ainvoke(
+                _assemble_prompt(chapter_list, current_start, current_end)
             )
+            log_info_set_color(_thread_id, _NODE_NAME, response)
+            final_chapter_blueprint.append(response.content)
 
-            _middle_result = {**_middle_result, "chapter_blueprint": response.content}
-        else:
-            current_start = 1
-            final_chapter_blueprint = []
-            while current_start <= _number_of_chapters:
-                current_end = min(current_start + 10, _number_of_chapters)
-                chapter_list = "\n\n".join(final_chapter_blueprint[-200:])
+            current_start = current_end + 1
 
-                response = await _get_llm().ainvoke(
-                    _assemble_chunk_prompt(chapter_list, current_start, current_end)
-                )
-                final_chapter_blueprint.append(response.content)
-
-                logger.info(
-                    set_color(
-                        f"trace_id={_trace_id} | node=chunk_chapter_blueprint | current_start={current_start} | current_end={current_end} | message={response}",
-                        "pink",
-                    )
-                )
-                current_start = current_end + 1
-
-            _middle_result = {
-                **_middle_result,
-                "chapter_blueprint": "\n\n".join(final_chapter_blueprint),
+        _middle_result = {_NODE_NAME: "\n\n".join(final_chapter_blueprint)}
+        os.makedirs(f"{_work_dir}/middle", exist_ok=True)
+        await write_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
+                "text": json.dumps(_middle_result, ensure_ascii=False),
             }
-
-        return Command(
-            goto=["human_in_loop_agree"],
-            update={
-                "middle_result": _middle_result,
-                "human_in_loop_node": "chapter_blueprint",
-            },
         )
+        _middle_result.update(_data)
+        return {"code": 0, "err_message": "ok", "data": _middle_result}
 
     except Exception as e:
-        logger.error(
-            set_color(
-                f"trace_id={_trace_id} | node=chapter_blueprint | error={e}", "red"
-            )
-        )
-        return Command(
-            goto="__end__",
-            update={
-                "err_message": f"trace_id={_trace_id} | node=chapter_blueprint | error={e}"
-            },
-        )
+        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
+        return {"code": 1, "err_message": _err_message}
 
 
 # 结果保存
-async def summarize_architecture(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["__end__"]]:
+async def build_architecture(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "build_architecture"
     try:
         # 变量
-        _trace_id = runtime.context.trace_id
+        _thread_id = runtime.context.thread_id
         _task_dir = runtime.context.task_dir
-        _middle_result = state.middle_result
+        _data = state.data
 
-        _work_dir = os.path.join(_task_dir, _trace_id)
+        _work_dir = os.path.join(_task_dir, _thread_id)
         os.makedirs(_work_dir, exist_ok=True)
 
         final_content = (
             "#=== 0) 小说设定 ===\n"
-            f"主题：{_middle_result['topic']},类型：{_middle_result['genre']},篇幅：约{_middle_result['number_of_chapters']}章（每章{_middle_result['word_number']}字）\n\n"
+            f"主题：{_data['topic']},类型：{_data['genre']},篇幅：约{_data['number_of_chapters']}章（每章{_data['word_number']}字）\n\n"
             "#=== 1) 核心种子 ===\n"
-            f"{_middle_result['core_seed']}\n\n"
+            f"{_data['core_seed']}\n\n"
             "#=== 2) 角色动力学 ===\n"
-            f"{_middle_result['character_dynamics']}\n\n"
+            f"{_data['character_dynamics']}\n\n"
             "#=== 3) 世界观 ===\n"
-            f"{_middle_result['world_building']}\n\n"
+            f"{_data['world_building']}\n\n"
             "#=== 4) 三幕式情节架构 ===\n"
-            f"{_middle_result['plot_arch']}\n"
+            f"{_data['plot_arch']}\n"
         )
         await write_file_tool.arun(
             {
@@ -532,45 +431,25 @@ async def summarize_architecture(
                 "text": final_content,
             }
         )
-        logger.info(
-            set_color(
-                f"trace_id={_trace_id} | node=summarize_architecture | message=save to {_work_dir}/novel_architecture.md",
-                "pink",
-            )
+        log_info_set_color(
+            _thread_id, _NODE_NAME, "save to {_work_dir}/novel_architecture.md"
         )
 
         await write_file_tool.arun(
             {
                 "file_path": f"{_work_dir}/novel_chapter_blueprint.md",
-                "text": _middle_result["chapter_blueprint"],
+                "text": _data["chapter_blueprint"],
             }
         )
-        logger.info(
-            set_color(
-                f"trace_id={_trace_id} | node=save_chapter_blueprint | message=save to {_work_dir}/novel_chapter_blueprint.md",
-                "pink",
-            )
+        log_info_set_color(
+            _thread_id, _NODE_NAME, "save to {_work_dir}/novel_chapter_blueprint.md"
         )
 
-        return Command(
-            goto=["__end__"],
-            update={
-                "architecture_messages": final_content,
-            },
-        )
+        return {"code": 0, "err_message": "ok", "data": final_content}
 
     except Exception as e:
-        logger.error(
-            set_color(
-                f"trace_id={_trace_id} | node=summarize_architecture | error={e}", "red"
-            )
-        )
-        return Command(
-            goto="__end__",
-            update={
-                "err_message": f"trace_id={_trace_id} | node=summarize_architecture | error={e}"
-            },
-        )
+        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
+        return {"code": 1, "err_message": _err_message}
 
 
 # 人工指导
@@ -583,66 +462,31 @@ async def human_in_loop_guidance(
         "world_building",
         "plot_arch",
         "chapter_blueprint",
-        "__end__",
     ]
 ]:
-    _trace_id = runtime.context.trace_id
+    # 变量
+    _thread_id = runtime.context.thread_id
+    _task_dir = runtime.context.task_dir
     _human_in_loop_node = state.human_in_loop_node
-    if _human_in_loop_node == "core_seed":
-        user_guidance = interrupt(
-            {
-                "message_id": _trace_id,
-                "content": "基于上述生成信息准备开始`构建核心种子`，是否需要人工指导，需要的话直接输入指导内容，不需要的话直接输入`不需要`",
-            }
-        )
-        _result = user_guidance["result"]
-        return Command(goto="core_seed", update={"user_guidance": _result})
 
-    elif _human_in_loop_node == "character_dynamics":
-        user_guidance = interrupt(
-            {
-                "message_id": _trace_id,
-                "content": "基于上述生成信息准备开始`构建角色`，是否需要人工指导，需要的话直接输入指导内容，不需要的话直接输入`不需要`",
-            }
-        )
-        _result = user_guidance["result"]
-        return Command(goto="character_dynamics", update={"user_guidance": _result})
+    _work_dir = os.path.join(_task_dir, _thread_id)
+    os.makedirs(_work_dir, exist_ok=True)
 
-    elif _human_in_loop_node == "world_building":
-        user_guidance = interrupt(
-            {
-                "message_id": _trace_id,
-                "content": "基于上述生成信息准备开始`构建世界观`，是否需要人工指导，需要的话直接输入指导内容，不需要的话直接输入`不需要`",
-            }
-        )
-        _result = user_guidance["result"]
-        return Command(goto="world_building", update={"user_guidance": _result})
+    guidance_tip = "基于上述生成信息准备开始`{}`，是否需要人工指导，需要的话直接输入指导内容，不需要的话直接输入`不需要`"
 
-    elif _human_in_loop_node == "plot_arch":
-        user_guidance = interrupt(
-            {
-                "message_id": _trace_id,
-                "content": "基于上述生成信息准备开始`构建三幕式情节`，是否需要人工指导，需要的话直接输入指导内容，不需要的话直接输入`不需要`",
-            }
-        )
-        _result = user_guidance["result"]
-        return Command(goto="plot_arch", update={"user_guidance": _result})
-
-    elif _human_in_loop_node == "chapter_blueprint":
-        user_guidance = interrupt(
-            {
-                "message_id": _trace_id,
-                "content": "基于上述生成信息准备开始`构建章节蓝图`，是否需要人工指导，需要的话直接输入指导内容，不需要的话直接输入`不需要`",
-            }
-        )
-        _result = user_guidance["result"]
-        return Command(goto="chapter_blueprint", update={"user_guidance": _result})
-
-    else:
-        return Command(goto="__end__")
+    user_guidance = interrupt(
+        {
+            "message_id": _thread_id,
+            "content": guidance_tip.format(_human_in_loop_node),
+        }
+    )
+    return Command(
+        goto=_human_in_loop_node,  # type: ignore
+        update={"user_guidance": user_guidance},
+    )
 
 
-# 人工指导
+# 人工确认
 async def human_in_loop_agree(
     state: State, runtime: Runtime[Context]
 ) -> Command[
@@ -654,178 +498,63 @@ async def human_in_loop_agree(
         "world_building",
         "plot_arch",
         "chapter_blueprint",
-        "summarize_architecture",
+        "build_architecture",
         "__end__",
     ]
 ]:
-    _trace_id = runtime.context.trace_id
+    # 变量
+    _thread_id = runtime.context.thread_id
+    _task_dir = runtime.context.task_dir
+    _code = state.code
     _human_in_loop_node = state.human_in_loop_node
-    _middle_result = state.middle_result
+    _data = state.data
 
-    if _human_in_loop_node == "extract_setting":
-        user_guidance = interrupt(
-            {
-                "message_id": _trace_id,
-                "content": "对于上述`抽取的信息`是否满意，不满意的话，可以输入修改建议，若是满意的话，可以输入`满意`",
-            }
-        )
-        _result = user_guidance["result"]
-        if _result == "满意":
-            return Command(
-                goto="human_in_loop_guidance",
-                update={
-                    "user_guidance": _result,
-                    "human_in_loop_node": "core_seed",
-                },
-            )
-        else:
-            tmp = json.dumps(_middle_result, ensure_ascii=False)
-            _result = f"<上一次生成的结果>\n\n{tmp}\n\n</上一次生成的结果>\n\n<用户修改建议>\n\n{_result}\n\n</用户修改建议>"
+    _work_dir = os.path.join(_task_dir, _thread_id)
+    os.makedirs(_work_dir, exist_ok=True)
 
-            return Command(
-                goto="extract_setting",
-                update={
-                    "user_guidance": _result,
-                },
-            )
+    if _code != 0:
+        return Command(goto="__end__")
 
-    elif _human_in_loop_node == "core_seed":
-        user_guidance = interrupt(
-            {
-                "message_id": _trace_id,
-                "content": "对于上述`核心种子`是否满意，不满意的话，可以输入修改建议，若是满意的话，可以输入`满意`",
-            }
-        )
-        _result = user_guidance["result"]
-        if _result == "满意":
-            return Command(
-                goto="human_in_loop_guidance",
-                update={
-                    "user_guidance": _result,
-                    "human_in_loop_node": "character_dynamics",
-                },
-            )
-        else:
-            tmp = _middle_result["core_seed"]
-            _result = f"<上一次生成的结果>\n\n{tmp}\n\n</上一次生成的结果>\n\n<用户修改建议>\n\n{_result}\n\n</用户修改建议>"
+    guidance_tip = "对于上述`{}`是否满意，不满意的话，可以输入修改建议，若是满意的话，可以输入`满意`"
+    user_guidance = interrupt(
+        {
+            "message_id": _thread_id,
+            "content": guidance_tip.format(_human_in_loop_node),
+        }
+    )
 
-            return Command(
-                goto="core_seed",
-                update={
-                    "user_guidance": _result,
-                },
-            )
-
-    elif _human_in_loop_node == "character_dynamics":
-        user_guidance = interrupt(
-            {
-                "message_id": _trace_id,
-                "content": "对于上述`角色信息`是否满意，不满意的话，可以输入修改建议，若是满意的话，可以输入`满意`",
-            }
-        )
-        _result = user_guidance["result"]
-        if _result == "满意":
-            return Command(
-                goto="human_in_loop_guidance",
-                update={
-                    "user_guidance": _result,
-                    "human_in_loop_node": "world_building",
-                },
-            )
-        else:
-            tmp = _middle_result["character_dynamics"]
-            _result = f"<上一次生成的结果>\n\n{tmp}\n\n</上一次生成的结果>\n\n<用户修改建议>\n\n{_result}\n\n</用户修改建议>"
-
-            return Command(
-                goto="character_dynamics",
-                update={
-                    "user_guidance": _result,
-                },
-            )
-
-    elif _human_in_loop_node == "world_building":
-        user_guidance = interrupt(
-            {
-                "message_id": _trace_id,
-                "content": "对于上述`世界观`是否满意，不满意的话，可以输入修改建议，若是满意的话，可以输入`满意`",
-            }
-        )
-        _result = user_guidance["result"]
-        if _result == "满意":
-            return Command(
-                goto="human_in_loop_guidance",
-                update={
-                    "user_guidance": _result,
-                    "human_in_loop_node": "plot_arch",
-                },
-            )
-        else:
-            tmp = _middle_result["world_building"]
-            _result = f"<上一次生成的结果>\n\n{tmp}\n\n</上一次生成的结果>\n\n<用户修改建议>\n\n{_result}\n\n</用户修改建议>"
-
-            return Command(
-                goto="world_building",
-                update={
-                    "user_guidance": _result,
-                },
-            )
-
-    elif _human_in_loop_node == "plot_arch":
-        user_guidance = interrupt(
-            {
-                "message_id": _trace_id,
-                "content": "对于上述`三幕式情节架构`是否满意，不满意的话，可以输入修改建议，若是满意的话，可以输入`满意`",
-            }
-        )
-        _result = user_guidance["result"]
-        if _result == "满意":
-            return Command(
-                goto="chapter_blueprint",
-                update={
-                    "user_guidance": _result,
-                    "human_in_loop_node": "plot_arch",
-                },
-            )
-        else:
-            tmp = _middle_result["plot_arch"]
-            _result = f"<上一次生成的结果>\n\n{tmp}\n\n</上一次生成的结果>\n\n<用户修改建议>\n\n{_result}\n\n</用户修改建议>"
-
-            return Command(
-                goto="plot_arch",
-                update={
-                    "user_guidance": _result,
-                },
-            )
-
-    elif _human_in_loop_node == "chapter_blueprint":
-        user_guidance = interrupt(
-            {
-                "message_id": _trace_id,
-                "content": "对于上述`构建章节蓝图`是否满意，不满意的话，可以输入修改建议，若是满意的话，可以输入`满意`",
-            }
-        )
-        _result = user_guidance["result"]
-        if _result == "满意":
-            return Command(
-                goto="summarize_architecture",
-                update={
-                    "user_guidance": _result,
-                    "human_in_loop_node": "chapter_blueprint",
-                },
-            )
-        else:
-            tmp = _middle_result["chapter_blueprint"]
-            _result = f"<上一次生成的结果>\n\n{tmp}\n\n</上一次生成的结果>\n\n<用户修改建议>\n\n{_result}\n\n</用户修改建议>"
-
-            return Command(
-                goto="chapter_blueprint",
-                update={
-                    "user_guidance": _result,
-                },
-            )
-
+    _current_node = _human_in_loop_node
+    if _current_node == "extract_setting":
+        _next_node = "core_seed"
+    elif _current_node == "core_seed":
+        _next_node = "character_dynamics"
+    elif _current_node == "character_dynamics":
+        _next_node = "world_building"
+    elif _current_node == "world_building":
+        _next_node = "plot_arch"
+    elif _current_node == "plot_arch":
+        _next_node = "chapter_blueprint"
+    elif _current_node == "chapter_blueprint":
+        _next_node = "build_architecture"
     else:
         return Command(goto="__end__")
+
+    if user_guidance["human_in_loop_value"] == "满意":
+        return Command(
+            goto="human_in_loop_guidance",
+            update={
+                "human_in_loop_node": _next_node,
+            },
+        )
+    else:
+        tmp = json.dumps(_data, ensure_ascii=False)
+        user_guidance["human_in_loop_value"] = (
+            f"<上一次生成的结果>\n\n{tmp}\n\n</上一次生成的结果>\n\n<用户修改建议>\n\n{user_guidance['human_in_loop_value']}\n\n</用户修改建议>"
+        )
+        return Command(
+            goto=_current_node,  # type: ignore
+            update={"user_guidance": user_guidance},
+        )
 
 
 # architecture subgraph
@@ -836,16 +565,22 @@ _agent.add_node("character_dynamics", character_dynamics)
 _agent.add_node("world_building", world_building)
 _agent.add_node("plot_arch", plot_arch)
 _agent.add_node("chapter_blueprint", chapter_blueprint)
-_agent.add_node("summarize_architecture", summarize_architecture)
+_agent.add_node("build_architecture", build_architecture)
 
 _agent.add_node("human_in_loop_guidance", human_in_loop_guidance)
 _agent.add_node("human_in_loop_agree", human_in_loop_agree)
 
 _agent.add_edge(START, "extract_setting")
-
+_agent.add_edge("extract_setting", "human_in_loop_agree")
+_agent.add_edge("core_seed", "human_in_loop_agree")
+_agent.add_edge("character_dynamics", "human_in_loop_agree")
+_agent.add_edge("world_building", "human_in_loop_agree")
+_agent.add_edge("plot_arch", "human_in_loop_agree")
+_agent.add_edge("chapter_blueprint", "human_in_loop_agree")
+_agent.add_edge("build_architecture", END)
 
 checkpointer = InMemorySaver()
 ainovel_architecture_agent = _agent.compile(checkpointer=checkpointer)
 
-png_bytes = ainovel_architecture_agent.get_graph(xray=True).draw_mermaid()
-logger.info(f"ainovel_architecture_agent: \n\n{png_bytes}")
+# png_bytes = ainovel_architecture_agent.get_graph(xray=True).draw_mermaid()
+# logger.info(f"ainovel_architecture_agent: \n\n{png_bytes}")

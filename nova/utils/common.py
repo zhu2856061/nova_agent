@@ -125,6 +125,7 @@ def handle_event(trace_id, event):
                     "checkpoint_ns": checkpoint_ns,
                     "parent_ids": parent_ids,
                     "trace_id": trace_id,
+                    "output": data["output"] if data.get("output") else "",
                 },
             }
             return ydata
@@ -141,7 +142,7 @@ def handle_event(trace_id, event):
                     "checkpoint_ns": checkpoint_ns,
                     "parent_ids": parent_ids,
                     "trace_id": trace_id,
-                    "input": data.get("input"),
+                    "input": data["input"] if data.get("input") else "",
                 },
             }
             return ydata
@@ -309,6 +310,22 @@ def handle_event(trace_id, event):
                     },
                 }
                 return ydata
+
+        elif kind == "on_parser_end":
+            _name = langgraph_node + "|" + name
+            ydata = {
+                "event": "on_parser_end",
+                "data": {
+                    "node_name": _name,
+                    "step": langgraph_step,
+                    "run_id": run_id,
+                    "checkpoint_ns": checkpoint_ns,
+                    "parent_ids": parent_ids,
+                    "trace_id": trace_id,
+                    "output": data["output"],
+                },
+            }
+
         else:
             return None
 

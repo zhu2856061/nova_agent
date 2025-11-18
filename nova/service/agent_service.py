@@ -1,18 +1,17 @@
 # -*- coding: utf-8 -*-
-# @Time   : 2025/08/20
+# @Time   : 2025/11/20
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
 import logging
-from typing import AsyncGenerator, Dict, Optional
+from typing import AsyncGenerator
 
 import aiohttp
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from langchain_core.runnables import RunnableConfig
 from langgraph.types import Command
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
-from nova import CONF
+from nova.agent.ainovel import ainovel
 from nova.agent.ainovel_architect import ainovel_architecture_agent
 from nova.agent.ainovel_chapter import ainovel_chapter_agent
 from nova.agent.ainovel_interact import (
@@ -25,9 +24,11 @@ from nova.agent.ainovel_interact import (
     summarize_architecture_agent,
     world_building_agent,
 )
+from nova.agent.deepresearcher import deepresearcher
 from nova.agent.memorizer import memorizer_agent
 from nova.agent.researcher import researcher_agent
 from nova.agent.wechat_researcher import wechat_researcher_agent
+from nova.model.agent import AgentRequest, AgentResponse
 from nova.utils import handle_event
 
 logger = logging.getLogger(__name__)
@@ -40,211 +41,171 @@ agent_router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
+# Central agent registry - maintains all agent mappings
+AGENT_REGISTRY = {
+    "researcher": researcher_agent,
+    "wechat_researcher": wechat_researcher_agent,
+    "memorizer": memorizer_agent,
+    "ainovel_architect": ainovel_architecture_agent,
+    "ainovel_chapter": ainovel_chapter_agent,
+    "ainovel_extract_setting": extract_setting_agent,
+    "ainovel_core_seed": core_seed_agent,
+    "ainovel_character_dynamics": character_dynamics_agent,
+    "ainovel_world_building": world_building_agent,
+    "ainovel_plot_arch": plot_arch_agent,
+    "ainovel_chapter_blueprint": chapter_blueprint_agent,
+    "ainovel_summarize_architecture": summarize_architecture_agent,
+    "ainovel_chapter_draft": chapter_draft_agent,
+    "ainovel": ainovel,
+    "deepresearcher": deepresearcher,
+}
 
-class AgentRequest(BaseModel):
-    trace_id: Optional[str] = Field(None, description="trace_id for logging")
-    state: Optional[Dict] = Field(None, description="the input messages of the task")
-    context: Dict = Field(..., description="the context runtime dict")
-    user_guidance: Optional[Dict] = Field(None, description="the user guidance")
-    stream: bool = Field(True, description="whether to stream the response")
+
+# Dependency for getting agent by name
+def get_agent(agent_name: str):
+    agent = AGENT_REGISTRY.get(agent_name)
+    if not agent:
+        raise HTTPException(status_code=404, detail=f"Agent '{agent_name}' not found")
+    return agent
 
 
-class AgentResponse(BaseModel):
-    code: int = Field(..., description="code ID")
-    messages: Dict = Field(..., description=" response message")
-
-
-async def service(Task, request: AgentRequest):
-    if not request:
-        raise HTTPException(status_code=400, detail="Input instances cannot be empty")
-
+# Shared streaming handler
+async def stream_agent_events(
+    instance, trace_id: str, state: BaseModel, context: BaseModel, config: dict
+) -> AsyncGenerator:
+    """Generic streaming handler for all agents"""
     try:
-        state = request.state
-        context = {
-            **request.context,
-            "trace_id": request.trace_id,
-            "task_dir": CONF["SYSTEM"]["task_dir"],
-        }
-        config = {"configurable": {"thread_id": request.trace_id}}
-        stream = request.stream
+        async with aiohttp.ClientSession() as session:  # Auto-closing context manager
+            async for event in instance.astream_events(
+                state, config=config, context=context, version="v2"
+            ):
+                response = handle_event(trace_id, event)
+                if response:
+                    yield (
+                        AgentResponse(code=0, data=response).model_dump_json() + "\n"
+                    )
 
-        if not stream:
-            result = await Task.ainvoke(state, context=context, config=config)  # type: ignore
-            if result.get("err_message"):
-                return AgentResponse(
-                    code=1,
-                    messages={"err": result.get("err_message")},
-                )
-
-            content = result.get("messages")[-1].content  # type: ignore
-            return AgentResponse(
-                code=0,
-                messages={"role": "assistant", "content": content},  # type: ignore
-            )
-        else:
-
-            async def async_service(
-                trace_id, inputs, context, config
-            ) -> AsyncGenerator:
-                session = None
-                try:
-                    session = aiohttp.ClientSession()  # 创建会话
-                    async for event in Task.astream_events(
-                        inputs, config=config, context=context, version="v2"
-                    ):
-                        data = handle_event(trace_id, event)
-                        if data:
-                            if data["event"] == "error":
-                                _response = AgentResponse(code=1, messages=data)
-                            else:
-                                _response = AgentResponse(code=0, messages=data)
-
-                            yield _response.model_dump_json() + "\n"
-
-                        else:
-                            continue
-
-                except Exception as e:
-                    logger.error(f"Error during streaming: {e}")
-                    raise
-                finally:
-                    if session is not None:
-                        await session.close()  # 确保会话关闭
-
-            return StreamingResponse(
-                async_service(request.trace_id, state, context, config),
-                media_type="application/json",  # 流式数据的 MIME 类型
-            )
     except Exception as e:
-        logger.error(f"Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@agent_router.post("/researcher", response_model=AgentResponse)
-async def researcher_service(request: AgentRequest):
-    return await service(researcher_agent, request)
-
-
-@agent_router.post("/wechat_researcher", response_model=AgentResponse)
-async def wechat_researcher_service(request: AgentRequest):
-    return await service(wechat_researcher_agent, request)
-
-
-@agent_router.post("/memorizer")
-async def memorizer_service(request: AgentRequest):
-    return await service(memorizer_agent, request)
-
-
-@agent_router.post("/ainovel_architect")
-async def ainovel_architect_service(request: AgentRequest):
-    return await service(ainovel_architecture_agent, request)
-
-
-@agent_router.post("/ainovel_chapter")
-async def ainovel_chapter_service(request: AgentRequest):
-    return await service(ainovel_chapter_agent, request)
-
-
-@agent_router.post("/ainovel_extract_setting")
-async def ainovel_extract_setting_service(request: AgentRequest):
-    return await service(extract_setting_agent, request)
-
-
-@agent_router.post("/ainovel_core_seed")
-async def ainovel_core_seed_service(request: AgentRequest):
-    return await service(core_seed_agent, request)
-
-
-@agent_router.post("/ainovel_character_dynamics")
-async def ainovel_character_dynamics_service(request: AgentRequest):
-    return await service(character_dynamics_agent, request)
-
-
-@agent_router.post("/ainovel_world_building")
-async def ainovel_world_building_service(request: AgentRequest):
-    return await service(world_building_agent, request)
-
-
-@agent_router.post("/ainovel_plot_arch")
-async def ainovel_plot_arch_service(request: AgentRequest):
-    return await service(plot_arch_agent, request)
-
-
-@agent_router.post("/ainovel_chapter_blueprint")
-async def ainovel_chapter_blueprint_service(request: AgentRequest):
-    return await service(chapter_blueprint_agent, request)
-
-
-@agent_router.post("/ainovel_summarize_architecture")
-async def ainovel_summarize_architecture_service(request: AgentRequest):
-    return await service(summarize_architecture_agent, request)
-
-
-@agent_router.post("/ainovel_chapter_draft")
-async def ainovel_chapter_draft_service(request: AgentRequest):
-    return await service(chapter_draft_agent, request)
+        logger.error(f"Streaming error (trace_id={trace_id}): {str(e)}", exc_info=True)
+        error_response = AgentResponse(
+            code=500, err_message=f"Streaming failed: {str(e)}"
+        )
+        yield error_response.model_dump_json() + "\n"
+    finally:
+        if session is not None:
+            await session.close()  # 确保会话关闭
 
 
 @agent_router.post("/human_in_loop")
 async def human_in_loop(request: AgentRequest):
-    """LLM Server"""
     if not request:
         raise HTTPException(status_code=400, detail="Input instances cannot be empty")
 
     try:
-        user_guidance = request.user_guidance
-        context = {
-            **request.context,
-            "trace_id": request.trace_id,
-            "task_dir": CONF["SYSTEM"]["task_dir"],
-        }
-        config: RunnableConfig = {"configurable": {"thread_id": request.trace_id}}
-        if not user_guidance:
-            raise HTTPException(status_code=1, detail="user_guidance is None")
+        trace_id = request.trace_id
+        context = request.context
+        state = request.state
+        thread_id = context.thread_id
+        config = {"configurable": {"thread_id": thread_id}}
+
+        user_guidance = state.user_guidance
+        if user_guidance:
+            raise HTTPException(status_code=400, detail="user_guidance is required")
 
         agent_name = user_guidance.get("agent_name")
         if not agent_name:
-            raise HTTPException(status_code=1, detail="agent_name is None")
+            raise HTTPException(status_code=400, detail="agent_name is required")
 
-        if agent_name == "ainovel_architect":
-            agent_workflow = ainovel_architecture_agent
-        elif agent_name == "ainovel_chapter":
-            agent_workflow = ainovel_chapter_agent
-        else:
-            raise HTTPException(status_code=2, detail="agent_name is not supported")
+        agent = get_agent(agent_name)
 
-        async def async_service(trace_id, user_guidance, context) -> AsyncGenerator:
-            session = None
+        # Streaming handler for human-in-loop
+        async def stream_human_in_loop() -> AsyncGenerator:
             try:
-                session = aiohttp.ClientSession()  # 创建会话
-                async for event in agent_workflow.astream_events(
-                    Command(resume=user_guidance),
-                    config=config,
-                    context=context,
-                    version="v2",
-                ):
-                    data = handle_event(trace_id, event)
-                    if data:
-                        if data["event"] == "error":
-                            _response = AgentResponse(code=1, messages=data)
-                        else:
-                            _response = AgentResponse(code=0, messages=data)
-
-                        yield _response.model_dump_json() + "\n"
-                    else:
-                        continue
-
+                async with aiohttp.ClientSession() as session:
+                    async for event in agent.astream_events(
+                        Command(resume=user_guidance),
+                        config=config,
+                        context=context,
+                        version="v2",
+                    ):
+                        response: AgentResponse = handle_event(trace_id, event)
+                        if response:
+                            yield response.model_dump_json() + "\n"
             except Exception as e:
-                logger.error(f"Error during streaming: {e}")
-                raise
+                logger.error(
+                    f"Human-in-loop error (trace_id={trace_id}): {str(e)}",
+                    exc_info=True,
+                )
+                error_response = AgentResponse(
+                    code=500, err_message=f"Interaction failed: {str(e)}"
+                )
+                yield error_response.model_dump_json() + "\n"
             finally:
                 if session is not None:
                     await session.close()  # 确保会话关闭
 
         return StreamingResponse(
-            async_service(request.trace_id, user_guidance, context),
+            stream_human_in_loop(),
             media_type="application/json",  # 流式数据的 MIME 类型
         )
+    except HTTPException:
+        # Re-raise HTTP exceptions without modification
+        raise
     except Exception as e:
-        logger.error(f"Error: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Unexpected error in human-in-loop: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
+
+
+async def agent_service(agent, request: AgentRequest):
+    if not request:
+        raise HTTPException(status_code=400, detail="Input instances cannot be empty")
+
+    try:
+        trace_id = request.trace_id
+        context = request.context
+        state = request.state
+        stream = request.stream
+        thread_id = request.context.thread_id
+        config = {"configurable": {"thread_id": thread_id}}
+
+        if not stream:
+            response = await agent.ainvoke(state, context=context, config=config)
+            return AgentResponse(code=0, data=response)
+        else:
+            return StreamingResponse(
+                stream_agent_events(agent, trace_id, state, context, config),
+                media_type="application/json",  # 流式数据的 MIME 类型
+            )
+    except Exception as e:
+        logger.error(
+            f"Agent service error (trace_id={request.trace_id}): {str(e)}",
+            exc_info=True,
+        )
+        raise HTTPException(status_code=500, detail=f"Service error: {str(e)}")
+
+
+# 动态注册函数
+def register_agent_endpoints():
+    """Dynamically register all agent endpoints from the registry"""
+    for agent_name, agent_instance in AGENT_REGISTRY.items():
+        # 增加一层闭包，固定当前的 agent_name
+        def create_endpoint_factory(current_agent_name):
+            async def endpoint(
+                request: AgentRequest,
+                agent=Depends(
+                    lambda: get_agent(current_agent_name)
+                ),  # 使用固定的 current_agent_name
+            ):
+                return await agent_service(agent, request)
+
+            return endpoint
+
+        # 为每个 agent 生成独立的 endpoint
+        endpoint = create_endpoint_factory(agent_name)
+
+        # 注册端点
+        agent_router.post(f"/{agent_name}", name=f"{agent_name}_service")(endpoint)
+
+
+# Register all agent endpoints
+register_agent_endpoints()

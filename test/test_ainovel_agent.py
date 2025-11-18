@@ -9,19 +9,19 @@ sys.path.append("..")
 import os
 
 os.environ["CONFIG_PATH"] = "../config.yaml"
-from nova.agent.ainovel_chapter import ainovel_chapter_agent
+from nova.agent.ainovel_interact import extract_setting_agent
 
-inputs = {"word_number": 2000, "current_chapter_id": 1, "number_of_chapters": 6}
+state = {"user_guidance": "写一篇科幻小说"}
 
 context = {
     "trace_id": "1",
     "task_dir": "./",
-    "chapter_model": "reasoning",
+    "model": "deepseek",
 }
 
 
 async def async_generate_response():
-    tmp = await ainovel_chapter_agent.ainvoke(inputs, context=context)  # type: ignore
+    tmp = await extract_setting_agent.ainvoke(state, context=context)  # type: ignore
     print("Assistant:\n", tmp)
 
 

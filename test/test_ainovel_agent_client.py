@@ -6,33 +6,33 @@ import asyncio
 import json
 
 import httpx
+import requests
+
+request_data = {
+    "trace_id": "123",
+    "context": {
+        "thread_id": "Nova",
+        "task_dir": "merlin",
+        "model": "basic",
+    },
+    "state": {
+        "user_guidance": {
+            "input": "请帮忙写一篇废土世界的 AI 叛乱，偏科幻的小说, 大概3章节，每章节大约2000字"
+        },
+    },
+    "stream": True,
+}
 
 
-async def stream_task_client():
+async def ainovel_agent_client():
     # 定义请求数据，符合 LLMRequest 的结构
-    request_data = {
-        "trace_id": "123",
-        "context": {
-            "task_dir": "./",
-            "clarify_model": "reasoning",
-            "architecture_model": "reasoning",
-        },
-        "state": {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "请帮忙写一篇废土世界的 AI 叛乱，偏科幻的小说, 大概3章节，每章节大约2000字",
-                },
-            ],
-        },
-    }
 
     # 使用 httpx 异步客户端发送请求
     async with httpx.AsyncClient(timeout=600.0) as client:
         # 发送 POST 请求到 /stream_llm 路由
         async with client.stream(
             "POST",
-            "http://0.0.0.0:2021/task/stream_ainovel",
+            "http://0.0.0.0:2021/agent/ainovel_extract_setting",
             json=request_data,
             timeout=600.0,
         ) as response:
@@ -47,6 +47,14 @@ async def stream_task_client():
                     print(tmp)
 
 
+def agent_request():
+    request_data["stream"] = False
+    r = requests.post(
+        "http://0.0.0.0:2021/agent/ainovel_extract_setting", json=request_data
+    )
+    print(r.json())
+
+
 if __name__ == "__main__":
-    asyncio.run(stream_task_client())
-    # stream_llm_request()
+    agent_request()
+    # asyncio.run(ainovel_agent_client())

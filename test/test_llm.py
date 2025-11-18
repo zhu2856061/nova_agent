@@ -45,22 +45,33 @@ class ClarifyWithUser(BaseModel):
     )
 
 
-llm_instance = get_llm_by_type(
-    "basic_no_thinking"
-)  # .with_structured_output(AnswerWithJustification)
-# llm_instance = get_llm_by_type("reasoning")
+def llm_instance():
+    llm_instance = get_llm_by_type(
+        "basic_no_thinking"
+    )  # .with_structured_output(AnswerWithJustification)
+    # llm_instance = get_llm_by_type("reasoning")
 
-question = """请查询网络上的信息，深圳的天气"""
+    question = """请查询网络上的信息，深圳的天气"""
+
+    async def async_generate_response():
+        tmp = await llm_instance.ainvoke(question)
+        print(tmp)
+        # print(repair_json_output(tmp.content))
+
+        # async for chunk in llm_instance.astream(question):
+        #     # print(chunk.response_metadata)
+        #     print(chunk.content, end="|", flush=True)
+
+    asyncio.run(async_generate_response())
 
 
-async def async_generate_response():
-    tmp = await llm_instance.ainvoke(question)
-    print(tmp)
-    # print(repair_json_output(tmp.content))
+def stream_llm_instance():
+    llm_instance = get_llm_by_type("basic")
+    chunks = []
 
-    # async for chunk in llm_instance.astream(question):
-    #     # print(chunk.response_metadata)
-    #     print(chunk.content, end="|", flush=True)
+    async def async_generate_response():
+        async for chunk in llm_instance.astream("what color is the sky?"):
+            chunks.append(chunk)
+            print(chunk.content, end="|", flush=True)
 
-
-asyncio.run(async_generate_response())
+    asyncio.run(async_generate_response())

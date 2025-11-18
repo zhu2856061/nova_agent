@@ -14,6 +14,9 @@
 └── 当前章节摘要：
     {short_summary}
 
+└── 小说设定：
+    {novel_architecture}
+
 当前章节信息：
 第{novel_number}章《{chapter_title}》：
 ├── 章节定位：{chapter_role}

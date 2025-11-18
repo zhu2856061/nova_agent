@@ -7,7 +7,6 @@ import logging
 import os
 import re
 from copy import deepcopy
-from dataclasses import dataclass, field
 from pathlib import Path
 
 from langchain_core.messages import HumanMessage
@@ -17,6 +16,7 @@ from pydantic import BaseModel, Field
 
 from nova import CONF
 from nova.llms import get_llm_by_type
+from nova.model.agent import Context, State
 from nova.prompts.template import apply_prompt_template
 from nova.tools import read_file_tool, write_file_tool
 from nova.utils import (
@@ -30,40 +30,6 @@ logger = logging.getLogger(__name__)
 
 # ######################################################################################
 # 全局变量
-
-
-@dataclass(kw_only=True)
-class State:
-    code: int = field(
-        default=0,
-        metadata={"description": "The code to use for the agent."},
-    )
-    err_message: str = field(
-        default="",
-        metadata={"description": "The error message to use for the agent."},
-    )
-    # 用户介入的信息
-    user_guidance: str = field(
-        default="",
-        metadata={"description": "The user guidance to use for the agent."},
-    )
-
-
-@dataclass(kw_only=True)
-class Context:
-    trace_id: str = field(
-        default="default",
-        metadata={"description": "The trace_id to use for the agent."},
-    )
-    task_dir: str = field(
-        default="merlin",
-        metadata={"description": "The task directory to use for the agent."},
-    )
-
-    novel_model: str = field(
-        default="basic",
-        metadata={"description": "The name of llm to use for the agent. "},
-    )
 
 
 # extract_setting uses this
@@ -103,18 +69,18 @@ def get_prompt(current_chat, current_tab):
 async def extract_setting(state: State, runtime: Runtime[Context]):
     try:
         # 变量
-        _trace_id = runtime.context.trace_id
+        _thread_id = runtime.context.thread_id
         _task_dir = runtime.context.task_dir
-        _model_name = runtime.context.novel_model
+        _model_name = runtime.context.model
         _user_guidance = state.user_guidance
 
-        _work_dir = os.path.join(_task_dir, _trace_id)
+        _work_dir = os.path.join(_task_dir, _thread_id)
         os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
         def _assemble_prompt():
             tmp = {
-                "messages": _user_guidance,
+                "messages": _user_guidance.get("input", ""),
                 "user_guidance": "",
             }
             _prompt_tamplate = get_prompt(_work_dir, "extract_setting")
@@ -128,7 +94,7 @@ async def extract_setting(state: State, runtime: Runtime[Context]):
         response = await _get_llm().ainvoke(_assemble_prompt())
         logger.info(
             set_color(
-                f"trace_id={_trace_id} | node=extract_setting | message={response}",
+                f"trace_id={_thread_id} | node=extract_setting | message={response}",
                 "pink",
             )
         )
@@ -147,10 +113,10 @@ async def extract_setting(state: State, runtime: Runtime[Context]):
             }
         )
 
-        return {"code": 0, "err_message": "ok"}
+        return {"code": 0, "err_message": "ok", "data": _middle_result}
 
     except Exception as e:
-        err_message = f"trace_id={_trace_id} | node=extract_setting | error={e}"
+        err_message = f"trace_id={_thread_id} | node=extract_setting | error={e}"
         logger.error(set_color(err_message, "red"))
         return {"code": 1, "err_message": err_message}
 
@@ -159,22 +125,21 @@ async def extract_setting(state: State, runtime: Runtime[Context]):
 async def core_seed(state: State, runtime: Runtime[Context]):
     try:
         # 变量
-        _trace_id = runtime.context.trace_id
+        _thread_id = runtime.context.thread_id
         _task_dir = runtime.context.task_dir
-        _model_name = runtime.context.novel_model
+        _model_name = runtime.context.model
         _user_guidance = state.user_guidance
 
-        _work_dir = os.path.join(_task_dir, _trace_id)
+        _work_dir = os.path.join(_task_dir, _thread_id)
         os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
         def _assemble_prompt(_param_result):
             tmp = {
                 **_param_result,
-                "user_guidance": _user_guidance,
+                "user_guidance": _user_guidance.get("input", ""),
             }
             _prompt_tamplate = get_prompt(_work_dir, "core_seed")
-
             return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
         # LLM
@@ -191,7 +156,7 @@ async def core_seed(state: State, runtime: Runtime[Context]):
         response = await _get_llm().ainvoke(_assemble_prompt(_param_result))
         logger.info(
             set_color(
-                f"trace_id={_trace_id} | node=core_seed | message={response}",
+                f"trace_id={_thread_id} | node=core_seed | message={response}",
                 "pink",
             )
         )
@@ -207,7 +172,7 @@ async def core_seed(state: State, runtime: Runtime[Context]):
         return {"code": 0, "err_message": "ok"}
 
     except Exception as e:
-        err_message = f"trace_id={_trace_id} | node=core_seed | error={e}"
+        err_message = f"trace_id={_thread_id} | node=core_seed | error={e}"
         logger.error(set_color(err_message, "red"))
         return {"code": 1, "err_message": err_message}
 
@@ -216,17 +181,17 @@ async def core_seed(state: State, runtime: Runtime[Context]):
 async def character_dynamics(state: State, runtime: Runtime[Context]):
     try:
         # 变量
-        _trace_id = runtime.context.trace_id
+        _thread_id = runtime.context.thread_id
         _task_dir = runtime.context.task_dir
-        _model_name = runtime.context.novel_model
+        _model_name = runtime.context.model
         _user_guidance = state.user_guidance
 
-        _work_dir = os.path.join(_task_dir, _trace_id)
+        _work_dir = os.path.join(_task_dir, _thread_id)
         os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
         def _assemble_prompt(_param_result):
-            tmp = {**_param_result, "user_guidance": _user_guidance}
+            tmp = {**_param_result, "user_guidance": _user_guidance.get("input", "")}
             _prompt_tamplate = get_prompt(_task_dir, "character_dynamics")
 
             return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
@@ -250,7 +215,7 @@ async def character_dynamics(state: State, runtime: Runtime[Context]):
         response = await _get_llm().ainvoke(_assemble_prompt(_param_result))
         logger.info(
             set_color(
-                f"trace_id={_trace_id} | node=character_dynamics | message={response}",
+                f"trace_id={_thread_id} | node=character_dynamics | message={response}",
                 "pink",
             )
         )
@@ -265,7 +230,7 @@ async def character_dynamics(state: State, runtime: Runtime[Context]):
         return {"code": 0, "err_message": "ok"}
 
     except Exception as e:
-        err_message = f"trace_id={_trace_id} | node=character_dynamics | error={e}"
+        err_message = f"trace_id={_thread_id} | node=character_dynamics | error={e}"
         logger.error(set_color(err_message, "red"))
         return {"code": 1, "err_message": err_message}
 
@@ -274,17 +239,17 @@ async def character_dynamics(state: State, runtime: Runtime[Context]):
 async def world_building(state: State, runtime: Runtime[Context]):
     try:
         # 变量
-        _trace_id = runtime.context.trace_id
+        _thread_id = runtime.context.thread_id
         _task_dir = runtime.context.task_dir
-        _model_name = runtime.context.novel_model
+        _model_name = runtime.context.model
         _user_guidance = state.user_guidance
 
-        _work_dir = os.path.join(_task_dir, _trace_id)
+        _work_dir = os.path.join(_task_dir, _thread_id)
         os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
         def _assemble_prompt(_param_result):
-            tmp = {**_param_result, "user_guidance": _user_guidance}
+            tmp = {**_param_result, "user_guidance": _user_guidance.get("input", "")}
             _prompt_tamplate = get_prompt(_work_dir, "world_building")
 
             return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
@@ -308,7 +273,7 @@ async def world_building(state: State, runtime: Runtime[Context]):
         response = await _get_llm().ainvoke(_assemble_prompt(_param_result))
         logger.info(
             set_color(
-                f"trace_id={_trace_id} | node=world_building | message={response}",
+                f"trace_id={_thread_id} | node=world_building | message={response}",
                 "pink",
             )
         )
@@ -322,7 +287,7 @@ async def world_building(state: State, runtime: Runtime[Context]):
 
         return {"code": 0, "err_message": "ok"}
     except Exception as e:
-        err_message = f"trace_id={_trace_id} | node=world_building | error={e}"
+        err_message = f"trace_id={_thread_id} | node=world_building | error={e}"
         logger.error(set_color(err_message, "red"))
         return {"code": 1, "err_message": err_message}
 
@@ -331,17 +296,17 @@ async def world_building(state: State, runtime: Runtime[Context]):
 async def plot_arch(state: State, runtime: Runtime[Context]):
     try:
         # 变量
-        _trace_id = runtime.context.trace_id
+        _thread_id = runtime.context.thread_id
         _task_dir = runtime.context.task_dir
-        _model_name = runtime.context.novel_model
+        _model_name = runtime.context.model
         _user_guidance = state.user_guidance
 
-        _work_dir = os.path.join(_task_dir, _trace_id)
+        _work_dir = os.path.join(_task_dir, _thread_id)
         os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
         def _assemble_prompt(_param_result):
-            tmp = {**_param_result, "user_guidance": _user_guidance}
+            tmp = {**_param_result, "user_guidance": _user_guidance.get("input", "")}
             _prompt_tamplate = get_prompt(_work_dir, "plot_arch")
 
             return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
@@ -375,7 +340,7 @@ async def plot_arch(state: State, runtime: Runtime[Context]):
         response = await _get_llm().ainvoke(_assemble_prompt(_param_result))
         logger.info(
             set_color(
-                f"trace_id={_trace_id} | node=plot_arch | message={response}",
+                f"trace_id={_thread_id} | node=plot_arch | message={response}",
                 "pink",
             )
         )
@@ -390,7 +355,7 @@ async def plot_arch(state: State, runtime: Runtime[Context]):
         return {"code": 0, "err_message": "ok"}
 
     except Exception as e:
-        err_message = f"trace_id={_trace_id} | node=plot_arch | error={e}"
+        err_message = f"trace_id={_thread_id} | node=plot_arch | error={e}"
         logger.error(set_color(err_message, "red"))
         return {"code": 1, "err_message": err_message}
 
@@ -399,18 +364,18 @@ async def plot_arch(state: State, runtime: Runtime[Context]):
 async def chapter_blueprint(state: State, runtime: Runtime[Context]):
     try:
         # 变量
-        _trace_id = runtime.context.trace_id
+        _thread_id = runtime.context.thread_id
         _task_dir = runtime.context.task_dir
-        _model_name = runtime.context.novel_model
+        _model_name = runtime.context.model
         _user_guidance = state.user_guidance
 
-        _work_dir = os.path.join(_task_dir, _trace_id)
+        _work_dir = os.path.join(_task_dir, _thread_id)
         os.makedirs(_work_dir, exist_ok=True)
 
         def _assemble_prompt(_param_result, chapter_list, start, end):
             tmp = {
                 **_param_result,
-                "user_guidance": _user_guidance,
+                "user_guidance": _user_guidance.get("input", ""),
                 "chapter_list": chapter_list,
                 "start": start,
                 "end": end,
@@ -468,7 +433,7 @@ async def chapter_blueprint(state: State, runtime: Runtime[Context]):
 
             logger.info(
                 set_color(
-                    f"trace_id={_trace_id} | node=chunk_chapter_blueprint | current_start={current_start} | current_end={current_end} | message={response}",
+                    f"trace_id={_thread_id} | node=chunk_chapter_blueprint | current_start={current_start} | current_end={current_end} | message={response}",
                     "pink",
                 )
             )
@@ -487,7 +452,7 @@ async def chapter_blueprint(state: State, runtime: Runtime[Context]):
         return {"code": 0, "err_message": "ok"}
 
     except Exception as e:
-        err_message = f"trace_id={_trace_id} | node=chapter_blueprint | error={e}"
+        err_message = f"trace_id={_thread_id} | node=chapter_blueprint | error={e}"
         logger.error(set_color(err_message, "red"))
         return {"code": 1, "err_message": err_message}
 
@@ -496,10 +461,10 @@ async def chapter_blueprint(state: State, runtime: Runtime[Context]):
 async def summarize_architecture(state: State, runtime: Runtime[Context]):
     try:
         # 变量
-        _trace_id = runtime.context.trace_id
+        _thread_id = runtime.context.thread_id
         _task_dir = runtime.context.task_dir
 
-        _work_dir = os.path.join(_task_dir, _trace_id)
+        _work_dir = os.path.join(_task_dir, _thread_id)
         os.makedirs(_work_dir, exist_ok=True)
 
         _param_result = await read_file_tool.arun(
@@ -555,7 +520,7 @@ async def summarize_architecture(state: State, runtime: Runtime[Context]):
         )
         logger.info(
             set_color(
-                f"trace_id={_trace_id} | node=summarize_architecture | message=save to {_work_dir}/novel_architecture.md",
+                f"trace_id={_thread_id} | node=summarize_architecture | message=save to {_work_dir}/novel_architecture.md",
                 "pink",
             )
         )
@@ -568,7 +533,7 @@ async def summarize_architecture(state: State, runtime: Runtime[Context]):
         )
         logger.info(
             set_color(
-                f"trace_id={_trace_id} | node=save_chapter_blueprint | message=save to {_work_dir}/novel_chapter_blueprint.md",
+                f"trace_id={_thread_id} | node=save_chapter_blueprint | message=save to {_work_dir}/novel_chapter_blueprint.md",
                 "pink",
             )
         )
@@ -580,7 +545,7 @@ async def summarize_architecture(state: State, runtime: Runtime[Context]):
         )
         logger.info(
             set_color(
-                f"trace_id={_trace_id} | node=novel_extract_setting | message=save to {_work_dir}/novel_extract_setting.md",
+                f"trace_id={_thread_id} | node=novel_extract_setting | message=save to {_work_dir}/novel_extract_setting.md",
                 "pink",
             )
         )
@@ -588,7 +553,7 @@ async def summarize_architecture(state: State, runtime: Runtime[Context]):
         return {"code": 0, "err_message": "ok"}
 
     except Exception as e:
-        err_message = f"trace_id={_trace_id} | node=summarize_architecture | error={e}"
+        err_message = f"trace_id={_thread_id} | node=summarize_architecture | error={e}"
         logger.error(set_color(err_message, "red"))
         return {"code": 1, "err_message": err_message}
 
@@ -746,12 +711,12 @@ def get_last_n_chapters_text(work_dir: str, current_chapter_num: int, n: int = 3
 async def chapter_draft(state: State, runtime: Runtime[Context]):
     try:
         # 变量
-        _trace_id = runtime.context.trace_id
+        _thread_id = runtime.context.thread_id
         _task_dir = runtime.context.task_dir
-        _model_name = runtime.context.novel_model
+        _model_name = runtime.context.model
         _user_guidance = state.user_guidance
 
-        _work_dir = os.path.join(_task_dir, _trace_id)
+        _work_dir = os.path.join(_task_dir, _thread_id)
         os.makedirs(_work_dir, exist_ok=True)
 
         if os.path.exists(f"{_work_dir}/novel_extract_setting.md"):
@@ -761,7 +726,7 @@ async def chapter_draft(state: State, runtime: Runtime[Context]):
             _novel_setting = json.loads(_novel_setting)
             _word_number = _novel_setting["word_number"]
         else:
-            err_message = f"trace_id={_trace_id} | node=chapter_draft | error=novel_setting is None"
+            err_message = f"trace_id={_thread_id} | node=chapter_draft | error=novel_setting is None"
             logger.error(set_color(err_message, "red"))
             return {"code": 1, "err_message": err_message}
         #
@@ -770,7 +735,7 @@ async def chapter_draft(state: State, runtime: Runtime[Context]):
                 {"file_path": f"{_work_dir}/novel_architecture.md"}
             )
         else:
-            err_message = f"trace_id={_trace_id} | node=chapter_draft | error=novel_architecture is None"
+            err_message = f"trace_id={_thread_id} | node=chapter_draft | error=novel_architecture is None"
             logger.error(set_color(err_message, "red"))
             return {"code": 1, "err_message": err_message}
         if os.path.exists(f"{_work_dir}/novel_chapter_blueprint.md"):
@@ -778,7 +743,7 @@ async def chapter_draft(state: State, runtime: Runtime[Context]):
                 {"file_path": f"{_work_dir}/novel_chapter_blueprint.md"}
             )
         else:
-            err_message = f"trace_id={_trace_id} | node=chapter_draft | error=novel_chapter_blueprint is None"
+            err_message = f"trace_id={_thread_id} | node=chapter_draft | error=novel_chapter_blueprint is None"
             logger.error(set_color(err_message, "red"))
             return {"code": 1, "err_message": err_message}
 
@@ -891,7 +856,7 @@ async def chapter_draft(state: State, runtime: Runtime[Context]):
                     "key_items": key_items,
                     "scene_location": scene_location,
                     "time_constraint": time_constraint,
-                    "user_guidance": _user_guidance,
+                    "user_guidance": _user_guidance.get("input", ""),
                     "novel_architecture": _novel_architecture,
                     "character_state": new_character_state,
                 }
@@ -958,7 +923,7 @@ async def chapter_draft(state: State, runtime: Runtime[Context]):
                     "key_items": key_items,
                     "scene_location": scene_location,
                     "time_constraint": time_constraint,
-                    "user_guidance": _user_guidance,
+                    "user_guidance": _user_guidance.get("input", ""),
                 }
 
                 _prompt_tamplate = get_prompt(_work_dir, "next_chapter_draft")
@@ -1046,7 +1011,7 @@ async def chapter_draft(state: State, runtime: Runtime[Context]):
             _new_global_summary = _new_global_summary.content
             logger.info(
                 set_color(
-                    f"trace_id={_trace_id} | node=chapter_draft | message={_new_global_summary}",
+                    f"trace_id={_thread_id} | node=chapter_draft | message={_new_global_summary}",
                     "pink",
                 )
             )
@@ -1064,7 +1029,7 @@ async def chapter_draft(state: State, runtime: Runtime[Context]):
             _new_character_state = _new_character_state.content
             logger.info(
                 set_color(
-                    f"trace_id={_trace_id} | node=chapter_draft | message={_new_character_state}",
+                    f"trace_id={_thread_id} | node=chapter_draft | message={_new_character_state}",
                     "pink",
                 )
             )
@@ -1087,7 +1052,7 @@ async def chapter_draft(state: State, runtime: Runtime[Context]):
                 _new_character_state = _new_character_state.content
                 logger.info(
                     set_color(
-                        f"trace_id={_trace_id} | node=chapter_draft | message={_new_character_state}",
+                        f"trace_id={_thread_id} | node=chapter_draft | message={_new_character_state}",
                         "pink",
                     )
                 )
@@ -1111,7 +1076,7 @@ async def chapter_draft(state: State, runtime: Runtime[Context]):
             _summarize_recent_chapters = _summarize_recent_chapters.content
             logger.info(
                 set_color(
-                    f"trace_id={_trace_id} | node=chapter_draft | message={_summarize_recent_chapters}",
+                    f"trace_id={_thread_id} | node=chapter_draft | message={_summarize_recent_chapters}",
                     "pink",
                 )
             )
@@ -1123,7 +1088,7 @@ async def chapter_draft(state: State, runtime: Runtime[Context]):
             )
 
         if not _new_character_state:
-            err_message = f"trace_id={_trace_id} | node=chapter_draft | error=new_character_state: is None"
+            err_message = f"trace_id={_thread_id} | node=chapter_draft | error=new_character_state: is None"
             logger.error(set_color(err_message, "red"))
             return {"code": 1, "err_message": err_message}
 
@@ -1157,7 +1122,7 @@ async def chapter_draft(state: State, runtime: Runtime[Context]):
         return {"code": 0, "err_message": "ok"}
 
     except Exception as e:
-        err_message = f"trace_id={_trace_id} | node=chapter_draft | error={e}"
+        err_message = f"trace_id={_thread_id} | node=chapter_draft | error={e}"
         logger.error(set_color(err_message, "red"))
         return {"code": 1, "err_message": err_message}
 
