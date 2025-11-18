@@ -2,8 +2,10 @@
 # @Time   : 2025/08/01 10:24
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
-from typing import Dict, List
+from typing import Annotated, Dict, List
 
+from langchain_core.messages import MessageLikeRepresentation
+from langgraph.graph import add_messages
 from pydantic import BaseModel, Field
 
 
@@ -11,7 +13,10 @@ class State(BaseModel):
     code: int = Field(default=0, description="The code to use for the agent.")
     err_message: str = Field(default="", description="error message")
     user_guidance: Dict = Field(default={}, description="user guidance")
-    messages: List[Dict] = Field(default=[], description="messages")
+    # messages: List[Dict] = Field(default=[], description="messages")
+    messages: Annotated[List[MessageLikeRepresentation], add_messages] = Field(
+        default=[], description="messages"
+    )
     data: Dict = Field(default={}, description="data")
     human_in_loop_node: str = Field(
         default="",

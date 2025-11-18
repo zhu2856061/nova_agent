@@ -99,24 +99,36 @@ async def stream_agent_events(
 @agent_router.post("/human_in_loop")
 async def human_in_loop(request: AgentRequest):
     if not request:
+        logger.error(
+            "human_in_loop error: Input instances cannot be empty", exc_info=True
+        )
         raise HTTPException(status_code=400, detail="Input instances cannot be empty")
 
     try:
         trace_id = request.trace_id
         context = request.context
         state = request.state
+        stream = request.stream
         thread_id = context.thread_id
         config = {"configurable": {"thread_id": thread_id}}
-
         user_guidance = state.user_guidance
-        if user_guidance:
+
+        if not user_guidance:
+            logger.error(
+                "human_in_loop error: user_guidance is required", exc_info=True
+            )
             raise HTTPException(status_code=400, detail="user_guidance is required")
 
         agent_name = user_guidance.get("agent_name")
         if not agent_name:
+            logger.error("human_in_loop error: agent_name is required", exc_info=True)
             raise HTTPException(status_code=400, detail="agent_name is required")
 
         agent = get_agent(agent_name)
+
+        if not stream:
+            response = await agent.ainvoke(state, context=context, config=config)
+            return AgentResponse(code=0, data=response)
 
         # Streaming handler for human-in-loop
         async def stream_human_in_loop() -> AsyncGenerator:
@@ -128,9 +140,12 @@ async def human_in_loop(request: AgentRequest):
                         context=context,
                         version="v2",
                     ):
-                        response: AgentResponse = handle_event(trace_id, event)
+                        response = handle_event(trace_id, event)
                         if response:
-                            yield response.model_dump_json() + "\n"
+                            yield (
+                                AgentResponse(code=0, data=response).model_dump_json()
+                                + "\n"
+                            )
             except Exception as e:
                 logger.error(
                     f"Human-in-loop error (trace_id={trace_id}): {str(e)}",

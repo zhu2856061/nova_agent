@@ -23,6 +23,7 @@ from nova.model.agent import Context, State
 from nova.prompts.template import apply_prompt_template
 from nova.tools import write_file_tool
 from nova.utils import set_color
+from nova.utils.common import raw_to_annotated
 
 # ######################################################################################
 # 配置
@@ -88,15 +89,15 @@ async def extract_setting(state: State, runtime: Runtime[Context]):
         _model_name = runtime.context.model
         _user_guidance = state.user_guidance
         _messages = state.messages
-
         _work_dir = os.path.join(_task_dir, _thread_id)
         os.makedirs(_work_dir, exist_ok=True)
 
+        # _messages = raw_to_annotated(_messages)
         # 提示词
         def _assemble_prompt():
             tmp = {
                 "messages": get_buffer_string(_messages),  # type: ignore
-                "user_guidance": _user_guidance.get("input", ""),
+                "user_guidance": _user_guidance.get("human_in_loop", ""),
             }
             _prompt_tamplate = get_prompt(_NODE_NAME)
             return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
@@ -122,7 +123,12 @@ async def extract_setting(state: State, runtime: Runtime[Context]):
                 "text": json.dumps(_middle_result, ensure_ascii=False),
             }
         )
-        return {"code": 0, "err_message": "ok", "data": _middle_result}
+        return {
+            "code": 0,
+            "err_message": "ok",
+            "data": _middle_result,
+            "human_in_loop_node": _NODE_NAME,
+        }
 
     except Exception as e:
         _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
@@ -145,7 +151,10 @@ async def core_seed(state: State, runtime: Runtime[Context]):
 
         # 提示词
         def _assemble_prompt():
-            tmp = {**_data, "user_guidance": _user_guidance.get("input", "")}
+            tmp = {
+                **_data,
+                "user_guidance": _user_guidance.get("human_in_loop", ""),
+            }
             _prompt_tamplate = get_prompt(_NODE_NAME)
             return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
@@ -166,7 +175,12 @@ async def core_seed(state: State, runtime: Runtime[Context]):
             }
         )
         _middle_result.update(_data)
-        return {"code": 0, "err_message": "ok", "data": _middle_result}
+        return {
+            "code": 0,
+            "err_message": "ok",
+            "data": _middle_result,
+            "human_in_loop_node": _NODE_NAME,
+        }
 
     except Exception as e:
         _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
@@ -189,7 +203,7 @@ async def character_dynamics(state: State, runtime: Runtime[Context]):
 
         # 提示词
         def _assemble_prompt():
-            tmp = {**_data, "user_guidance": _user_guidance.get("input", "")}
+            tmp = {**_data, "user_guidance": _user_guidance.get("human_in_loop", "")}
             _prompt_tamplate = get_prompt(_NODE_NAME)
             return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
@@ -208,7 +222,12 @@ async def character_dynamics(state: State, runtime: Runtime[Context]):
             }
         )
         _middle_result.update(_data)
-        return {"code": 0, "err_message": "ok", "data": _middle_result}
+        return {
+            "code": 0,
+            "err_message": "ok",
+            "data": _middle_result,
+            "human_in_loop_node": _NODE_NAME,
+        }
 
     except Exception as e:
         _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
@@ -231,7 +250,7 @@ async def world_building(state: State, runtime: Runtime[Context]):
 
         # 提示词
         def _assemble_prompt():
-            tmp = {**_data, "user_guidance": _user_guidance.get("input", "")}
+            tmp = {**_data, "user_guidance": _user_guidance.get("human_in_loop", "")}
             _prompt_tamplate = get_prompt(_NODE_NAME)
             return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
@@ -250,7 +269,12 @@ async def world_building(state: State, runtime: Runtime[Context]):
             }
         )
         _middle_result.update(_data)
-        return {"code": 0, "err_message": "ok", "data": _middle_result}
+        return {
+            "code": 0,
+            "err_message": "ok",
+            "data": _middle_result,
+            "human_in_loop_node": _NODE_NAME,
+        }
 
     except Exception as e:
         _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
@@ -273,7 +297,7 @@ async def plot_arch(state: State, runtime: Runtime[Context]):
 
         # 提示词
         def _assemble_prompt():
-            tmp = {**_data, "user_guidance": _user_guidance.get("input", "")}
+            tmp = {**_data, "user_guidance": _user_guidance.get("human_in_loop", "")}
             _prompt_tamplate = get_prompt(_NODE_NAME)
             return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
@@ -292,7 +316,12 @@ async def plot_arch(state: State, runtime: Runtime[Context]):
             }
         )
         _middle_result.update(_data)
-        return {"code": 0, "err_message": "ok", "data": _middle_result}
+        return {
+            "code": 0,
+            "err_message": "ok",
+            "data": _middle_result,
+            "human_in_loop_node": _NODE_NAME,
+        }
 
     except Exception as e:
         _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
@@ -315,7 +344,7 @@ async def chapter_blueprint(state: State, runtime: Runtime[Context]):
 
         # 提示词
         def _assemble_prompt():
-            tmp = {**_data, "user_guidance": _user_guidance.get("input", "")}
+            tmp = {**_data, "user_guidance": _user_guidance.get("human_in_loop", "")}
             _prompt_tamplate = get_prompt(_NODE_NAME)
             return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
@@ -334,7 +363,12 @@ async def chapter_blueprint(state: State, runtime: Runtime[Context]):
             }
         )
         _middle_result.update(_data)
-        return {"code": 0, "err_message": "ok", "data": _middle_result}
+        return {
+            "code": 0,
+            "err_message": "ok",
+            "data": _middle_result,
+            "human_in_loop_node": _NODE_NAME,
+        }
 
     except Exception as e:
         _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
@@ -360,7 +394,7 @@ async def chunk_chapter_blueprint(state: State, runtime: Runtime[Context]):
         def _assemble_prompt(chapter_list, start, end):
             tmp = {
                 **_data,
-                "user_guidance": _user_guidance.get("input", ""),
+                "user_guidance": _user_guidance.get("human_in_loop", ""),
                 "chapter_list": chapter_list,
                 "start": start,
                 "end": end,
@@ -394,7 +428,12 @@ async def chunk_chapter_blueprint(state: State, runtime: Runtime[Context]):
             }
         )
         _middle_result.update(_data)
-        return {"code": 0, "err_message": "ok", "data": _middle_result}
+        return {
+            "code": 0,
+            "err_message": "ok",
+            "data": _middle_result,
+            "human_in_loop_node": _NODE_NAME,
+        }
 
     except Exception as e:
         _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
@@ -432,7 +471,7 @@ async def build_architecture(state: State, runtime: Runtime[Context]):
             }
         )
         log_info_set_color(
-            _thread_id, _NODE_NAME, "save to {_work_dir}/novel_architecture.md"
+            _thread_id, _NODE_NAME, f"save to {_work_dir}/novel_architecture.md"
         )
 
         await write_file_tool.arun(
@@ -442,10 +481,15 @@ async def build_architecture(state: State, runtime: Runtime[Context]):
             }
         )
         log_info_set_color(
-            _thread_id, _NODE_NAME, "save to {_work_dir}/novel_chapter_blueprint.md"
+            _thread_id, _NODE_NAME, f"save to {_work_dir}/novel_chapter_blueprint.md"
         )
 
-        return {"code": 0, "err_message": "ok", "data": final_content}
+        return {
+            "code": 0,
+            "err_message": "ok",
+            "data": final_content,
+            "human_in_loop_node": _NODE_NAME,
+        }
 
     except Exception as e:
         _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
@@ -472,14 +516,8 @@ async def human_in_loop_guidance(
     _work_dir = os.path.join(_task_dir, _thread_id)
     os.makedirs(_work_dir, exist_ok=True)
 
-    guidance_tip = "基于上述生成信息准备开始`{}`，是否需要人工指导，需要的话直接输入指导内容，不需要的话直接输入`不需要`"
-
-    user_guidance = interrupt(
-        {
-            "message_id": _thread_id,
-            "content": guidance_tip.format(_human_in_loop_node),
-        }
-    )
+    guidance_tip = f"基于上述生成信息准备开始`{_human_in_loop_node}`，是否需要人工指导，需要的话直接输入指导内容，不需要的话直接输入`不需要`"
+    user_guidance = interrupt({"message_id": _thread_id, "content": guidance_tip})
     return Command(
         goto=_human_in_loop_node,  # type: ignore
         update={"user_guidance": user_guidance},
@@ -515,7 +553,7 @@ async def human_in_loop_agree(
     if _code != 0:
         return Command(goto="__end__")
 
-    guidance_tip = "对于上述`{}`是否满意，不满意的话，可以输入修改建议，若是满意的话，可以输入`满意`"
+    guidance_tip = f"对于`{_human_in_loop_node}`的结果是否满意，不满意的话，可以输入修改建议，若是满意的话，可以输入`满意`"
     user_guidance = interrupt(
         {
             "message_id": _thread_id,
@@ -539,7 +577,7 @@ async def human_in_loop_agree(
     else:
         return Command(goto="__end__")
 
-    if user_guidance["human_in_loop_value"] == "满意":
+    if user_guidance["human_in_loop"] == "满意":
         return Command(
             goto="human_in_loop_guidance",
             update={
@@ -548,8 +586,8 @@ async def human_in_loop_agree(
         )
     else:
         tmp = json.dumps(_data, ensure_ascii=False)
-        user_guidance["human_in_loop_value"] = (
-            f"<上一次生成的结果>\n\n{tmp}\n\n</上一次生成的结果>\n\n<用户修改建议>\n\n{user_guidance['human_in_loop_value']}\n\n</用户修改建议>"
+        user_guidance["human_in_loop"] = (
+            f"<上一次生成的结果>\n\n{tmp}\n\n</上一次生成的结果>\n\n<用户修改建议>\n\n{user_guidance['human_in_loop']}\n\n</用户修改建议>"
         )
         return Command(
             goto=_current_node,  # type: ignore
