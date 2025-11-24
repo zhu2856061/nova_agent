@@ -4,15 +4,8 @@
 # @Moto   : Knowledge comes from decomposition
 import reflex as rx
 
-from app.pages.agent_ainovel_architect_page import agent_ainovel_architect_page
-from app.pages.agent_ainovel_chapter_page import agent_ainovel_chapter_page
-from app.pages.agent_memorizer_page import agent_memorizer_page
-from app.pages.agent_researcher_page import agent_researcher_page
-from app.pages.agent_wechat_researcher_page import agent_wechat_researcher_page
+from app.pages.agent_memorizer_page import memorizer_page
 from app.pages.chat_page import chat_page
-from app.pages.interact_ainovel_architect_page import interact_ainovel_architect_page
-from app.pages.task_ainovel_page import task_ainovel_page
-from app.pages.task_deepresearcher_page import task_deepresearcher_page
 
 
 def redirect_component():
@@ -66,53 +59,53 @@ app.add_page(
 
 # agent 模式
 app.add_page(
-    component=agent_memorizer_page,
+    component=memorizer_page,
     title="Nova Agent",
     route="/agent/memorizer",
     image="novaait.png",
 )
-app.add_page(
-    component=agent_researcher_page,
-    title="Nova Agent",
-    route="/agent/researcher",
-    image="novaait.png",
-)
-app.add_page(
-    component=agent_wechat_researcher_page,
-    title="Nova Agent",
-    route="/agent/wechat_researcher",
-    image="novaait.png",
-)
-app.add_page(
-    component=agent_ainovel_architect_page,
-    title="Nova Agent",
-    route="/agent/ainovel_architect",
-    image="novaait.png",
-)
-app.add_page(
-    component=agent_ainovel_chapter_page,
-    title="Nova Agent",
-    route="/agent/ainovel_chapter",
-    image="novaait.png",
-)
+# app.add_page(
+#     component=agent_researcher_page,
+#     title="Nova Agent",
+#     route="/agent/researcher",
+#     image="novaait.png",
+# )
+# app.add_page(
+#     component=agent_wechat_researcher_page,
+#     title="Nova Agent",
+#     route="/agent/wechat_researcher",
+#     image="novaait.png",
+# )
+# app.add_page(
+#     component=agent_ainovel_architect_page,
+#     title="Nova Agent",
+#     route="/agent/ainovel_architect",
+#     image="novaait.png",
+# )
+# app.add_page(
+#     component=agent_ainovel_chapter_page,
+#     title="Nova Agent",
+#     route="/agent/ainovel_chapter",
+#     image="novaait.png",
+# )
 
-app.add_page(
-    component=interact_ainovel_architect_page,
-    title="Nova Interact",
-    route="/interact/ainovel",
-    image="novaait.png",
-)
+# app.add_page(
+#     component=interact_ainovel_architect_page,
+#     title="Nova Interact",
+#     route="/interact/ainovel",
+#     image="novaait.png",
+# )
 
-# task 模式
-app.add_page(
-    component=task_deepresearcher_page,
-    title="Nova Task",
-    route="/task/deepresearcher",
-    image="novaait.png",
-)
-app.add_page(
-    component=task_ainovel_page,
-    title="Nova Task",
-    route="/task/ainovel",
-    image="novaait.png",
-)
+# # task 模式
+# app.add_page(
+#     component=task_deepresearcher_page,
+#     title="Nova Task",
+#     route="/task/deepresearcher",
+#     image="novaait.png",
+# )
+# app.add_page(
+#     component=task_ainovel_page,
+#     title="Nova Task",
+#     route="/task/ainovel",
+#     image="novaait.png",
+# )

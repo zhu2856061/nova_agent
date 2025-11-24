@@ -27,7 +27,6 @@ async def _stream_responses(
 ) -> AsyncGenerator[str, None]:
     """抽取流式响应处理逻辑，消除代码冗余"""
     try:
-        # aiohttp.ClientSession在此处未被实际使用，移除多余的会话管理
         async for response in model.astream(messages, config=config, **model_kwargs):
             if response.content:
                 yield (

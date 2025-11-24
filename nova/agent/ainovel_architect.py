@@ -23,7 +23,6 @@ from nova.model.agent import Context, State
 from nova.prompts.template import apply_prompt_template
 from nova.tools import write_file_tool
 from nova.utils import set_color
-from nova.utils.common import raw_to_annotated
 
 # ######################################################################################
 # 配置
@@ -85,7 +84,7 @@ async def extract_setting(state: State, runtime: Runtime[Context]):
     try:
         # 变量
         _thread_id = runtime.context.thread_id
-        _task_dir = runtime.context.task_dir
+        _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
         _model_name = runtime.context.model
         _user_guidance = state.user_guidance
         _messages = state.messages
@@ -141,7 +140,7 @@ async def core_seed(state: State, runtime: Runtime[Context]):
     try:
         # 变量
         _thread_id = runtime.context.thread_id
-        _task_dir = runtime.context.task_dir
+        _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
         _model_name = runtime.context.model
         _user_guidance = state.user_guidance
         _data = state.data
@@ -193,7 +192,7 @@ async def character_dynamics(state: State, runtime: Runtime[Context]):
     try:
         # 变量
         _thread_id = runtime.context.thread_id
-        _task_dir = runtime.context.task_dir
+        _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
         _model_name = runtime.context.model
         _user_guidance = state.user_guidance
         _data = state.data
@@ -240,7 +239,7 @@ async def world_building(state: State, runtime: Runtime[Context]):
     try:
         # 变量
         _thread_id = runtime.context.thread_id
-        _task_dir = runtime.context.task_dir
+        _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
         _model_name = runtime.context.model
         _user_guidance = state.user_guidance
         _data = state.data
@@ -287,7 +286,7 @@ async def plot_arch(state: State, runtime: Runtime[Context]):
     try:
         # 变量
         _thread_id = runtime.context.thread_id
-        _task_dir = runtime.context.task_dir
+        _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
         _model_name = runtime.context.model
         _user_guidance = state.user_guidance
         _data = state.data
@@ -334,7 +333,7 @@ async def chapter_blueprint(state: State, runtime: Runtime[Context]):
     try:
         # 变量
         _thread_id = runtime.context.thread_id
-        _task_dir = runtime.context.task_dir
+        _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
         _model_name = runtime.context.model
         _user_guidance = state.user_guidance
         _data = state.data
@@ -381,7 +380,7 @@ async def chunk_chapter_blueprint(state: State, runtime: Runtime[Context]):
     try:
         # 变量
         _thread_id = runtime.context.thread_id
-        _task_dir = runtime.context.task_dir
+        _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
         _model_name = runtime.context.model
         _user_guidance = state.user_guidance
         _data = state.data
@@ -446,7 +445,7 @@ async def build_architecture(state: State, runtime: Runtime[Context]):
     try:
         # 变量
         _thread_id = runtime.context.thread_id
-        _task_dir = runtime.context.task_dir
+        _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
         _data = state.data
 
         _work_dir = os.path.join(_task_dir, _thread_id)
@@ -510,7 +509,7 @@ async def human_in_loop_guidance(
 ]:
     # 变量
     _thread_id = runtime.context.thread_id
-    _task_dir = runtime.context.task_dir
+    _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
     _human_in_loop_node = state.human_in_loop_node
 
     _work_dir = os.path.join(_task_dir, _thread_id)
@@ -542,7 +541,7 @@ async def human_in_loop_agree(
 ]:
     # 变量
     _thread_id = runtime.context.thread_id
-    _task_dir = runtime.context.task_dir
+    _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
     _code = state.code
     _human_in_loop_node = state.human_in_loop_node
     _data = state.data

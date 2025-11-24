@@ -5,111 +5,98 @@ import uuid
 import httpx
 import requests
 
-# 后端接口地址
-STREAM_AGENT_MEMORIZER_BACKEND_URL = (
-    "http://0.0.0.0:2021/agent/memorizer"  # 需根据实际修改
-)
-STREAM_AGENT_RESEARCHER_BACKEND_URL = (
-    "http://0.0.0.0:2021/agent/researcher"  # 需根据实际修改
-)
-STREAM_AGENT_WECHATRESEARCHER_BACKEND_URL = (
-    "http://0.0.0.0:2021/agent/wechat_researcher"  # 需根据实际修改
-)
-STREAM_AGENT_AINOVEL_ARCHITECT_BACKEND_URL = (
-    "http://0.0.0.0:2021/agent/ainovel_architect"  # 需根据实际修改
-)
-STREAM_AGENT_AINOVEL_CHAPTER_BACKEND_URL = (
-    "http://0.0.0.0:2021/agent/ainovel_chapter"  # 需根据实际修改
-)
-
-HUMAN_IN_LOOP_BACKEND_URL = "http://0.0.0.0:2021/agent/human_in_loop"
-
-AGENT_AINOVEL_EXTRACT_SETTING_BACKEND_URL = (
-    "http://0.0.0.0:2021/agent/ainovel_extract_setting"  # 需根据实际修改
-)
-AGENT_AINOVEL_CORE_SEED_BACKEND_URL = (
-    "http://0.0.0.0:2021/agent/ainovel_core_seed"  # 需根据实际修改
-)
-
-AGENT_AINOVEL_CHARATER_DYNAMICS_BACKEND_URL = (
-    "http://0.0.0.0:2021/agent/ainovel_character_dynamics"  # 需根据实际修改
-)
-
-AGENT_AINOVEL_WORLD_BUILDING_BACKEND_URL = (
-    "http://0.0.0.0:2021/agent/ainovel_world_building"  # 需根据实际修改
-)
-
-AGENT_AINOVEL_PLOT_ARCH_BACKEND_URL = (
-    "http://0.0.0.0:2021/agent/ainovel_plot_arch"  # 需根据实际修改
-)
-
-AGENT_AINOVEL_CHAPTER_BLUEPRINT_BACKEND_URL = (
-    "http://0.0.0.0:2021/agent/ainovel_chapter_blueprint"  # 需根据实际修改
-)
-
-AGENT_AINOVEL_SUMMARIZE_ACRHITECTURE_BACKEND_URL = (
-    "http://0.0.0.0:2021/agent/ainovel_summarize_architecture"  # 需根据实际修改
-)
-
-AGENT_AINOVEL_CHAPTER_DRAFT_BACKEND_URL = (
-    "http://0.0.0.0:2021/agent/ainovel_chapter_draft"  # 需根据实际修改
-)
 logger = logging.getLogger(__name__)
 
+AGENT_BACKEND_URL = {
+    "llm": "http://0.0.0.0:2021/chat/llm",
+    "memorizer": "http://0.0.0.0:2021/agent/memorizer",
+    "researcher": "http://0.0.0.0:2021/agent/researcher",
+    "wechat_researcher": "http://0.0.0.0:2021/agent/wechat_researcher",
+    "ainovel_architect": "http://0.0.0.0:2021/agent/ainovel_architect",
+    "ainovel_chapter": "http://0.0.0.0:2021/agent/ainovel_chapter",
+    "ainovel": "http://0.0.0.0:2021/agent/ainovel",
+    "ainovel_extract_setting": "http://0.0.0.0:2021/agent/ainovel_extract_setting",
+    "ainovel_core_seed": "http://0.0.0.0:2021/agent/ainovel_core_seed",
+    "ainovel_character_dynamics": "http://0.0.0.0:2021/agent/ainovel_character_dynamics",
+    "ainovel_world_building": "http://0.0.0.0:2021/agent/ainovel_world_building",
+    "ainovel_plot_arch": "http://0.0.0.0:2021/agent/ainovel_plot_arch",
+    "ainovel_chapter_blueprint": "http://0.0.0.0:2021/agent/ainovel_chapter_blueprint",
+    "ainovel_summarize_architecture": "http://0.0.0.0:2021/agent/ainovel_summarize_architecture",
+    "ainovel_chapter_draft": "http://0.0.0.0:2021/agent/ainovel_chapter_draft",
+    "human_in_loop": "http://0.0.0.0:2021/agent/human_in_loop",
+    "deepresearcher": "http://0.0.0.0:2021/task/deepresearcher",
+}
 
-async def get_agent_api(
-    url: str,
-    trace_id: str,
-    state: dict,  # {"memorizer_messages": messages}
-    context: dict,
-    user_guidance: dict,
-    stream=True,
-):
+
+async def get_nova_agent_api(url_name: str, trace_id: str, state: dict, context: dict):
+    """
+    发送请求到后端并获取流式响应
+
+    Args:
+        url: 请求的URL
+        trace_id: 请求的trace_id
+        state: 状态数据
+        context: 上下文数据
+
+    Yields:
+        流式返回的响应内容片段
+    """
     trace_id = trace_id or str(uuid.uuid4())
 
-    request_data = {
-        "trace_id": trace_id,
-        "context": context,
-        "state": state,  # {"memorizer_messages": messages}
-        "user_guidance": user_guidance,
-        "stream": stream,
-    }
-
-    current_answer_message_id = None
-    current_reasoning_message_id = None
+    request_data = {"trace_id": trace_id, "context": context, "state": state}
 
     try:
+        url = AGENT_BACKEND_URL[url_name]
         async with httpx.AsyncClient() as client:
             # 发送 POST 请求到 /stream_llm 路由
             async with client.stream(
                 "POST", url, json=request_data, timeout=3600.0
             ) as response:
                 response.raise_for_status()
+                # 检查响应状态码
+                if response.status_code != 200:
+                    logger.error(f"Error: {response.status_code}")
+                    return
 
                 async for chunk in response.aiter_bytes():
                     if not chunk:
-                        continue
-
+                        continue  # 跳过空行
                     try:
                         line_data = json.loads(chunk.decode("utf-8"))
-
-                        if line_data.get("code", 1) != 0:
-                            error_msg = f"❌ 后端错误: {line_data.get('message', '未知错误')}(code={line_data.get('code')}, msg={line_data.get('messages')})"
-                            logger.error(f"{error_msg} (trace_id: {trace_id})")
-                            yield {"type": "error", "content": error_msg}
+                        if line_data.get("code") != 0:
+                            yield {
+                                "type": "error",
+                                "content": line_data.get("err_message"),
+                            }
                             return
 
-                        if line_data.get("code", 1) != 0:
-                            error_msg = f"❌ 后端错误: {line_data.get('message', '未知错误')}(code={line_data.get('code')}, msg={line_data.get('messages')})"
-                            logger.error(f"{error_msg} (trace_id: {trace_id})")
-                            yield {"type": "error", "content": error_msg}
-                            return
+                        # 提取内容
+                        yield line_data["data"]
 
-                        _event = line_data["messages"]["event"]
-                        _data = line_data["messages"]["data"]
-                        _node_name = _data["node_name"]
-                        _step = _data["step"] or 0
+                    except json.JSONDecodeError:
+                        error_msg = f"❌ 响应格式错误: 无法解析内容: {chunk[:200]}..."
+                        logger.error(f"{error_msg} (trace_id: {trace_id})")
+                        yield {"type": "error", "content": error_msg}
+                        return
+                    except KeyError as e:
+                        error_msg = f"❌ 响应结构错误: 缺少必要字段「{str(e)}」"
+                        logger.error(f"{error_msg} (trace_id: {trace_id})")
+                        yield {"type": "error", "content": error_msg}
+                        return
 
+    except requests.exceptions.RequestException as e:
+        error_msg = f"❌ 请求失败: {str(e)}（流式连接中断）"
+        logger.error(f"{error_msg} (trace_id: {trace_id})")
+        yield {"type": "error", "content": error_msg}
+        return
+    except Exception as e:
+        error_msg = f"❌ 流式处理异常: {str(e)}"
+        logger.error(f"{error_msg} (trace_id: {trace_id})")
+        yield {"type": "error", "content": error_msg}
+        return
+
+
+"""
                         # 系统事件
                         if _event in [
                             "on_chain_start",
@@ -248,3 +235,4 @@ async def get_agent_api(
         logger.error(f"{error_msg} (trace_id: {trace_id})")
         yield {"type": "error", "content": error_msg}
         return
+"""

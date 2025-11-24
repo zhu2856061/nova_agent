@@ -2,7 +2,7 @@
 # @Time   : 2025/09/24 10:24
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
-
+from __future__ import annotations
 import reflex as rx
 
 
@@ -50,7 +50,6 @@ def form_item(item: dict) -> rx.Component:
 
 
 def settings_modal(State, trigger) -> rx.Component:
-    """用于创建新聊天的模态框组件"""
     return rx.dialog.root(  # 对话框根组件
         rx.dialog.trigger(trigger),  # 对话框触发器，传入的参数作为触发元素
         rx.dialog.content(  # 对话框内容区域

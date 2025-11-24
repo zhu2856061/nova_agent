@@ -7,10 +7,6 @@ from typing import Optional
 
 import reflex as rx
 
-# from app.components.novel.core_interact_section import (
-#     editor_component_form,
-# )
-
 
 @dataclass(kw_only=True)
 class TabMenu:

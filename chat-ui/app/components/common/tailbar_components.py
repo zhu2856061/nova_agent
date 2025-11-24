@@ -3,15 +3,16 @@
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
 
+
 import reflex as rx
 
 
-def novel_footer(State) -> rx.Component:
+def footer() -> rx.Component:
     """The action bar to send a new message."""
     return rx.center(
         rx.vstack(
             rx.text(
-                "Nova AI integrates cutting-edge model technology, making efficient work accessible.",
+                "Nova AI Making Efficient Work Accessible.",
                 text_align="center",
                 font_size="0.7em",
                 color=rx.color("mauve", 10),
@@ -23,7 +24,7 @@ def novel_footer(State) -> rx.Component:
         position="sticky",
         bottom="0",
         left="0",
-        padding_y="16px",
+        padding_y="8px",
         backdrop_filter="auto",
         backdrop_blur="lg",
         border_top=f"1px solid {rx.color('mauve', 3)}",

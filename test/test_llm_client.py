@@ -12,6 +12,7 @@ request_data = {
     "trace_id": "12345",
     "context": {
         "model": "basic",
+        "thread_id": "nova",
         "config": {"temperature": 0.7},
     },
     "state": {
