@@ -26,7 +26,7 @@ class State(BaseModel):
 
 class Context(BaseModel):
     thread_id: str = Field("default", description="the thread_id")
-    task_dir: str = Field("merlin", description="the task dir")
+    task_dir: str = Field("", description="the task dir")
     model: str = Field("basic", description="the model")
     models: Dict = Field(default={}, description="the model dict")
     config: Dict = Field(default={}, description="the config dict")

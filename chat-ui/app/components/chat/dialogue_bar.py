@@ -21,7 +21,7 @@ def message_content(text, color: ColorType) -> rx.Component:
     :param color: 气泡色系
     """
     return rx.markdown(
-        text.strip() | "（无内容）",
+        text.strip(),
         # 气泡内边距：上下0.5rem，左右0.8rem，保证文字与气泡边框的间距
         padding="0.1rem 0.8rem",
         # 气泡背景色：基于传入的主题色系，取3号浅色色阶（柔和背景）

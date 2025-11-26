@@ -31,14 +31,22 @@ async def _stream_responses(
             if response.content:
                 yield (
                     ChatResponse(
-                        code=0, data={"content": response.content}
+                        code=0,
+                        data={
+                            "event": "llm_stream",
+                            "data": {"content": response.content},
+                        },
                     ).model_dump_json()
                     + "\n"
                 )
             if response.additional_kwargs:
                 yield (
                     ChatResponse(
-                        code=0, data=response.additional_kwargs
+                        code=0,
+                        data={
+                            "event": "llm_stream",
+                            "data": response.additional_kwargs,
+                        },
                     ).model_dump_json()
                     + "\n"
                 )

@@ -29,7 +29,7 @@ from nova.agent.memorizer import memorizer_agent
 from nova.agent.researcher import researcher_agent
 from nova.agent.wechat_researcher import wechat_researcher_agent
 from nova.model.agent import AgentRequest, AgentResponse
-from nova.utils import handle_event
+from nova.service.handle_event import handle_event
 
 logger = logging.getLogger(__name__)
 
@@ -81,6 +81,14 @@ async def stream_agent_events(
             ):
                 response = handle_event(trace_id, event)
                 if response:
+                    if response.get("event") == "error":
+                        yield (
+                            AgentResponse(
+                                code=1, err_message=response.get("data").get("output")
+                            ).model_dump_json()
+                            + "\n"
+                        )
+                        return
                     yield (
                         AgentResponse(code=0, data=response).model_dump_json() + "\n"
                     )
@@ -141,6 +149,10 @@ async def human_in_loop(request: AgentRequest):
                         version="v2",
                     ):
                         response = handle_event(trace_id, event)
+                        if response.get("event") == "error":
+                            yield AgentResponse(code=1, err_message=response)
+                            return
+
                         if response:
                             yield (
                                 AgentResponse(code=0, data=response).model_dump_json()

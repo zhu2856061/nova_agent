@@ -29,15 +29,9 @@ class ChatState(rx.State):
     params_fields: list[Parameters] = []
     chat_instance: dict[str, list[Message]] = {}
 
-    # 获得badge
-    @rx.var
-    def get_badge(self) -> str:
-        """获得badge"""
-        return _TITLE + " - " + self.current_chat
-
-    # 初始状态
-    @rx.event
-    def init_state(self):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # 初始状态
         self.params_fields: list[Parameters] = [
             Parameters(
                 mkey="model",
@@ -49,7 +43,7 @@ class ChatState(rx.State):
             Parameters(
                 mkey="config",
                 mtype="text_area",
-                mvalue=json.dumps({"temperature": 0.7}),
+                mvalue=json.dumps({"user_id": "merlin"}),
                 mvaluetype="dict",
                 mselected=None,
             ),
@@ -57,6 +51,12 @@ class ChatState(rx.State):
         self.chat_instance = {
             self.default_chat_name: [Message(role="assistant", content=_DEFAULT_INTRO)]
         }
+
+    # 获得badge
+    @rx.var
+    def get_badge(self) -> str:
+        """获得badge"""
+        return _TITLE + " - " + self.current_chat
 
     # 创建会话窗口的提交事件
     @rx.event
@@ -158,26 +158,29 @@ class ChatState(rx.State):
             state={"messages": messages},
             context=context,
         ):
-            if value and value.get("reasoning_content", None) is not None:
-                if is_start_thinking:
-                    self.chat_instance[self.current_chat][
-                        -1
-                    ].content += "\n\n🤔 Thinking...\n\n"
-                    is_start_thinking = False
+            if value and value.get("type", None) is not None:
+                if value["type"] == "thought":
+                    if is_start_thinking:
+                        self.chat_instance[self.current_chat][
+                            -1
+                        ].content += "\n\n🤔 Thinking...\n\n"
+                        is_start_thinking = False
 
-                self.chat_instance[self.current_chat][-1].content += value[
-                    "reasoning_content"
-                ]
+                    self.chat_instance[self.current_chat][-1].content += value[
+                        "content"
+                    ]
 
-            if value and value.get("content", None) is not None:
-                if is_start_answer:
-                    self.chat_instance[self.current_chat][
-                        -1
-                    ].content += "\n\n✨ Answering...\n\n"
-                    is_start_answer = False
+                if value["type"] == "answer":
+                    if is_start_answer:
+                        self.chat_instance[self.current_chat][
+                            -1
+                        ].content += "\n\n✨ Answering...\n\n"
+                        is_start_answer = False
 
-                self.chat_instance[self.current_chat][-1].content += value["content"]
-            yield
+                    self.chat_instance[self.current_chat][-1].content += value[
+                        "content"
+                    ]
+                yield
         self.is_processing = False
 
     def _session_contxet_control_and_get_message(self):
@@ -197,10 +200,10 @@ def chat_page_main():
     return rx.vstack(
         # ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←
         # 这一行是触发同步的“钩子”
-        rx.box(
-            on_mount=ChatState.init_state,  # 页面加载时执行一次
-            display="none",  # 完全隐藏，不影响布局
-        ),
+        # rx.box(
+        #     on_mount=ChatState.init_state,  # 页面加载时执行一次
+        #     display="none",  # 完全隐藏，不影响布局
+        # ),
         # ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑
         rx.box(
             dialoguebar(ChatState.get_chat_instance),

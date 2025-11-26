@@ -22,7 +22,7 @@ from nova.llms import get_llm_by_type
 from nova.model.agent import Context, State
 from nova.prompts.template import apply_prompt_template
 from nova.tools import read_file_tool, write_file_tool
-from nova.utils import set_color
+from nova.utils import log_error_set_color, log_info_set_color
 
 # ######################################################################################
 # 配置
@@ -40,26 +40,6 @@ def get_prompt(current_tab):
     with open(f"{_PROMPT_DIR}/ainovel/{current_tab}.md") as f:
         prompt_content = f.read()
     return prompt_content
-
-
-def log_info_set_color(trace_id, node, message, color="pink"):
-    logger.info(
-        set_color(
-            f"trace_id={trace_id} | node={node} | message={message}",
-            color,
-        )
-    )
-
-
-def log_error_set_color(trace_id, node, e, color="red"):
-    err_message = f"trace_id={trace_id} | node={node} | error={e}"
-    logger.info(
-        set_color(
-            f"trace_id={trace_id} | node={node} | error={e}",
-            color,
-        )
-    )
-    return err_message
 
 
 def parse_chapter_blueprint(blueprint_text: str):

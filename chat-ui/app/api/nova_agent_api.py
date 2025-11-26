@@ -71,7 +71,7 @@ async def get_nova_agent_api(url_name: str, trace_id: str, state: dict, context:
                             return
 
                         # 提取内容
-                        yield line_data["data"]
+                        yield extract_event_data(line_data["data"])
 
                     except json.JSONDecodeError:
                         error_msg = f"❌ 响应格式错误: 无法解析内容: {chunk[:200]}..."
@@ -96,143 +96,125 @@ async def get_nova_agent_api(url_name: str, trace_id: str, state: dict, context:
         return
 
 
-"""
-                        # 系统事件
-                        if _event in [
-                            "on_chain_start",
-                            "on_chain_end",
-                            "on_tool_start",
-                            "on_tool_end",
-                        ]:
-                            if _event == "on_chain_start":
-                                _graph_name = _node_name.split("|")[0]
-                                if "RunnableSequence" in _node_name:
-                                    content = None
-                                elif "LangGraph" in _node_name:
-                                    if _graph_name:
-                                        content = f"⏳ 【图{_graph_name}】开始任务\n\n"
-                                    else:
-                                        content = "⏳ 【图task】开始任务\n\n"
-                                else:
-                                    content = f"📌 【图{_graph_name}】🚀【第{_step}步执行: {_node_name}】\n\n"
-
-                            elif _event == "on_chain_end":
-                                _graph_name = _node_name.split("|")[0]
-                                if "RunnableSequence" in _node_name:
-                                    content = None
-                                elif "LangGraph" in _node_name:
-                                    if _graph_name:
-                                        content = f"✅ 【图{_graph_name}】 🟢 【任务结束】\n\n"
-                                    else:
-                                        content = "✅ 【图task】 🟢 【任务结束】\n\n"
-                                else:
-                                    content = f"⏳ 【图{_graph_name}】🟢【第{_step}步完成】: {_node_name}\n\n"
-
-                            elif _event == "on_tool_start":
-                                _input = str(_data["input"])
-                                content = (
-                                    f"🛠️ 【调用工具: {_node_name}】\n\n入参: {_input[:200]}...\n\n"
-                                    if len(_input) > 200
-                                    else f"🛠️ 【调用工具: {_node_name}】\n\n入参: {_input}\n\n"
-                                )
-
-                            elif _event == "on_tool_end":
-                                _output = str(_data["output"])
-                                content = (
-                                    f"🛠️ 【工具: {_node_name}执行结束】\n\n出参: {_output[:200]}...\n\n"
-                                    if len(_output) > 200
-                                    else f"🛠️ 【工具: {_node_name}执行结束】\n\n出参: {_output}\n\n"
-                                )
-
-                            if content:
-                                yield {"type": "system", "content": content}
-
-                        elif _event in [
-                            "on_chat_model_start",
-                            "on_chat_model_end",
-                            "on_chat_model_stream",
-                        ]:
-                            if _event == "on_chat_model_start":
-                                content = f"🤔 【{_node_name}: 正在思考...】\n\n"
-                                if content:
-                                    yield {"type": "chat_start", "content": content}
-
-                            elif _event == "on_chat_model_end":
-                                # title = f"✨ 【{_node_name}: 思考完成】\n\n"
-                                reasoning_content = (
-                                    _data["output"].get("reasoning_content", "").strip()
-                                )
-                                content = _data["output"].get("content", "").strip()
-                                tool_calls = _data["output"].get("tool_calls", [])
-
-                                key_info = {
-                                    "content": content,
-                                    "reasoning_content": reasoning_content,
-                                    "tool_calls": tool_calls,
-                                }
-
-                                yield {"type": "chat_end", "content": key_info}
-
-                            # 模型流式事件 - 区分思考和回答内容
-                            elif _event == "on_chat_model_stream":
-                                _output = _data["output"]
-                                _message_id = _output["message_id"]
-                                _reasoning = _output.get("reasoning_content", "")
-                                _answer = _output.get("content", "")
-                                # _tool_calls = _output.get("tool_calls", [])
-
-                                # 思考内容
-                                if _reasoning:
-                                    if _message_id != current_reasoning_message_id:
-                                        current_reasoning_message_id = _message_id
-                                        yield {
-                                            "type": "thought",
-                                            "content": "\n\n📝 思考过程：\n\n",
-                                        }
-
-                                    yield {
-                                        "type": "thought",
-                                        "content": f"{_reasoning}",
-                                    }
-
-                                # 回答内容
-                                if _answer:
-                                    if _message_id != current_answer_message_id:
-                                        current_answer_message_id = _message_id
-                                        yield {
-                                            "type": "answer",
-                                            "content": "\n\n📌 回答内容：\n\n",
-                                        }
-
-                                    yield {"type": "answer", "content": f"{_answer}"}
-
-                        elif _event in ["on_chain_stream"]:
-                            _output = _data["output"]
-                            _content = _output.get("content", "")
-                            yield {
-                                "type": "human_in_loop",
-                                "content": f"\n\n🐞 人工介入：{_content}\n\n",
-                            }
-
-                    except json.JSONDecodeError:
-                        error_msg = f"❌ 响应格式错误: 无法解析内容（前200字符）: {chunk[:200]}..."
-                        logger.error(f"{error_msg} (trace_id: {trace_id})")
-                        yield {"type": "error", "content": error_msg}
-                        return
-                    except KeyError as e:
-                        error_msg = f"❌ 响应结构错误: 缺少必要字段「{str(e)}」"
-                        logger.error(f"{error_msg} (trace_id: {trace_id})")
-                        yield {"type": "error", "content": error_msg}
-                        return
-
-    except requests.exceptions.RequestException as e:
-        error_msg = f"❌ 请求失败: {str(e)}（流式连接中断）"
-        logger.error(f"{error_msg} (trace_id: {trace_id})")
-        yield {"type": "error", "content": error_msg}
+def extract_event_data(line_data):
+    _event = line_data.get("event")
+    _data = line_data.get("data")
+    if not _event:
         return
-    except Exception as e:
-        error_msg = f"❌ 流式处理异常: {str(e)}"
-        logger.error(f"{error_msg} (trace_id: {trace_id})")
-        yield {"type": "error", "content": error_msg}
+
+    # 系统事件
+    if _event == "llm_stream":
+        _reasoning_content = _data.get("reasoning_content", "")
+        _content = _data.get("content", "")
+        # 思考内容
+        if _reasoning_content:
+            return {"type": "thought", "content": f"{_reasoning_content}"}
+
+        # 回答内容
+        if _content:
+            return {"type": "answer", "content": f"{_content}"}
+
+    elif _event == "on_chain_start":
+        _node_name = _data.get("node_name")
+        content = f"\n\n⏳ 【 {_node_name} 】 节点开始\n\n"
+        return {"type": "system", "content": content}
+
+    elif _event == "on_chain_end":
+        _node_name = _data.get("node_name")
+        _output = _data.get("output")
+        content = f"\n\n✅ 【 {_node_name} 】 节点结束 \n\n"
+
+        # 只关注最终LangGGraph输出
+        if _output and _node_name == "LangGraph":
+            if isinstance(_output, dict):
+                if _output["code"] != 0:
+                    return {"type": "error", "content": _output["err_message"]}
+                _data = _output.get("data")
+                content += f"{_data}\n\n"
+
+        return {"type": "system", "content": content}
+
+    elif _event == "on_tool_start":
+        _node_name = _data.get("node_name")
+        _input = _data.get("input")
+        content = f"\n\n🛠️ 【 {_node_name} 】 开始调用工具 \n\n"
+        if _input:
+            _input = str(_input)[:200]
+            content += f"入参: {_input}\n\n"
+            return {"type": "system", "content": content}
+        else:
+            return {"type": "system", "content": content}
+
+    elif _event == "on_tool_end":
+        _node_name = _data.get("node_name")
+        _output = _data.get("output")
+        content = f"\n\n🛠️ 【 {_node_name} 】 结束调用工具: \n\n"
+        if _output:
+            _output = str(_output)[:200]
+            content += f"出参: {_output}\n\n"
+            return {"type": "system", "content": content}
+        else:
+            return {"type": "system", "content": content}
+
+    elif _event == "on_chat_model_start":
+        _node_name = _data.get("node_name")
+        content = f"\n\n⏳ 【 {_node_name} 】 LLM模型开始 \n\n"
+        return {"type": "system", "content": content}
+
+    elif _event == "on_chat_model_end":
+        _node_name = _data.get("node_name")
+        _output = _data.get("output")
+        content = f"\n\n✅【 {_node_name} 】 LLM模型结束 \n\n"
+        if _output:
+            _content = _output["content"]
+            _reasoning_content = _output["reasoning_content"]
+            _tool_calls = _output["tool_calls"]
+
+            if _reasoning_content:
+                content += f"ℹ️ 【Think】\n\n{_reasoning_content}\n\n"
+
+            if _content:
+                content += f"📘 【Answer】\n\n{_content}\n\n"
+
+            if _tool_calls:
+                for _tool_call in _tool_calls:
+                    _tool_name = _tool_call["name"]
+                    _tool_args = _tool_call["args"]
+                    content += f"🛠️ 【Tool: {_tool_name}】\n\n{_tool_args}\n\n"
+
+            return {"type": "system", "content": content}
+        else:
+            return {"type": "system", "content": content}
+
+    elif _event == "on_chat_model_stream":
+        _node_name = _data.get("node_name")
+        _output = _data.get("output")
+
+        _reasoning_content = _output.get("reasoning_content", "")
+        _content = _output.get("content", "")
+        # 思考内容
+        if _reasoning_content:
+            return {"type": "thought", "content": f"{_reasoning_content}"}
+
+        # 回答内容
+        if _content:
+            return {"type": "answer", "content": f"{_content}"}
+
+    elif _event == "human_in_loop":
+        _node_name = _data.get("node_name")
+        _output = _data.get("output")
+        return {
+            "type": "human_in_loop",
+            "content": f"\n\n🐞 【 {_node_name} 】 人工介入：\n\n{_output}\n\n",
+        }
+
+    elif _event == "on_parser_end":
+        _node_name = _data.get("node_name")
+        _output = _data.get("output")
+        return {
+            "type": "human_in_loop",
+            "content": f"\n\n✅ 【 {_node_name} 】 完成：\n\n{_output}\n\n",
+        }
+
+    else:
         return
-"""
