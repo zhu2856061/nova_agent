@@ -10,8 +10,10 @@ logger = logging.getLogger(__name__)
 AGENT_BACKEND_URL = {
     "llm": "http://0.0.0.0:2021/chat/llm",
     "memorizer": "http://0.0.0.0:2021/agent/memorizer",
+    "themeslicer": "http://0.0.0.0:2021/agent/themeslicer",
     "researcher": "http://0.0.0.0:2021/agent/researcher",
     "wechat_researcher": "http://0.0.0.0:2021/agent/wechat_researcher",
+    "deepresearcher": "http://0.0.0.0:2021/task/deepresearcher",
     "ainovel_architect": "http://0.0.0.0:2021/agent/ainovel_architect",
     "ainovel_chapter": "http://0.0.0.0:2021/agent/ainovel_chapter",
     "ainovel": "http://0.0.0.0:2021/agent/ainovel",
@@ -24,7 +26,6 @@ AGENT_BACKEND_URL = {
     "ainovel_summarize_architecture": "http://0.0.0.0:2021/agent/ainovel_summarize_architecture",
     "ainovel_chapter_draft": "http://0.0.0.0:2021/agent/ainovel_chapter_draft",
     "human_in_loop": "http://0.0.0.0:2021/agent/human_in_loop",
-    "deepresearcher": "http://0.0.0.0:2021/task/deepresearcher",
 }
 
 

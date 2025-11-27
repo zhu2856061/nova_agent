@@ -2,11 +2,14 @@
 # @Time   : 2025/08/12 10:24
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
+from __future__ import annotations
+
 import asyncio
 import logging
 from typing import Literal, cast
 
 from langchain_core.messages import SystemMessage
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
@@ -178,4 +181,5 @@ _agent.add_edge(START, "memorizer")
 _agent.add_edge("memorizer", "node_guidance")
 _agent.add_edge("memorizer_tools", END)
 
-memorizer_agent = _agent.compile()
+checkpointer = InMemorySaver()
+memorizer_agent = _agent.compile(checkpointer=checkpointer)

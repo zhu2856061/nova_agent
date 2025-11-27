@@ -2,23 +2,22 @@
 # @Time   : 2025/08/12 10:24
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
-import logging
-from dataclasses import dataclass, field
-from typing import Annotated, List, Literal, Optional
+from __future__ import annotations
 
-from langchain_core.messages import MessageLikeRepresentation
+import logging
+from typing import List
+
+from langchain_core.messages import AIMessage, HumanMessage, get_buffer_string
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.graph import START, StateGraph, add_messages
+from langgraph.graph import START, StateGraph
 from langgraph.runtime import Runtime
 from langgraph.types import Command, interrupt
 from pydantic import BaseModel, Field
 
 from nova.llms import get_llm_by_type
-from nova.prompts.theme_slicer import apply_system_prompt_template
-from nova.utils import (
-    get_today_str,
-    set_color,
-)
+from nova.model.agent import Context, State
+from nova.prompts.template import apply_prompt_template, get_prompt
+from nova.utils import get_today_str, log_error_set_color, log_info_set_color
 
 logger = logging.getLogger(__name__)
 # ######################################################################################
@@ -39,90 +38,76 @@ class Topics(BaseModel):
     topics: List[Topic] = Field(description="The topics")
 
 
-@dataclass(kw_only=True)
-class State:
-    err_message: str = field(
-        default="",
-        metadata={"description": "The error message to use for the agent."},
-    )
-    topic: Optional[List[Topic]] = field(
-        default=None,
-        metadata={"description": "The error message to use for the agent."},
-    )
-    theme_slicer_messages: Annotated[list[MessageLikeRepresentation], add_messages]
-
-
-@dataclass(kw_only=True)
-class Context:
-    trace_id: str = field(
-        default="default",
-        metadata={"description": "The trace_id to use for the agent."},
-    )
-
-    theme_slicer_model: str = field(
-        default="basic",
-        metadata={"description": "The name of llm to use for the agent. "},
-    )
-
-
 # ######################################################################################
 # 函数
-async def theme_slicer(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["__end__"]]:
+async def theme_slicer(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "theme_slicer"
     try:
         # 变量
-        _trace_id = runtime.context.trace_id
-        _model_name = runtime.context.theme_slicer_model
-        _messages = state.theme_slicer_messages
+        _thread_id = runtime.context.thread_id
+        _model_name = runtime.context.model
+        _messages = state.messages
+        _human_in_loop_node = state.human_in_loop_node
 
         # 提示词
         def _assemble_prompt(messages):
-            content = apply_system_prompt_template(
-                "theme_slicer", {"date": get_today_str()}
-            )
+            tmp = {
+                "date": get_today_str(),
+                "content": get_buffer_string(messages),
+                "user_guidance": _human_in_loop_node,
+            }
 
-            messages[-1].content = content + messages[-1].content
-
-            return messages
+            _prompt_tamplate = get_prompt("theme", _NODE_NAME)
+            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
         # LLM
         def _get_llm():
             return get_llm_by_type(_model_name).with_structured_output(Topics)
 
-        _tmp_messages = _assemble_prompt(_messages)
+        response = await _get_llm().ainvoke(_assemble_prompt(_messages))
+        log_info_set_color(_thread_id, _NODE_NAME, response)
 
-        msg = await _get_llm().ainvoke(_tmp_messages)
-
-        return Command(goto="__end__", update={"topic": msg.topics})  # type: ignore
+        _data = []
+        for topic in response.topics:  # type: ignore
+            _data.append(topic.model_dump())
+        return {
+            "code": 0,
+            "err_message": "ok",
+            "messages": AIMessage(content=_data),
+            "data": {_NODE_NAME: _data},
+        }
 
     except Exception as e:
-        logger.error(
-            set_color(f"trace_id={_trace_id} | node=theme_slicer | error={e}", "red")
-        )
-        return Command(
-            goto="__end__",
-            update={
-                "err_message": f"trace_id={_trace_id} | node=theme_slicer | error={e}"
-            },
-        )
+        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
+        return {"code": 1, "err_message": _err_message}
 
 
-async def human_in_loop(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["theme_slicer", "__end__"]]:
-    _trace_id = runtime.context.trace_id
+async def human_in_loop(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "human_in_loop"
+
+    # 变量
+    _thread_id = runtime.context.thread_id
+    _code = state.code
+    if _code != 0:
+        return Command(goto="__end__")
+
     value = interrupt(
         {
-            "message_id": _trace_id,
+            "message_id": _thread_id,
             "content": "对生成的topic进行确定",
         }
     )
-    print("===>", value)
-    if value["result"] == "确定":
+    log_info_set_color(_thread_id, _NODE_NAME, value)
+
+    if value["human_in_loop"] == "确定":
         return Command(goto="__end__")
     else:
-        return Command(goto="theme_slicer")
+        return Command(
+            goto="theme_slicer", update={"human_in_loop_node": value["human_in_loop"]}
+        )
+    # except Exception as e:
+    #     _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
+    #     return {"code": 1, "err_message": _err_message}
 
 
 # researcher subgraph

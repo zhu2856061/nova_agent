@@ -3,29 +3,86 @@
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
 import asyncio
-import sys
+import json
 
-sys.path.append("..")
-import os
-
-os.environ["CONFIG_PATH"] = "../config.yaml"
-from nova.agent.theme_slicer import theme_slicer_agent
-
-inputs = {
-    "theme_slicer_messages": [
-        {
-            "role": "user",
-            "content": "帮我研究一个关于依沃西单抗在非小细胞肺癌的临床研究的进展。",
-        }
-    ],
-}
-
-context = {"trace_id": 123, "theme_slicer_model": "basic"}
+import httpx
 
 
-async def async_generate_response():
-    tmp = await theme_slicer_agent.ainvoke(inputs, context=context)  # type: ignore
-    print("Assistant:\n", tmp)
+async def agent_client():
+    request_data = {
+        "trace_id": "123",
+        "context": {
+            "thread_id": "Nova",
+            "task_dir": "merlin",
+            "model": "basic",
+        },
+        "state": {
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "请帮忙写一篇废土世界的 AI 叛乱，偏科幻的小说, 大概3章节，每章节大约2000字",
+                }
+            ],
+        },
+        "stream": True,
+    }
+    # 使用 httpx 异步客户端发送请求
+    async with httpx.AsyncClient(timeout=600.0) as client:
+        # 发送 POST 请求到 /stream_llm 路由
+        async with client.stream(
+            "POST",
+            "http://0.0.0.0:2021/agent/themeslicer",
+            json=request_data,
+            timeout=600.0,
+        ) as response:
+            # 检查响应状态码
+            if response.status_code != 200:
+                print(f"Error: {response.status_code}")
+                return
+
+            async for chunk in response.aiter_bytes():
+                if chunk:
+                    tmp = json.loads(chunk.decode("utf-8"))
+                    print(tmp)
 
 
-asyncio.run(async_generate_response())
+async def human_in_loop_client():
+    request_data = {
+        "trace_id": "123",
+        "context": {
+            "thread_id": "Nova",
+            "task_dir": "merlin",
+            "model": "basic",
+        },
+        "state": {
+            "user_guidance": {
+                "human_in_loop": "确定",  # 主题数量为1个
+                "agent_name": "themeslicer",
+            },
+        },
+        "stream": True,
+    }
+
+    # 使用 httpx 异步客户端发送请求
+    async with httpx.AsyncClient(timeout=600.0) as client:
+        # 发送 POST 请求到 /stream_llm 路由
+        async with client.stream(
+            "POST",
+            "http://0.0.0.0:2021/agent/human_in_loop",
+            json=request_data,
+            timeout=600.0,
+        ) as response:
+            # 检查响应状态码
+            if response.status_code != 200:
+                print(f"Error: {response.status_code}")
+                return
+
+            async for chunk in response.aiter_bytes():
+                if chunk:
+                    tmp = json.loads(chunk.decode("utf-8"))
+                    print(tmp)
+
+
+if __name__ == "__main__":
+    # asyncio.run(agent_client())
+    asyncio.run(human_in_loop_client())

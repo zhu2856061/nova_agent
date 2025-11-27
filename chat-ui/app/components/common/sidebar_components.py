@@ -42,6 +42,11 @@ class SideState(rx.State):
                     tobe="/agent/memorizer",
                 ),
                 SideMenu(
+                    title="themeslicer",
+                    icon="bot-message-square",
+                    tobe="/agent/themeslicer",
+                ),
+                SideMenu(
                     title="web_searcher",
                     icon="bot-message-square",
                     tobe="/agent/researcher",

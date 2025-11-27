@@ -14,7 +14,7 @@ from langchain_core.tools import BaseTool, InjectedToolArg
 from pydantic import BaseModel, Field
 
 from nova.llms import get_llm_by_type
-from nova.prompts.researcher import apply_system_prompt_template
+from nova.prompts.template import apply_prompt_template, get_prompt
 from nova.utils import get_today_str
 
 from .baidu_serper import serp_baidu_tool
@@ -40,26 +40,22 @@ class SearchToolInput(BaseModel):
 
 async def summarize_webpage(model: BaseChatModel, content: str):
     llm = model.with_structured_output(Summary)
-    webpage_content = content
+    _webpage_content = content
+
+    def _assemble_prompt(webpage_content):
+        tmp = {
+            "webpage_content": webpage_content,
+            "date": get_today_str(),
+        }
+        _prompt_tamplate = get_prompt("researcher", "summarize_webpage")
+        return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
     max_retries = 3
     current_retry = 0
     while current_retry <= max_retries:
         try:
             result = await asyncio.wait_for(
-                llm.ainvoke(
-                    [
-                        HumanMessage(
-                            content=apply_system_prompt_template(
-                                "summarize_webpage",
-                                {
-                                    "webpage_content": webpage_content,
-                                    "date": get_today_str(),
-                                },
-                            )
-                        )
-                    ]
-                ),
+                llm.ainvoke(_assemble_prompt(_webpage_content)),
                 timeout=200.0,
             )
 
@@ -68,11 +64,11 @@ async def summarize_webpage(model: BaseChatModel, content: str):
 
             return f"""<summary>\n{summary}\n</summary>\n\n<key_excerpts>\n{key_excerpts}\n</key_excerpts>"""  # type: ignore
         except Exception:
-            token_limit = int(len(webpage_content) * 0.8)
+            token_limit = int(len(_webpage_content) * 0.8)
             logger.warning(
                 f"current_retry: {current_retry}, summarize reducing the chars to: {token_limit}"
             )
-            webpage_content = webpage_content[:token_limit]
+            _webpage_content = _webpage_content[:token_limit]
             current_retry += 1
 
     return content

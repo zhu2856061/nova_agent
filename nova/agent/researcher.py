@@ -4,17 +4,13 @@
 # @Moto   : Knowledge comes from decomposition
 import asyncio
 import logging
-import operator
-from dataclasses import dataclass, field
-from typing import Annotated, Literal, cast
+from typing import cast
 
 from langchain_core.messages import (
     AIMessage,
     HumanMessage,
-    MessageLikeRepresentation,
     SystemMessage,
     ToolMessage,
-    filter_messages,
 )
 from langgraph.graph import START, StateGraph
 from langgraph.runtime import Runtime
@@ -22,13 +18,14 @@ from langgraph.types import Command
 from pydantic import BaseModel
 
 from nova.llms import get_llm_by_type
-from nova.prompts.researcher import apply_system_prompt_template
+from nova.model.agent import Context, State
+from nova.prompts.template import apply_prompt_template, get_prompt
 from nova.tools import llm_searcher_tool
 from nova.utils import (
     get_today_str,
-    override_reducer,
+    log_error_set_color,
+    log_info_set_color,
     remove_up_to_last_ai_message,
-    set_color,
 )
 
 # ######################################################################################
@@ -38,46 +35,6 @@ logger = logging.getLogger(__name__)
 
 # ######################################################################################
 # 全局变量
-@dataclass(kw_only=True)
-class State:
-    err_message: str = field(
-        default="",
-        metadata={"description": "The error message to use for the agent."},
-    )
-    researcher_messages: Annotated[list[MessageLikeRepresentation], operator.add]
-    tool_call_iterations: int = field(
-        default=0,
-        metadata={"description": "The number of iterations of tool calls."},
-    )
-    compressed_research: str = field(
-        default="",
-        metadata={"description": "The compressed research to use for the agent."},
-    )
-    raw_notes: Annotated[list[str], override_reducer]
-
-
-@dataclass(kw_only=True)
-class Context:
-    trace_id: str = field(
-        default="default",
-        metadata={"description": "The trace id to use for the agent."},
-    )
-    researcher_model: str = field(
-        default="basic",
-        metadata={"description": "The name of llm to use for the agent. "},
-    )
-    summarize_model: str = field(
-        default="basic",
-        metadata={"description": "The name of llm to use for the agent. "},
-    )
-    compress_research_model: str = field(
-        default="basic",
-        metadata={"description": "The name of llm to use for the agent. "},
-    )
-    max_react_tool_calls: int = field(
-        default=5,
-        metadata={"description": "The maximum number of tool calls to allow."},
-    )
 
 
 class ResearchComplete(BaseModel):
@@ -89,26 +46,24 @@ class ResearchComplete(BaseModel):
 
 
 # 研究员
-async def researcher(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["researcher_tools", "__end__"]]:
-    # 变量
-    _trace_id = runtime.context.trace_id
-    _model_name = runtime.context.researcher_model
-    _messages = state.researcher_messages
-    _tool_call_iterations = state.tool_call_iterations
+async def researcher(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "researcher"
     try:
+        # 变量
+        _thread_id = runtime.context.thread_id
+        _model_name = runtime.context.model
+        _messages = state.messages
+        _tool_call_iterations = state.user_guidance.get("tool_call_iterations", 1)
+
         # 提示词
         def _assemble_prompt(messages):
-            messages = [
-                SystemMessage(
-                    content=apply_system_prompt_template(
-                        "researcher_system", {"date": get_today_str()}
-                    )
-                )
+            tmp = {
+                "date": get_today_str(),
+            }
+            _prompt_tamplate = get_prompt("researcher", "researcher_system")
+            return [
+                SystemMessage(content=apply_prompt_template(_prompt_tamplate, tmp))
             ] + messages
-
-            return messages
 
         # LLM
         def _get_llm():
@@ -116,43 +71,35 @@ async def researcher(
             return get_llm_by_type(_model_name).bind_tools(_tools)
 
         response = await _get_llm().ainvoke(_assemble_prompt(_messages))
-        logger.info(
-            set_color(
-                f"trace_id={_trace_id} | node=researcher | message={response}", "pink"
-            )
-        )
+        log_info_set_color(_thread_id, _NODE_NAME, response)
 
+        state.user_guidance["tool_call_iterations"] = _tool_call_iterations + 1
         return Command(
             goto="researcher_tools",
             update={
-                "researcher_messages": [response],
-                "tool_call_iterations": _tool_call_iterations + 1,
+                "code": 0,
+                "err_message": "ok",
+                "messages": response,
+                "user_guidance": state.user_guidance,
+                "data": {_NODE_NAME: response},
             },
         )
 
     except Exception as e:
-        logger.error(
-            set_color(f"trace_id={_trace_id} | node=researcher | error={e}", "red")
-        )
-        return Command(
-            goto="__end__",
-            update={
-                "err_message": f"trace_id={_trace_id} | node=researcher | error={e}"
-            },
-        )
+        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
+        return Command(goto="__end__", update={"code": 1, "err_message": _err_message})
 
 
 # 研究员工具
-async def researcher_tools(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["researcher", "compress_research", "__end__"]]:
+async def researcher_tools(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "researcher_tools"
     try:
         # 变量
-        _trace_id = runtime.context.trace_id
-        _model_name = runtime.context.summarize_model
-        _most_recent_message = state.researcher_messages[-1]
-        _tool_call_iterations = state.tool_call_iterations
-        _max_react_tool_calls = runtime.context.max_react_tool_calls
+        _thread_id = runtime.context.thread_id
+        _model_name = runtime.context.model
+        _tool_call_iterations = state.user_guidance.get("tool_call_iterations", 1)
+        _max_react_tool_calls = state.user_guidance.get("max_react_tool_calls", 3)
+        _most_recent_message = state.data.get("researcher")
 
         # 执行
         if not cast(AIMessage, _most_recent_message).tool_calls or any(
@@ -177,11 +124,10 @@ async def researcher_tools(
             coros.append(execute_tool_safely(llm_searcher_tool, tmp))
         observations = await asyncio.gather(*coros)
 
-        logger.info(
-            set_color(
-                f"trace_id={_trace_id} | node=researcher_tools | message=use execute_tool_safely: \n {str(observations)[:400]} ",
-                "pink",
-            )
+        log_info_set_color(
+            _thread_id,
+            _NODE_NAME,
+            f"use execute_tool_safely: \n {str(observations)[:400]} ",
         )
 
         tool_outputs = [
@@ -197,55 +143,49 @@ async def researcher_tools(
             return Command(
                 goto="compress_research",
                 update={
-                    "researcher_messages": tool_outputs,
+                    "messages": tool_outputs,
                 },
             )
 
         return Command(
             goto="researcher",
             update={
-                "researcher_messages": tool_outputs,
+                "messages": tool_outputs,
             },
         )
 
     except Exception as e:
-        logger.error(
-            set_color(
-                f"trace_id={_trace_id} | node=researcher_tools | error={e}", "red"
-            )
-        )
-        return Command(
-            goto="__end__",
-            update={
-                "err_message": f"trace_id={_trace_id} | node=researcher_tools | error={e}"
-            },
-        )
+        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
+        return Command(goto="__end__", update={"code": 1, "err_message": _err_message})
 
 
 # 精炼结果
-async def compress_research(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["__end__"]]:
+async def compress_research(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "compress_research"
     try:
         # 变量
-        _trace_id = runtime.context.trace_id
-        _model_name = runtime.context.compress_research_model
-        _messages = state.researcher_messages
+        _thread_id = runtime.context.thread_id
+        _model_name = runtime.context.model
+        _messages = state.messages
 
         # 提示词
         def _assemble_prompt(messages):
+            _compress_research_system = get_prompt(
+                "researcher", "compress_research_system"
+            )
             messages = [
                 SystemMessage(
-                    content=apply_system_prompt_template(
-                        "compress_research_system", {"date": get_today_str()}
+                    content=apply_prompt_template(
+                        _compress_research_system, {"date": get_today_str()}
                     )
                 )
             ] + messages
 
+            _compress_research_human = get_prompt(
+                "researcher", "compress_research_human"
+            )
             messages.append(
-                HumanMessage(
-                    content=apply_system_prompt_template("compress_research_human")
-                )
+                HumanMessage(content=apply_prompt_template(_compress_research_human))
             )
             return messages
 
@@ -255,30 +195,16 @@ async def compress_research(
 
         max_retries = 3
         current_retry = 0
-        while current_retry <= max_retries:
+        while current_retry <= max_retries:  # 尝试3次, 防止因为上下文过长，导致失败
             try:
                 _tmp_messages = _assemble_prompt(_messages)
                 response = await _get_llm().ainvoke(_tmp_messages)
-                logger.info(
-                    set_color(
-                        f"trace_id={_trace_id} | node=compress_research | message=\n {str(response.content)} ",
-                        "pink",
-                    )
-                )
+                log_info_set_color(_thread_id, _NODE_NAME, response.content)
+
                 return Command(
                     goto="__end__",
                     update={
-                        "compressed_research": str(response.content),
-                        "raw_notes": [
-                            "\n".join(
-                                [
-                                    str(m.content)
-                                    for m in filter_messages(
-                                        _tmp_messages, include_types=["tool", "ai"]
-                                    )
-                                ]
-                            )
-                        ],
+                        "data": {_NODE_NAME: response.content},
                     },
                 )
             except Exception as e:
@@ -288,31 +214,14 @@ async def compress_research(
         return Command(
             goto="__end__",
             update={
-                "compressed_research": "Error synthesizing research report: Maximum retries exceeded",
-                "raw_notes": [
-                    "\n".join(
-                        [
-                            str(m.content)
-                            for m in filter_messages(
-                                _messages, include_types=["tool", "ai"]
-                            )
-                        ]
-                    )
-                ],
+                "data": {
+                    _NODE_NAME: "Error synthesizing research report: Maximum retries exceeded"
+                },
             },
         )
     except Exception as e:
-        logger.error(
-            set_color(
-                f"trace_id={_trace_id} | node=researcher_tools | error={e}", "red"
-            )
-        )
-        return Command(
-            goto="__end__",
-            update={
-                "err_message": f"trace_id={_trace_id} | node=researcher_tools | error={e}"
-            },
-        )
+        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
+        return Command(goto="__end__", update={"code": 1, "err_message": _err_message})
 
 
 # researcher subgraph

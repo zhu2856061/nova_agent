@@ -4,7 +4,10 @@
 # @Moto   : Knowledge comes from decomposition
 import reflex as rx
 
-from app.pages.agent_memorizer_page import memorizer_page
+# from app.pages.agent_memorizer_page import memorizer_page
+from app.pages.agent_page import page_set
+
+# from app.pages.agent_themeslicer_page import themeslicer_page
 from app.pages.chat_page import chat_page
 
 
@@ -58,54 +61,10 @@ app.add_page(
 )
 
 # agent 模式
-app.add_page(
-    component=memorizer_page,
-    title="Nova Agent",
-    route="/agent/memorizer",
-    image="novaait.png",
-)
-# app.add_page(
-#     component=agent_researcher_page,
-#     title="Nova Agent",
-#     route="/agent/researcher",
-#     image="novaait.png",
-# )
-# app.add_page(
-#     component=agent_wechat_researcher_page,
-#     title="Nova Agent",
-#     route="/agent/wechat_researcher",
-#     image="novaait.png",
-# )
-# app.add_page(
-#     component=agent_ainovel_architect_page,
-#     title="Nova Agent",
-#     route="/agent/ainovel_architect",
-#     image="novaait.png",
-# )
-# app.add_page(
-#     component=agent_ainovel_chapter_page,
-#     title="Nova Agent",
-#     route="/agent/ainovel_chapter",
-#     image="novaait.png",
-# )
-
-# app.add_page(
-#     component=interact_ainovel_architect_page,
-#     title="Nova Interact",
-#     route="/interact/ainovel",
-#     image="novaait.png",
-# )
-
-# # task 模式
-# app.add_page(
-#     component=task_deepresearcher_page,
-#     title="Nova Task",
-#     route="/task/deepresearcher",
-#     image="novaait.png",
-# )
-# app.add_page(
-#     component=task_ainovel_page,
-#     title="Nova Task",
-#     route="/task/ainovel",
-#     image="novaait.png",
-# )
+for item, value in page_set.items():
+    app.add_page(
+        component=value,
+        title="Nova Agent",
+        route=f"/agent/{item}",
+        image="novaait.png",
+    )
