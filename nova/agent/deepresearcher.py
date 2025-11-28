@@ -5,32 +5,32 @@
 import asyncio
 import logging
 import os
-from typing import Annotated, Literal, Optional
+from typing import Annotated
 
 from langchain_core.messages import (
     AIMessage,
     HumanMessage,
-    MessageLikeRepresentation,
     SystemMessage,
     ToolMessage,
     get_buffer_string,
 )
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.graph import START, MessagesState, StateGraph
+from langgraph.graph import START, StateGraph
 from langgraph.runtime import Runtime
 from langgraph.types import Command
 from pydantic import BaseModel, Field
-from typing_extensions import TypedDict
 
+from nova import CONF
 from nova.agent.researcher import researcher_agent
 from nova.llms import get_llm_by_type
-from nova.prompts.deepresearcher import apply_system_prompt_template
+from nova.model.agent import Context, State
+from nova.prompts.template import apply_prompt_template, get_prompt
 from nova.tools import markdown_to_html_tool
 from nova.utils import (
-    get_notes_from_tool_calls,
     get_today_str,
+    log_error_set_color,
+    log_info_set_color,
     override_reducer,
-    set_color,
 )
 
 # ######################################################################################
@@ -40,39 +40,6 @@ logger = logging.getLogger(__name__)
 
 # ######################################################################################
 # 全局变量
-
-
-class AgentState(MessagesState):
-    err_message: str
-    supervisor_messages: Annotated[list[MessageLikeRepresentation], override_reducer]
-    research_brief: Optional[str]
-    raw_notes: Annotated[list[str], override_reducer]
-    notes: Annotated[list[str], override_reducer]
-    final_report: str
-
-
-class SupervisorState(TypedDict):
-    supervisor_messages: Annotated[list[MessageLikeRepresentation], override_reducer]
-    research_brief: str
-    notes: Annotated[list[str], override_reducer]
-    research_iterations: int
-    raw_notes: Annotated[list[str], override_reducer]
-
-
-class Context(TypedDict):
-    trace_id: str
-    task_dir: str
-
-    clarify_model: str
-    research_brief_model: str
-    supervisor_model: str
-    researcher_model: str
-    summarize_model: str
-    compress_research_model: str
-    report_model: str
-
-    max_concurrent_research_units: int
-    max_react_tool_calls: int
 
 
 # clarify_with_user uses this
@@ -119,202 +86,194 @@ class ResearcherOutputState(BaseModel):
 
 
 # 用户澄清
-async def clarify_with_user(
-    state: AgentState, runtime: Runtime[Context]
-) -> Command[Literal["write_research_brief", "__end__"]]:
+async def clarify_with_user(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "clarify_with_user"
     try:
         # 变量
-        _trace_id = runtime.context.get("trace_id", "default")
-        _model_name = runtime.context.get("clarify_model", "basic")
-        _messages = state["messages"]
+        _thread_id = runtime.context.thread_id
+        _model_name = runtime.context.model
+        _messages = state.messages
 
         # 提示词
         def _assemble_prompt(messages):
             tmp = {"messages": get_buffer_string(messages), "date": get_today_str()}
-            return [
-                HumanMessage(
-                    content=apply_system_prompt_template("clarify_with_user", tmp)
-                )
-            ]
+            _prompt_tamplate = get_prompt("researcher", "clarify_with_user")
+            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
         # LLM
         def _get_llm():
             return get_llm_by_type(_model_name).with_structured_output(ClarifyWithUser)
 
         response = await _get_llm().ainvoke(_assemble_prompt(_messages))
-        logger.info(
-            set_color(
-                f"trace_id={_trace_id} | node=clarify_with_user | message={response}",
-                "pink",
-            )
-        )
-        if response.need_clarification:  # type: ignore
+        log_info_set_color(_thread_id, _NODE_NAME, response)
+
+        if not isinstance(response, ClarifyWithUser):
             return Command(
                 goto="__end__",
-                update={"messages": [AIMessage(content=response.question)]},  # type: ignore
+                update={
+                    "code": 1,
+                    "err_message": "ClarifyWithUser is not a valid response",
+                    "messages": [response],  # type: ignore
+                    "data": {_NODE_NAME: response},
+                },
+            )
+
+        if response.need_clarification:
+            return Command(
+                goto="__end__",
+                update={
+                    "code": 0,
+                    "err_message": "ok",
+                    "messages": [AIMessage(content=response.question)],
+                    "data": {_NODE_NAME: response.model_dump()},
+                },
             )
         else:
             return Command(
                 goto="write_research_brief",
-                update={"messages": [AIMessage(content=response.verification)]},  # type: ignore
+                update={
+                    "code": 0,
+                    "err_message": "ok",
+                    "messages": [AIMessage(content=response.verification)],
+                    "data": {_NODE_NAME: response.model_dump()},
+                },
             )
     except Exception as e:
-        logger.error(
-            set_color(
-                f"trace_id={_trace_id} | node=clarify_with_user | error={e}", "red"
-            )
-        )
-        return Command(
-            goto="__end__",
-            update={
-                "err_message": f"trace_id={_trace_id} | node=clarify_with_user | error={e}"
-            },
-        )
+        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
+        return Command(goto="__end__", update={"code": 1, "err_message": _err_message})
 
 
 # 转换问题
-async def write_research_brief(
-    state: AgentState, runtime: Runtime[Context]
-) -> Command[Literal["research_supervisor", "__end__"]]:
+async def write_research_brief(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "write_research_brief"
     try:
         # 变量
-        _trace_id = runtime.context.get("trace_id", "default")
-        _model_name = runtime.context.get("research_brief_model", "basic")
-        _messages = state["messages"]
+        _thread_id = runtime.context.thread_id
+        _model_name = runtime.context.model
+        _messages = state.messages
 
         # 提示词
         def _assemble_prompt(messages):
             tmp = {"messages": get_buffer_string(messages), "date": get_today_str()}
-            return [
-                HumanMessage(
-                    content=apply_system_prompt_template("write_research_brief", tmp)
-                )
-            ]
+
+            _prompt_tamplate = get_prompt("researcher", "write_research_brief")
+            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
         # LLM
         def _get_llm():
             return get_llm_by_type(_model_name).with_structured_output(ResearchQuestion)
 
         response = await _get_llm().ainvoke(_assemble_prompt(_messages))
-        logger.info(
-            set_color(
-                f"trace_id={_trace_id} | node=write_research_brief | message={response}",
-                "pink",
-            )
-        )
+        log_info_set_color(_thread_id, _NODE_NAME, response)
 
-        return Command(
-            goto="research_supervisor",
-            update={
-                "research_brief": response.research_brief,  # type: ignore
-                "supervisor_messages": {
-                    "type": "override",
-                    "value": [
-                        HumanMessage(content=response.research_brief),  # type: ignore
-                    ],
+        if not isinstance(response, ResearchQuestion):
+            return Command(
+                goto="__end__",
+                update={
+                    "code": 1,
+                    "err_message": "ResearchQuestion is not a valid response",
+                    "messages": [response],
+                    "data": {_NODE_NAME: response},
                 },
-            },
-        )
-    except Exception as e:
-        logger.error(
-            set_color(
-                f"trace_id={_trace_id} | node=write_research_brief | error={e}", "red"
             )
-        )
-        return Command(
-            goto="__end__",
-            update={
-                "err_message": f"trace_id={_trace_id} | node=write_research_brief | error={e}"
-            },
-        )
+
+        return {
+            "code": 0,
+            "err_message": "ok",
+            "messages": [HumanMessage(content=response.research_brief)],
+            "data": {_NODE_NAME: response.research_brief},
+        }
+
+    except Exception as e:
+        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
+        return Command(goto="__end__", update={"code": 1, "err_message": _err_message})
 
 
 # 监督员
-async def supervisor(
-    state: SupervisorState, runtime: Runtime[Context]
-) -> Command[Literal["supervisor_tools", "__end__"]]:
+async def supervisor(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "supervisor"
     try:
         # 变量
-        _trace_id = runtime.context.get("trace_id", "default")
-        _model_name = runtime.context.get("supervisor_model", "basic")
-        _max_concurrent = runtime.context.get("max_concurrent_research_units", 2)
-        _messages = state.get("supervisor_messages", [])
-        _research_iterations = state.get("research_iterations", 0)
+        _thread_id = runtime.context.thread_id
+        _model_name = runtime.context.model
+
+        _max_concurrent = runtime.context.config.get("max_concurrent_research_units", 2)
+        _research_brief = state.data.get("write_research_brief")
+        _research_iterations = state.user_guidance.get("research_iterations", 1)
+
+        if not _research_brief:
+            return Command(
+                goto="__end__",
+                update={
+                    "code": 1,
+                    "err_message": "write_research_brief is not found",
+                },
+            )
 
         # 提示词
-        def _assemble_prompt(messages):
+        def _assemble_prompt(research_brief):
             tmp = {
                 "max_concurrent_research_units": _max_concurrent,
                 "date": get_today_str(),
             }
+            _prompt_tamplate = get_prompt("researcher", "supervisor_system")
             return [
-                SystemMessage(content=apply_system_prompt_template("supervisor", tmp)),
-            ] + messages
+                SystemMessage(content=apply_prompt_template(_prompt_tamplate, tmp)),
+                HumanMessage(content=research_brief),
+            ]
 
         # LLM
         def _get_llm():
             lead_researcher_tools = [ConductResearch, ResearchComplete]
             return get_llm_by_type(_model_name).bind_tools(lead_researcher_tools)
 
-        response = await _get_llm().ainvoke(_assemble_prompt(_messages))
-        logger.info(
-            set_color(
-                f"trace_id={_trace_id} | node=supervisor | message={response}", "pink"
-            )
-        )
+        response = await _get_llm().ainvoke(_assemble_prompt(_research_brief))
+        log_info_set_color(_thread_id, _NODE_NAME, response)
 
+        state.user_guidance["research_iterations"] = _research_iterations + 1
+        state.user_guidance["research_brief"] = _research_brief
         return Command(
             goto="supervisor_tools",
             update={
-                "supervisor_messages": [response],
-                "research_iterations": _research_iterations + 1,
+                "messages": [response],
+                "user_guidance": state.user_guidance,
+                "data": {_NODE_NAME: response},
             },
         )
     except Exception as e:
-        logger.error(
-            set_color(f"trace_id={_trace_id} | node=supervisor | error={e}", "red")
-        )
-        return Command(
-            goto="__end__",
-            update={
-                "err_message": f"trace_id={_trace_id} | node=supervisor | error={e}"
-            },
-        )
+        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
+        return Command(goto="__end__", update={"code": 1, "err_message": _err_message})
 
 
 # 监督员工具
-async def supervisor_tools(
-    state: SupervisorState, runtime: Runtime[Context]
-) -> Command[Literal["supervisor", "__end__"]]:
+async def supervisor_tools(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "supervisor_tools"
     try:
         # 变量
-        _trace_id = runtime.context.get("trace_id", "default")
-        _max_concurrent = runtime.context.get("max_concurrent_research_units", 2)
-        _max_researcher_iterations = runtime.context.get("max_researcher_iterations", 2)
-        _supervisor_messages = state.get("supervisor_messages", [])
-        _research_iterations = state.get("research_iterations", 0)
-        _most_recent_message = _supervisor_messages[-1]
+        _thread_id = runtime.context.thread_id
+        _model_name = runtime.context.model
+
+        _max_concurrent = runtime.context.config.get("max_concurrent_research_units", 2)
+        _max_researcher_iterations = runtime.context.config.get(
+            "max_researcher_iterations", 10
+        )
+        _supervisor = state.data.get("supervisor")
+        _research_iterations = state.user_guidance["research_iterations"]
 
         # 执行
         exceeded_allowed_iterations = _research_iterations >= _max_researcher_iterations
-        no_tool_calls = not _most_recent_message.tool_calls  # type: ignore
+        no_tool_calls = not _supervisor.tool_calls  # type: ignore
         research_complete_tool_call = any(
             tool_call["name"] == "ResearchComplete"
-            for tool_call in _most_recent_message.tool_calls  # type: ignore
+            for tool_call in _supervisor.tool_calls  # type: ignore
         )
 
         if exceeded_allowed_iterations or no_tool_calls or research_complete_tool_call:
-            return Command(
-                goto="__end__",
-                update={
-                    "notes": get_notes_from_tool_calls(_supervisor_messages),
-                    "research_brief": state.get("research_brief", ""),
-                },
-            )
+            return Command(goto="__end__")
 
         all_conduct_research_calls = [
             tool_call
-            for tool_call in _most_recent_message.tool_calls  # type: ignore
+            for tool_call in _supervisor.tool_calls  # type: ignore
             if tool_call["name"] == "ConductResearch"
         ]
         conduct_research_calls = all_conduct_research_calls[:_max_concurrent]
@@ -325,33 +284,20 @@ async def supervisor_tools(
             coros.append(
                 researcher_agent.ainvoke(
                     {
-                        "researcher_messages": [
+                        "messages": [
                             HumanMessage(content=tool_call["args"]["research_topic"]),
                         ],
                     },  # type: ignore
                     context={
-                        "trace_id": _trace_id,
-                        "researcher_model": runtime.context.get(
-                            "researcher_model", "basic"
-                        ),
-                        "summarize_model": runtime.context.get(
-                            "summarize_model", "basic"
-                        ),
-                        "compress_research_model": runtime.context.get(
-                            "compress_research_model", "basic"
-                        ),
-                        "max_react_tool_calls": runtime.context.get(
-                            "max_react_tool_calls", 5
-                        ),
+                        "thread_id": _thread_id,
+                        "model": _model_name,
                     },  # type: ignore
                 )
             )
-
-            logger.info(
-                set_color(
-                    f"trace_id={_trace_id} | node=supervisor_tools | message=use researcher_subgraph: \n tool_call_id: {tool_call['id']}\n tool_args: {tool_call['args']} ",
-                    "pink",
-                )
+            log_info_set_color(
+                _thread_id,
+                _NODE_NAME,
+                f"use researcher_subgraph: \n tool_call_id: {tool_call['id']}\n tool_args: {tool_call['args']} ",
             )
 
         tool_results = await asyncio.gather(*coros)
@@ -385,57 +331,55 @@ async def supervisor_tools(
         return Command(
             goto="supervisor",
             update={
-                "supervisor_messages": tool_messages,
-                "raw_notes": [raw_notes_concat],
+                "messages": tool_messages,
+                "data": {_NODE_NAME: raw_notes_concat},
             },
         )
 
     except Exception as e:
-        logger.error(e)
-        return Command(
-            goto="__end__",
-            update={
-                "notes": get_notes_from_tool_calls(_supervisor_messages),
-                "research_brief": state.get("research_brief", ""),
-            },
-        )
+        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
+        return Command(goto="__end__", update={"code": 1, "err_message": _err_message})
 
 
 # 报告员
-async def final_report_generation(
-    state: AgentState, runtime: Runtime[Context]
-) -> Command[Literal["__end__"]]:
+async def final_report_generation(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "final_report_generation"
     try:
-        _model_name = runtime.context.get("report_model", "basic")
-        _task_dir = runtime.context.get("task_dir", "./")
-        _trace_id = runtime.context.get("trace_id", "default")
-        _work_dir = os.path.join(_task_dir, _trace_id)
+        # 变量
+        _thread_id = runtime.context.thread_id
+        _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
+        _model_name = runtime.context.model
+        _work_dir = os.path.join(_task_dir, _thread_id)
         os.makedirs(_work_dir, exist_ok=True)
 
-        notes = state.get("notes", [])
-        cleared_state = {
-            "notes": {"type": "override", "value": []},
-        }
+        _supervisor = state.data.get("supervisor")
+        _research_brief = state.user_guidance.get("research_brief")
+
+        if _supervisor is None or _research_brief is None:
+            return Command(
+                goto="__end__",
+                update={
+                    "code": 1,
+                    "err_message": "Missing supervisor or research_brief",
+                },
+            )
 
         # 提示词
         def _assemble_prompt(findings):
             tmp = {
                 "date": get_today_str(),
-                "research_brief": state.get("research_brief", ""),
+                "research_brief": _research_brief,
                 "findings": findings,
             }
 
-            return [
-                HumanMessage(
-                    content=apply_system_prompt_template("final_report_generation", tmp)
-                )
-            ]
+            _prompt_tamplate = get_prompt("researcher", "final_report_generation")
+            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
         # LLM
         def _get_llm(model_name):
             return get_llm_by_type(model_name)
 
-        findings = "\n".join(notes)
+        findings = "\n".join(_supervisor)
         max_retries = 3
         current_retry = 0
         while current_retry <= max_retries:
@@ -453,9 +397,11 @@ async def final_report_generation(
                 return Command(
                     goto="__end__",
                     update={
-                        "final_report": final_report.content,
-                        "messages": [final_report],
-                        **cleared_state,
+                        "code": 0,
+                        "err_message": "ok",
+                        "messages": final_report,
+                        "user_guidance": state.user_guidance,
+                        "data": {_NODE_NAME: final_report.content},
                     },
                 )
 
@@ -468,32 +414,21 @@ async def final_report_generation(
         return Command(
             goto="__end__",
             update={
-                "final_report": "Error generating final report: Maximum retries exceeded",
-                "messages": [final_report],  # type: ignore
-                **cleared_state,
+                "code": 1,
+                "err_message": "Error generating final report: Maximum retries exceeded",
             },
         )
 
     except Exception as e:
-        logger.error(
-            set_color(
-                f"trace_id={_trace_id} | node=final_report_generation | error={e}",
-                "red",
-            )
-        )
-        return Command(
-            goto="__end__",
-            update={
-                "err_message": f"trace_id={_trace_id} | node=final_report_generation | error={e}"
-            },
-        )
+        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
+        return Command(goto="__end__", update={"code": 1, "err_message": _err_message})
 
 
 #
 # Agent - Workflow
 
 # supervisor subgraph
-supervisor_builder = StateGraph(SupervisorState, context_schema=Context)
+supervisor_builder = StateGraph(State, context_schema=Context)
 supervisor_builder.add_node("supervisor", supervisor)
 supervisor_builder.add_node("supervisor_tools", supervisor_tools)
 supervisor_builder.add_edge(START, "supervisor")
@@ -501,7 +436,7 @@ supervisor_subgraph = supervisor_builder.compile()
 
 
 # supervisor researcher graph
-graph_builder = StateGraph(AgentState, context_schema=Context)
+graph_builder = StateGraph(State, context_schema=Context)
 graph_builder.add_node("clarify_with_user", clarify_with_user)
 graph_builder.add_node("write_research_brief", write_research_brief)
 graph_builder.add_node("research_supervisor", supervisor_subgraph)

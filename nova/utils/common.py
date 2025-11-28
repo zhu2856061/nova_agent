@@ -22,6 +22,9 @@ from langchain_core.messages import (
     ToolMessage,
     filter_messages,
 )
+from langchain_core.prompts import PromptTemplate
+
+from nova import CONF
 
 logger = logging.getLogger(__name__)
 
@@ -131,3 +134,15 @@ def annotated_to_raw(annotated_messages: List[AnyMessage]) -> List[Dict]:
             raw.append({"role": "unknown", "content": str(msg.content)})
 
     return raw
+
+
+def apply_prompt_template(template, state={}) -> str:
+    _prompt = PromptTemplate.from_template(template=template).format(**state)
+    return _prompt
+
+
+def get_prompt(task, current_tab):
+    _PROMPT_DIR = CONF["SYSTEM"]["prompt_template_dir"]
+    with open(f"{_PROMPT_DIR}/{task}/{current_tab}.md") as f:
+        prompt_content = f.read()
+    return prompt_content

@@ -4,28 +4,28 @@
 # @Moto   : Knowledge comes from decomposition
 import asyncio
 import logging
-from dataclasses import dataclass, field
-from typing import Annotated, Literal, cast
+from typing import cast
 
 from langchain_core.messages import (
     AIMessage,
     HumanMessage,
-    MessageLikeRepresentation,
     SystemMessage,
     ToolMessage,
 )
-from langgraph.graph import START, StateGraph, add_messages
+from langgraph.graph import START, StateGraph
 from langgraph.runtime import Runtime
 from langgraph.types import Command
 from pydantic import BaseModel
 
 from nova.llms import get_llm_by_type
-from nova.prompts.wechat_researcher import apply_system_prompt_template
+from nova.model.agent import Context, State
+from nova.prompts.template import apply_prompt_template, get_prompt
 from nova.tools import wechat_searcher_tool
 from nova.utils import (
     get_today_str,
+    log_error_set_color,
+    log_info_set_color,
     remove_up_to_last_ai_message,
-    set_color,
 )
 
 # ######################################################################################
@@ -35,60 +35,29 @@ logger = logging.getLogger(__name__)
 
 # ######################################################################################
 # 全局变量
-@dataclass(kw_only=True)
-class State:
-    err_message: str = field(
-        default="",
-        metadata={"description": "The error message to use for the agent."},
-    )
-    wechat_researcher_messages: Annotated[list[MessageLikeRepresentation], add_messages]
-    tool_call_iterations: int = field(
-        default=0,
-        metadata={"description": "The number of iterations of tool calls."},
-    )
-
-
-@dataclass(kw_only=True)
-class Context:
-    trace_id: str = field(
-        default="default",
-        metadata={"description": "The trace_id to use for the agent."},
-    )
-    wechat_researcher_model: str = field(
-        default="basic",
-        metadata={"description": "The name of llm to use for the agent. "},
-    )
-    max_react_tool_calls: int = field(
-        default=5,
-        metadata={"description": "The maximum number of tool calls to allow."},
-    )
-
-
 class ResearchComplete(BaseModel):
     """Call this tool to indicate that the research is complete."""
 
 
 # ######################################################################################
-async def wechat_researcher(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["wechat_researcher_tools", "__end__"]]:
-    # 变量
-    _trace_id = runtime.context.trace_id
-    _model_name = runtime.context.wechat_researcher_model
-    _messages = state.wechat_researcher_messages
-    _tool_call_iterations = state.tool_call_iterations
+async def wechat_researcher(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "wechat_researcher"
     try:
+        # 变量
+        _thread_id = runtime.context.thread_id
+        _model_name = runtime.context.model
+        _messages = state.messages
+        _tool_call_iterations = state.user_guidance.get("tool_call_iterations", 1)
+
         # 提示词
         def _assemble_prompt(messages):
-            messages = [
-                SystemMessage(
-                    content=apply_system_prompt_template(
-                        "wechat_researcher_system", {"date": get_today_str()}
-                    )
-                )
+            tmp = {
+                "date": get_today_str(),
+            }
+            _prompt_tamplate = get_prompt("researcher", "wechat_researcher_system")
+            return [
+                SystemMessage(content=apply_prompt_template(_prompt_tamplate, tmp))
             ] + messages
-
-            return messages
 
         # LLM
         def _get_llm():
@@ -96,49 +65,42 @@ async def wechat_researcher(
             return get_llm_by_type(_model_name).bind_tools(_tools)
 
         response = await _get_llm().ainvoke(_assemble_prompt(_messages))
-        logger.info(
-            set_color(
-                f"trace_id={_trace_id} | node=researcher | message={response}", "pink"
-            )
-        )
+        log_info_set_color(_thread_id, _NODE_NAME, response)
 
-        if not cast(AIMessage, response).tool_calls or any(
-            tool_call["name"] == "ResearchComplete"
-            for tool_call in cast(AIMessage, response).tool_calls
-        ):
-            return Command(
-                goto="__end__",
-            )
-
+        state.user_guidance["tool_call_iterations"] = _tool_call_iterations + 1
         return Command(
             goto="wechat_researcher_tools",
             update={
-                "wechat_researcher_messages": [response],
-                "tool_call_iterations": _tool_call_iterations + 1,
+                "code": 0,
+                "err_message": "ok",
+                "messages": response,
+                "user_guidance": state.user_guidance,
+                "data": {_NODE_NAME: response},
             },
         )
 
     except Exception as e:
-        logger.error(
-            set_color(f"trace_id={_trace_id} | node=researcher | error={e}", "red")
-        )
-        return Command(
-            goto="__end__",
-            update={
-                "err_message": f"trace_id={_trace_id} | node=researcher | error={e}"
-            },
-        )
+        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
+        return Command(goto="__end__", update={"code": 1, "err_message": _err_message})
 
 
-async def wechat_researcher_tools(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["wechat_researcher", "__end__"]]:
+async def wechat_researcher_tools(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "wechat_researcher_tools"
     try:
         # 变量
-        _trace_id = runtime.context.trace_id
-        _most_recent_message = state.wechat_researcher_messages[-1]
-        _tool_call_iterations = state.tool_call_iterations
-        _max_react_tool_calls = runtime.context.max_react_tool_calls
+        _thread_id = runtime.context.thread_id
+        _tool_call_iterations = state.user_guidance.get("tool_call_iterations", 1)
+        _max_react_tool_calls = state.user_guidance.get("max_react_tool_calls", 3)
+        _most_recent_message = state.data.get("researcher")
+
+        # 执行
+        if not cast(AIMessage, _most_recent_message).tool_calls or any(
+            tool_call["name"] == "ResearchComplete"
+            for tool_call in cast(AIMessage, _most_recent_message).tool_calls
+        ):
+            return Command(
+                goto="compress_research",
+            )
 
         async def execute_tool_safely(tool, args):
             try:
@@ -154,11 +116,10 @@ async def wechat_researcher_tools(
             coros.append(execute_tool_safely(wechat_searcher_tool, tmp))
         observations = await asyncio.gather(*coros)
 
-        logger.info(
-            set_color(
-                f"trace_id={_trace_id} | node=researcher_tools | message=use execute_tool_safely: \n {str(observations)[:400]}... ",
-                "pink",
-            )
+        log_info_set_color(
+            _thread_id,
+            _NODE_NAME,
+            f"use execute_tool_safely: \n {str(observations)[:400]} ",
         )
 
         tool_outputs = [
@@ -174,60 +135,50 @@ async def wechat_researcher_tools(
             return Command(
                 goto="__end__",
                 update={
-                    "wechat_researcher_messages": tool_outputs,
+                    "messages": tool_outputs,
                 },
             )
 
         return Command(
             goto="wechat_researcher",
             update={
-                "wechat_researcher_messages": tool_outputs,
+                "messages": tool_outputs,
             },
         )
 
     except Exception as e:
-        logger.error(
-            set_color(
-                f"trace_id={_trace_id} | node=wechat_researcher_tools | error={e}",
-                "red",
-            )
-        )
-        return Command(
-            goto="__end__",
-            update={
-                "err_message": f"trace_id={_trace_id} | node=wechat_researcher_tools | error={e}"
-            },
-        )
+        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
+        return Command(goto="__end__", update={"code": 1, "err_message": _err_message})
 
 
 # 精炼结果
-async def compress_research(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["__end__"]]:
+async def compress_research(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "compress_research"
     try:
         # 变量
-        _trace_id = runtime.context.trace_id
-        _model_name = runtime.context.wechat_researcher_model
-        _messages = state.wechat_researcher_messages
+        _thread_id = runtime.context.thread_id
+        _model_name = runtime.context.model
+        _messages = state.messages
 
         # 提示词
         def _assemble_prompt(messages):
-            messages = (
-                [
-                    SystemMessage(
-                        content=apply_system_prompt_template(
-                            "compress_research_system", {"date": get_today_str()}
-                        )
-                    )
-                ]
-                + messages
-                + [
-                    HumanMessage(
-                        content=apply_system_prompt_template("compress_research_human")
-                    )
-                ]
+            _compress_research_system = get_prompt(
+                "researcher", "compress_research_system"
             )
+            messages = [
+                SystemMessage(
+                    content=apply_prompt_template(
+                        _compress_research_system, {"date": get_today_str()}
+                    )
+                )
+            ] + messages
 
+            _compress_research_human = get_prompt(
+                "researcher", "compress_research_human"
+            )
+            messages.append(
+                HumanMessage(content=apply_prompt_template(_compress_research_human))
+            )
             return messages
 
         # LLM
@@ -236,52 +187,40 @@ async def compress_research(
 
         max_retries = 3
         current_retry = 0
-        while current_retry <= max_retries:
+        while current_retry <= max_retries:  # 尝试3次, 防止因为上下文过长，导致失败
             try:
                 _tmp_messages = _assemble_prompt(_messages)
                 response = await _get_llm().ainvoke(_tmp_messages)
-                logger.info(
-                    set_color(
-                        f"trace_id={_trace_id} | node=compress_research | message=\n {str(response.content)[:500]}... ",
-                        "pink",
-                    )
-                )
+                log_info_set_color(_thread_id, _NODE_NAME, response.content)
+
                 return Command(
                     goto="__end__",
                     update={
-                        "compressed_research": str(response.content),
+                        "data": {_NODE_NAME: response.content},
                     },
                 )
             except Exception as e:
-                # 多个工具产生的结果，删除最后一个工具的结果
                 _messages = remove_up_to_last_ai_message(_messages)
                 logger.warning(f"remove_up_to_last_ai_message: {e}")
                 current_retry += 1
-
         return Command(
             goto="__end__",
             update={
-                "compressed_research": "Error synthesizing research report: Maximum retries exceeded",
+                "data": {
+                    _NODE_NAME: "Error synthesizing research report: Maximum retries exceeded"
+                },
             },
         )
     except Exception as e:
-        logger.error(
-            set_color(
-                f"trace_id={_trace_id} | node=compress_research | error={e}", "red"
-            )
-        )
-        return Command(
-            goto="__end__",
-            update={
-                "err_message": f"trace_id={_trace_id} | node=compress_research | error={e}"
-            },
-        )
+        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
+        return Command(goto="__end__", update={"code": 1, "err_message": _err_message})
 
 
 # researcher subgraph
 _agent = StateGraph(State, context_schema=Context)
 _agent.add_node("wechat_researcher", wechat_researcher)
 _agent.add_node("wechat_researcher_tools", wechat_researcher_tools)
+_agent.add_node("compress_research", compress_research)
 _agent.add_edge(START, "wechat_researcher")
 
 wechat_researcher_agent = _agent.compile()

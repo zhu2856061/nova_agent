@@ -35,8 +35,6 @@ logger = logging.getLogger(__name__)
 
 # ######################################################################################
 # 全局变量
-
-
 class ResearchComplete(BaseModel):
     """Call this tool to indicate that the research is complete."""
 
