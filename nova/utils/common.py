@@ -9,11 +9,12 @@ import operator
 import time
 from datetime import datetime
 from functools import wraps
-from typing import Dict, List
+from typing import Any, Dict, List, cast
 
 from langchain_core.messages import (
     AIMessage,
     AnyMessage,
+    BaseMessage,
     ChatMessage,
     FunctionMessage,
     HumanMessage,
@@ -22,9 +23,12 @@ from langchain_core.messages import (
     ToolMessage,
     filter_messages,
 )
-from langchain_core.prompts import PromptTemplate
-
-from nova import CONF
+from langgraph.graph.message import (
+    BaseMessageChunk,
+    # add_messages,
+    convert_to_messages,
+    message_chunk_to_message,
+)  # 关键导入！这是 LangGraph 的内置转换器
 
 logger = logging.getLogger(__name__)
 
@@ -63,48 +67,50 @@ def get_notes_from_tool_calls(messages: list[MessageLikeRepresentation]):
     ]
 
 
-# 筛选消息
-def override_reducer(current_value, new_value):
+def override_reducer(current_value: Any, new_value: Any):
+    """
+    支持两种写入方式：
+    - 普通追加：直接返回 BaseMessage 或 List[BaseMessage]
+    - 强制覆盖：返回 {"type": "override", "value": [...]}
+    """
+
     if isinstance(new_value, dict) and new_value.get("type") == "override":
-        return new_value.get("value", new_value)
+        value = new_value.get("value", new_value)
+        if not isinstance(value, list):
+            value = [value]
+        value = [
+            message_chunk_to_message(cast(BaseMessageChunk, m))
+            for m in convert_to_messages(value)
+        ]
+        return value
     else:
-        return operator.add(current_value, new_value)
+        if not isinstance(new_value, list):
+            new_value = [new_value]
+        new_value = [
+            message_chunk_to_message(cast(BaseMessageChunk, m))
+            for m in convert_to_messages(new_value)
+        ]
+        value = operator.add(current_value, new_value)
+    return value
+    # 确保返回的是 List[AnyMessage]，兼容 LangGraph 运行时
 
 
 # 正向转换：前端raw消息 → Annotated[list[AnyMessage], add_messages]
-def raw_to_annotated(raw_messages: List[Dict]) -> List[AnyMessage]:
+def raw_to_annotated(
+    raw_messages: list[MessageLikeRepresentation],
+) -> List[BaseMessage]:
     """
     将前端传来的{"role": ..., "content": ...}列表转换为LangGraph所需的消息列表
     支持所有LangChain消息类型的反向映射
     """
-    annotated = []
-    for msg in raw_messages:
-        role = msg.get("role")
-        if role is None:
-            continue
-        content = msg.get("content", "")
-        # 特殊处理FunctionMessage（含name字段）
-        function_name = msg.get("name") if role == "Function" else None
+    if not isinstance(raw_messages, list):
+        value = [raw_messages]
+    value = [
+        message_chunk_to_message(cast(BaseMessageChunk, m))
+        for m in convert_to_messages(value)
+    ]
 
-        # 根据role映射到对应的消息类型
-        if role == "user":
-            annotated_msg = HumanMessage(content=content)
-        elif role == "assistant":
-            annotated_msg = AIMessage(content=content)
-        elif role == "system":
-            annotated_msg = SystemMessage(content=content)
-        elif role == "Function" and function_name:
-            # FunctionMessage需要name和content
-            annotated_msg = FunctionMessage(name=function_name, content=content)
-        elif role == "Tool":
-            annotated_msg = ToolMessage(content=content)
-        else:
-            # 其他自定义角色（如ChatMessage的任意role）
-            annotated_msg = ChatMessage(role=role, content=content)
-
-        annotated.append(annotated_msg)
-
-    return annotated
+    return value
 
 
 # 反向转换：Annotated消息列表 → 前端raw消息（用于响应时序列化）
@@ -134,15 +140,3 @@ def annotated_to_raw(annotated_messages: List[AnyMessage]) -> List[Dict]:
             raw.append({"role": "unknown", "content": str(msg.content)})
 
     return raw
-
-
-def apply_prompt_template(template, state={}) -> str:
-    _prompt = PromptTemplate.from_template(template=template).format(**state)
-    return _prompt
-
-
-def get_prompt(task, current_tab):
-    _PROMPT_DIR = CONF["SYSTEM"]["prompt_template_dir"]
-    with open(f"{_PROMPT_DIR}/{task}/{current_tab}.md") as f:
-        prompt_content = f.read()
-    return prompt_content

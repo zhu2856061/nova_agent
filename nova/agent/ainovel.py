@@ -21,7 +21,6 @@ from pydantic import BaseModel, Field
 from nova.agent.ainovel_architect import ainovel_architecture_agent
 from nova.agent.ainovel_chapter import ainovel_chapter_agent
 from nova.llms import get_llm_by_type
-from nova.prompts.ainovel import apply_system_prompt_template
 from nova.utils import (
     override_reducer,
     set_color,

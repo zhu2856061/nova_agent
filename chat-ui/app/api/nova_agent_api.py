@@ -117,13 +117,20 @@ def extract_event_data(line_data):
 
     elif _event == "on_chain_start":
         _node_name = _data.get("node_name")
+        if _node_name == "LangGraph":
+            content = f"\n\n⏳ 【 {_node_name} 】 图开始\n\n"
+            return {"type": "system", "content": "\n\n"}
+
         content = f"\n\n⏳ 【 {_node_name} 】 节点开始\n\n"
         return {"type": "system", "content": content}
 
     elif _event == "on_chain_end":
         _node_name = _data.get("node_name")
         _output = _data.get("output")
-        content = f"\n\n✅ 【 {_node_name} 】 节点结束 \n\n"
+        if _node_name == "LangGraph":
+            content = f"\n\n✅ 【 {_node_name} 】 图结束 \n\n"
+        else:
+            content = f"\n\n✅ 【 {_node_name} 】 节点结束 \n\n"
 
         # 只关注最终LangGGraph输出
         if _output and _node_name == "LangGraph":

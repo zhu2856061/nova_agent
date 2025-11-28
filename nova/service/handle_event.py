@@ -6,6 +6,8 @@ from __future__ import annotations
 
 import logging
 
+from langgraph.types import Command
+
 logger = logging.getLogger(__name__)
 
 
@@ -45,13 +47,15 @@ def handle_event(trace_id, event):
             # 工具内部执行过程不再展示
             if "RunnableSequence" in _name and "tool" in _name:
                 return None
-
+            output = data["output"] if data.get("output") else ""
+            if isinstance(output, Command):
+                output = output.update
             node_name = name if langgraph_node == "" else langgraph_node
             ydata = {
                 "event": "on_chain_end",
                 "data": {
                     "node_name": node_name,
-                    "output": data["output"] if data.get("output") else "",
+                    "output": output,
                 },
             }
             return ydata

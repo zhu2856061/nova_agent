@@ -16,12 +16,15 @@ request_data = {
         "config": {"user_id": "merlin"},
     },
     "state": {
-        "messages": [
-            {
-                "role": "user",
-                "content": "Hi, I'm Bob and I enjoy playing tennis. Remember this.",
-            },
-        ],
+        "messages": {
+            "type": "override",
+            "value": [
+                {
+                    "role": "user",
+                    "content": "Hi, I'm Bob and I enjoy playing tennis. Remember this.",  #
+                },
+            ],
+        },
     },
     "stream": True,
 }
@@ -45,6 +48,8 @@ async def memorizer_client():
             async for chunk in response.aiter_bytes():
                 if chunk:
                     tmp = json.loads(chunk.decode("utf-8"))
+                    # if tmp["data"]["event"] == "on_chat_model_stream":
+                    #     continue
                     print(tmp)
 
 

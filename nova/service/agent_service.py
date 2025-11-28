@@ -3,11 +3,12 @@
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
 import logging
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator
 
 import aiohttp
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
+from langchain_core.messages import BaseMessage
 from langgraph.types import Command
 from pydantic import BaseModel
 
@@ -71,9 +72,25 @@ def get_agent(agent_name: str):
     return agent
 
 
+def convert_langchain_objects_to_dict(obj: Any) -> Any:
+    if isinstance(obj, BaseMessage):
+        return obj.model_dump()  # 稳
+
+    if isinstance(obj, BaseModel):
+        return obj.model_dump()  # 现在绝对安全，不会 MockValSer
+
+    if isinstance(obj, (list, tuple, set)):
+        return [convert_langchain_objects_to_dict(i) for i in obj]
+
+    if isinstance(obj, dict):
+        return {k: convert_langchain_objects_to_dict(v) for k, v in obj.items()}
+
+    return obj
+
+
 # Shared streaming handler
 async def stream_agent_events(
-    instance, trace_id: str, state: BaseModel, context: BaseModel, config: dict
+    instance, trace_id: str, state, context: BaseModel, config: dict
 ) -> AsyncGenerator:
     """Generic streaming handler for all agents"""
     try:
@@ -84,16 +101,30 @@ async def stream_agent_events(
                 response = handle_event(trace_id, event)
                 if response:
                     if response.get("event") == "error":
-                        yield (
-                            AgentResponse(
-                                code=1, err_message=response.get("data").get("output")
+                        try:
+                            res = AgentResponse(
+                                code=0,
+                                err_message=response.get("data").get("output"),
+                                data=response,
                             ).model_dump_json()
-                            + "\n"
-                        )
+                        except Exception:
+                            res = AgentResponse(
+                                code=0,
+                                err_message="data is not json serializable",
+                            ).model_dump_json()
+
+                        yield res
                         return
-                    yield (
-                        AgentResponse(code=0, data=response).model_dump_json() + "\n"
-                    )
+
+                    try:
+                        print("===>", response)
+                        res = AgentResponse(code=0, data=response).model_dump_json()
+                    except Exception:
+                        res = AgentResponse(
+                            code=0, err_message="data is not json serializable"
+                        ).model_dump_json()
+
+                    yield res + "\n"
 
     except Exception as e:
         logger.error(f"Streaming error (trace_id={trace_id}): {str(e)}", exc_info=True)
@@ -153,18 +184,36 @@ async def human_in_loop(request: AgentRequest):
                         response = handle_event(trace_id, event)
                         if response:
                             if response.get("event") == "error":
-                                yield (
-                                    AgentResponse(
-                                        code=1,
+                                try:
+                                    res = AgentResponse(
+                                        code=0,
                                         err_message=response.get("data").get("output"),
+                                        data=response,
                                     ).model_dump_json()
-                                    + "\n"
-                                )
+                                except Exception:
+                                    res = AgentResponse(
+                                        code=0,
+                                        err_message="data is not json serializable",
+                                        data=convert_langchain_objects_to_dict(
+                                            response
+                                        ),
+                                    ).model_dump_json()
+
+                                yield res
                                 return
-                            yield (
-                                AgentResponse(code=0, data=response).model_dump_json()
-                                + "\n"
-                            )
+
+                            try:
+                                res = AgentResponse(
+                                    code=0, data=response
+                                ).model_dump_json()
+                            except Exception:
+                                res = AgentResponse(
+                                    code=0,
+                                    err_message="data is not json serializable",
+                                ).model_dump_json()
+
+                            yield res + "\n"
+
             except Exception as e:
                 logger.error(
                     f"Human-in-loop error (trace_id={trace_id}): {str(e)}",

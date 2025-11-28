@@ -6,11 +6,11 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import Literal, cast
+from typing import cast
 
 from langchain_core.messages import SystemMessage
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.graph import END, START, StateGraph
+from langgraph.graph import START, StateGraph
 from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import Command
@@ -42,13 +42,15 @@ async def memorizer(state: State, runtime: Runtime[Context]):
         _thread_id = runtime.context.thread_id
         _model_name = runtime.context.model
         _config = runtime.context.config
-        _messages = state.messages
+        _messages = state.messages.value
 
-        if _config.get("user_id") is None:
+        if _config.get("user_id") is None or len(_messages) <= 0:
             _err_message = log_error_set_color(
                 _thread_id, _NODE_NAME, "user_id is empty"
             )
-            return {"code": 1, "err_message": _err_message}
+            return Command(
+                goto="__end__", update={"code": 1, "err_message": _err_message}
+            )
 
         _user_id = cast(str, _config.get("user_id"))
 
@@ -66,6 +68,7 @@ async def memorizer(state: State, runtime: Runtime[Context]):
                 "user_info": "\n".join(f"[{mem.key}]: {mem.value}" for mem in memories),
                 "date": get_today_str(),
             }
+
             _prompt_tamplate = get_prompt("memorizer", _NODE_NAME)
             return [
                 SystemMessage(content=apply_prompt_template(_prompt_tamplate, tmp))
@@ -78,16 +81,31 @@ async def memorizer(state: State, runtime: Runtime[Context]):
         response = await _get_llm().ainvoke(await _assemble_prompt(_messages))
         log_info_set_color(_thread_id, _NODE_NAME, response)
 
-        return {
-            "code": 0,
-            "err_message": "ok",
-            "messages": response,
-            "data": {_NODE_NAME: response},
-        }
+        # 判断是否有工具调用
+        tool_calls = getattr(response, "tool_calls", [])
+
+        if not tool_calls:  # 如果没有工具调用，则正常返回 - 回复结果
+            return Command(
+                goto="__end__",
+                update={
+                    "code": 0,
+                    "err_message": "ok",
+                    "data": {_NODE_NAME: response},
+                },
+            )
+
+        return Command(
+            goto="memorizer_tools",
+            update={
+                "code": 0,
+                "err_message": "ok",
+                "data": {_NODE_NAME: response},
+            },
+        )
 
     except Exception as e:
         _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
-        return {"code": 1, "err_message": _err_message}
+        return Command(goto="__end__", update={"code": 1, "err_message": _err_message})
 
 
 async def execute_tool_safely(tool, args):
@@ -103,18 +121,28 @@ async def memorizer_tools(state: State, runtime: Runtime[Context]):
         # 变量
         _thread_id = runtime.context.thread_id
         _config = runtime.context.config
-        _messages = state.messages
+        _data = state.data
 
-        if _config.get("user_id") is None:
+        if _config.get("user_id") is None or _data is None:
             _err_message = log_error_set_color(
                 _thread_id, _NODE_NAME, "user_id is empty"
             )
-            return {"code": 1, "err_message": _err_message}
+            return Command(
+                goto="__end__", update={"code": 1, "err_message": _err_message}
+            )
 
         _user_id = cast(str, _config.get("user_id"))
 
         # Extract tool calls from the last message
-        tool_calls = getattr(_messages[-1], "tool_calls", [])
+        tool_calls = getattr(_data.get("memorizer"), "tool_calls", [])
+        if not tool_calls:
+            _err_message = log_error_set_color(
+                _thread_id, _NODE_NAME, "no tool calls found"
+            )
+            return Command(
+                goto="__end__", update={"code": 1, "err_message": _err_message}
+            )
+
         # Concurrently execute all upsert_memory calls
         _upsert_memorys = []
         for tc in tool_calls:
@@ -143,43 +171,26 @@ async def memorizer_tools(state: State, runtime: Runtime[Context]):
         ]
 
         log_info_set_color(_thread_id, _NODE_NAME, results)
-        return {
-            "code": 0,
-            "err_message": "ok",
-            "messages": results,
-            "data": {_NODE_NAME: results},
-        }
+        return Command(
+            goto="__end__",
+            update={
+                "code": 0,
+                "err_message": "ok",
+                "data": {_NODE_NAME: results},
+            },
+        )
 
     except Exception as e:
         _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
-        return {"code": 1, "err_message": _err_message}
-
-
-async def node_guidance(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["__end__", "memorizer_tools"]]:
-    _code = state.code
-    if _code != 0:
-        return Command(goto="__end__")
-    _data = state.data
-
-    if _data.get("memorizer") is not None:
-        tool_calls = getattr(_data.get("memorizer"), "tool_calls", [])
-        if not tool_calls:
-            return Command(goto="__end__")
-
-    return Command(goto="memorizer_tools")
+        return Command(goto="__end__", update={"code": 1, "err_message": _err_message})
 
 
 # researcher subgraph
 _agent = StateGraph(State, context_schema=Context)
 _agent.add_node("memorizer", memorizer)
 _agent.add_node("memorizer_tools", memorizer_tools)
-_agent.add_node("node_guidance", node_guidance)
 
 _agent.add_edge(START, "memorizer")
-_agent.add_edge("memorizer", "node_guidance")
-_agent.add_edge("memorizer_tools", END)
 
 checkpointer = InMemorySaver()
 memorizer_agent = _agent.compile(checkpointer=checkpointer)
