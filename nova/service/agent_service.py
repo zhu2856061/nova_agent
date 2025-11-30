@@ -27,9 +27,8 @@ from nova.agent.ainovel_interact import (
 )
 from nova.agent.deepresearcher import deepresearcher
 from nova.agent.memorizer import memorizer_agent
-from nova.agent.researcher import researcher_agent
+from nova.agent.researcher import researcher_agent, wechat_researcher_agent
 from nova.agent.theme_slicer import theme_slicer_agent
-from nova.agent.wechat_researcher import wechat_researcher_agent
 from nova.model.agent import AgentRequest, AgentResponse
 from nova.service.handle_event import handle_event
 
@@ -48,6 +47,7 @@ AGENT_REGISTRY = {
     "memorizer": memorizer_agent,
     "themeslicer": theme_slicer_agent,
     "researcher": researcher_agent,
+    "deepresearcher": deepresearcher,
     "wechat_researcher": wechat_researcher_agent,
     "ainovel_architect": ainovel_architecture_agent,
     "ainovel_chapter": ainovel_chapter_agent,
@@ -60,7 +60,6 @@ AGENT_REGISTRY = {
     "ainovel_summarize_architecture": summarize_architecture_agent,
     "ainovel_chapter_draft": chapter_draft_agent,
     "ainovel": ainovel,
-    "deepresearcher": deepresearcher,
 }
 
 

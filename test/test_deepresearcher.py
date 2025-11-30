@@ -3,41 +3,61 @@
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
 import asyncio
-import sys
+import json
 
-sys.path.append("..")
-import os
-
-os.environ["CONFIG_PATH"] = "../config.yaml"
-from nova.task.deepresearcher import deepresearcher
-
-inputs = {
-    "messages": [
-        {
-            "role": "system",
-            "content": "请查询网络上的信息，深圳的最近一周内的经济新闻",
-        }
-    ],
-}
-
-context = {
-    "trace_id": "1",
-    "task_dir": "./",
-    "clarify_model": "reasoning",
-    "research_brief_model": "reasoning",
-    "supervisor_model": "reasoning",
-    "researcher_model": "reasoning",
-    "summarize_model": "reasoning",
-    "compress_research_model": "reasoning",
-    "report_model": "reasoning",
-    "max_concurrent_research_units": 1,
-    "max_react_tool_calls": 1,
-}
+import httpx
 
 
-async def async_generate_response():
-    tmp = await deepresearcher.ainvoke(inputs, context=context)  # type: ignore
-    print("Assistant:\n", tmp)
+async def agent_client():
+    request_data = {
+        "trace_id": "123",
+        "context": {
+            "thread_id": "Nova",
+            "task_dir": "merlin",
+            "model": "deepseek",
+            "config": {
+                "max_concurrent_research_units": 2,
+                "max_researcher_iterations": 4,
+            },
+        },
+        "state": {
+            "user_guidance": {"research_iterations": 1},
+            "messages": {
+                "type": "override",
+                "value": [
+                    {
+                        "role": "user",
+                        "content": "请查询网络上的信息，深圳的最近一周内的经济新闻",
+                    },
+                ],
+            },
+        },
+        "stream": True,
+    }
+    # 使用 httpx 异步客户端发送请求
+    async with httpx.AsyncClient(timeout=600.0) as client:
+        # 发送 POST 请求到 /stream_llm 路由
+        async with client.stream(
+            "POST",
+            "http://0.0.0.0:2021/agent/deepresearcher",
+            json=request_data,
+            timeout=600.0,
+        ) as response:
+            # 检查响应状态码
+            if response.status_code != 200:
+                print(f"Error: {response.status_code}")
+                return
+
+            async for chunk in response.aiter_bytes():
+                if chunk:
+                    # try:
+                    tmp = json.loads(chunk)
+                    if tmp["data"]["event"] == "on_chat_model_stream":
+                        continue
+                    print(tmp)
+                    # except:
+                    #     print(chunk)
 
 
-asyncio.run(async_generate_response())
+if __name__ == "__main__":
+    asyncio.run(agent_client())

@@ -21,7 +21,7 @@ from nova.agent.utils import extract_valid_info
 from nova.llms import get_llm_by_type
 from nova.model.agent import Context, Messages, State
 from nova.prompts.template import apply_prompt_template, get_prompt
-from nova.tools import llm_searcher_tool
+from nova.tools import llm_searcher_tool, wechat_searcher_tool
 from nova.utils import (
     get_today_str,
     log_error_set_color,
@@ -174,6 +174,82 @@ async def researcher_tools(state: State, runtime: Runtime[Context]):
         )
 
 
+# 研究员工具
+async def wechat_researcher_tools(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "researcher_tools"
+    try:
+        # 变量
+        _thread_id = runtime.context.thread_id
+        _model_name = runtime.context.model
+        _tool_call_iterations = state.user_guidance.get("tool_call_iterations", 1)
+        _max_react_tool_calls = state.user_guidance.get("max_react_tool_calls", 1)
+        _most_recent_message = state.data.get("researcher")
+
+        # 执行
+        if not cast(AIMessage, _most_recent_message).tool_calls or any(
+            tool_call["name"] == "ResearchComplete"
+            for tool_call in cast(AIMessage, _most_recent_message).tool_calls
+        ):
+            return Command(
+                goto="compress_research",
+            )
+
+        async def execute_tool_safely(tool, args):
+            try:
+                return await tool.ainvoke(args)
+            except Exception as e:
+                return f"Error executing tool: {str(e)}"
+
+        # Otherwise, execute tools and gather results.
+        tool_calls = cast(AIMessage, _most_recent_message).tool_calls  # type: ignore
+        coros = []
+        for tool_call in tool_calls:
+            tmp = {**tool_call["args"], "runtime": {"summarize_model": _model_name}}
+            coros.append(execute_tool_safely(wechat_searcher_tool, tmp))
+        observations = await asyncio.gather(*coros)
+
+        log_info_set_color(
+            _thread_id,
+            _NODE_NAME,
+            f"use execute_tool_safely: \n {str(observations)[:400]} ",
+        )
+
+        tool_outputs = [
+            ToolMessage(
+                content=observation,
+                name=tool_call["name"],
+                tool_call_id=tool_call["id"],
+            )
+            for observation, tool_call in zip(observations, tool_calls)
+        ]
+
+        if _tool_call_iterations >= _max_react_tool_calls:
+            return Command(
+                goto="compress_research",
+                update={
+                    "messages": tool_outputs,
+                },
+            )
+
+        return Command(
+            goto="researcher",
+            update={
+                "messages": tool_outputs,
+            },
+        )
+
+    except Exception as e:
+        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
+        return Command(
+            goto="__end__",
+            update={
+                "code": 1,
+                "messages": Messages(type="end"),
+                "err_message": _err_message,
+            },
+        )
+
+
 # 精炼结果
 async def compress_research(state: State, runtime: Runtime[Context]):
     _NODE_NAME = "compress_research"
@@ -259,3 +335,13 @@ _agent.add_node("compress_research", compress_research)
 _agent.add_edge(START, "researcher")
 
 researcher_agent = _agent.compile()
+
+
+# wechat researcher subgraph
+_wechat_agent = StateGraph(State, context_schema=Context)
+_wechat_agent.add_node("researcher", researcher)
+_wechat_agent.add_node("researcher_tools", wechat_researcher_tools)
+_wechat_agent.add_node("compress_research", compress_research)
+_wechat_agent.add_edge(START, "researcher")
+
+wechat_researcher_agent = _wechat_agent.compile()
