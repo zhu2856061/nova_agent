@@ -17,8 +17,9 @@ from langgraph.runtime import Runtime
 from langgraph.types import Command
 from pydantic import BaseModel
 
+from nova.agent.utils import extract_valid_info
 from nova.llms import get_llm_by_type
-from nova.model.agent import Context, State
+from nova.model.agent import Context, Messages, State
 from nova.prompts.template import apply_prompt_template, get_prompt
 from nova.tools import llm_searcher_tool
 from nova.utils import (
@@ -50,8 +51,8 @@ async def researcher(state: State, runtime: Runtime[Context]):
         # 变量
         _thread_id = runtime.context.thread_id
         _model_name = runtime.context.model
-        _messages = state.messages
-        _tool_call_iterations = state.user_guidance.get("tool_call_iterations", 1)
+        _messages = state.messages.value
+        _tool_call_iterations = state.user_guidance.get("tool_call_iterations", 0)
 
         # 提示词
         def _assemble_prompt(messages):
@@ -69,6 +70,8 @@ async def researcher(state: State, runtime: Runtime[Context]):
             return get_llm_by_type(_model_name).bind_tools(_tools)
 
         response = await _get_llm().ainvoke(_assemble_prompt(_messages))
+        extract_valid_info(response)
+
         log_info_set_color(_thread_id, _NODE_NAME, response)
 
         state.user_guidance["tool_call_iterations"] = _tool_call_iterations + 1
@@ -77,7 +80,7 @@ async def researcher(state: State, runtime: Runtime[Context]):
             update={
                 "code": 0,
                 "err_message": "ok",
-                "messages": response,
+                "messages": Messages(type="add", value=[response]),
                 "user_guidance": state.user_guidance,
                 "data": {_NODE_NAME: response},
             },
@@ -85,7 +88,14 @@ async def researcher(state: State, runtime: Runtime[Context]):
 
     except Exception as e:
         _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
-        return Command(goto="__end__", update={"code": 1, "err_message": _err_message})
+        return Command(
+            goto="__end__",
+            update={
+                "code": 1,
+                "messages": Messages(type="end"),
+                "err_message": _err_message,
+            },
+        )
 
 
 # 研究员工具
@@ -96,7 +106,7 @@ async def researcher_tools(state: State, runtime: Runtime[Context]):
         _thread_id = runtime.context.thread_id
         _model_name = runtime.context.model
         _tool_call_iterations = state.user_guidance.get("tool_call_iterations", 1)
-        _max_react_tool_calls = state.user_guidance.get("max_react_tool_calls", 3)
+        _max_react_tool_calls = state.user_guidance.get("max_react_tool_calls", 1)
         _most_recent_message = state.data.get("researcher")
 
         # 执行
@@ -154,7 +164,14 @@ async def researcher_tools(state: State, runtime: Runtime[Context]):
 
     except Exception as e:
         _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
-        return Command(goto="__end__", update={"code": 1, "err_message": _err_message})
+        return Command(
+            goto="__end__",
+            update={
+                "code": 1,
+                "messages": Messages(type="end"),
+                "err_message": _err_message,
+            },
+        )
 
 
 # 精炼结果
@@ -164,7 +181,7 @@ async def compress_research(state: State, runtime: Runtime[Context]):
         # 变量
         _thread_id = runtime.context.thread_id
         _model_name = runtime.context.model
-        _messages = state.messages
+        _messages = state.messages.value
 
         # 提示词
         def _assemble_prompt(messages):
@@ -197,11 +214,14 @@ async def compress_research(state: State, runtime: Runtime[Context]):
             try:
                 _tmp_messages = _assemble_prompt(_messages)
                 response = await _get_llm().ainvoke(_tmp_messages)
+                extract_valid_info(response)
                 log_info_set_color(_thread_id, _NODE_NAME, response.content)
 
                 return Command(
                     goto="__end__",
                     update={
+                        "code": 0,
+                        "messages": Messages(type="end"),
                         "data": {_NODE_NAME: response.content},
                     },
                 )
@@ -212,6 +232,8 @@ async def compress_research(state: State, runtime: Runtime[Context]):
         return Command(
             goto="__end__",
             update={
+                "code": 1,
+                "messages": Messages(type="end"),
                 "data": {
                     _NODE_NAME: "Error synthesizing research report: Maximum retries exceeded"
                 },
@@ -219,7 +241,14 @@ async def compress_research(state: State, runtime: Runtime[Context]):
         )
     except Exception as e:
         _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
-        return Command(goto="__end__", update={"code": 1, "err_message": _err_message})
+        return Command(
+            goto="__end__",
+            update={
+                "code": 1,
+                "messages": Messages(type="end"),
+                "err_message": _err_message,
+            },
+        )
 
 
 # researcher subgraph

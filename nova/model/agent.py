@@ -32,6 +32,8 @@ def override_reducer(current_value: Messages, new_value: Any):
     - 强制覆盖：返回 {"type": "override", "value": [...]}
     """
     if isinstance(new_value, Messages):
+        if new_value.type == "end":
+            return Messages(type="end", value=[])  # type: ignore
         value = new_value.value
         if not isinstance(value, list):
             value = [value]
@@ -44,7 +46,7 @@ def override_reducer(current_value: Messages, new_value: Any):
             return Messages(type="override", value=value)  # type: ignore
         else:
             value = operator.add(current_value.value, value)
-            return Messages(type="override", value=value)  # type: ignore
+            return Messages(type="add", value=value)  # type: ignore
 
     else:
         if not isinstance(new_value, list):
@@ -54,7 +56,7 @@ def override_reducer(current_value: Messages, new_value: Any):
             for m in convert_to_messages(new_value)
         ]
         value = operator.add(current_value.value, new_value)
-        return Messages(value=value)
+        return Messages(type="add", value=value)
 
 
 class State(BaseModel):

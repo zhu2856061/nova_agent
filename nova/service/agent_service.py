@@ -117,21 +117,20 @@ async def stream_agent_events(
                         return
 
                     try:
-                        print("===>", response)
                         res = AgentResponse(code=0, data=response).model_dump_json()
                     except Exception:
                         res = AgentResponse(
                             code=0, err_message="data is not json serializable"
                         ).model_dump_json()
 
-                    yield res + "\n"
+                    yield res
 
     except Exception as e:
         logger.error(f"Streaming error (trace_id={trace_id}): {str(e)}", exc_info=True)
         error_response = AgentResponse(
             code=500, err_message=f"Streaming failed: {str(e)}"
         )
-        yield error_response.model_dump_json() + "\n"
+        yield error_response.model_dump_json()
     finally:
         if session is not None:
             await session.close()  # 确保会话关闭
@@ -212,7 +211,7 @@ async def human_in_loop(request: AgentRequest):
                                     err_message="data is not json serializable",
                                 ).model_dump_json()
 
-                            yield res + "\n"
+                            yield res
 
             except Exception as e:
                 logger.error(

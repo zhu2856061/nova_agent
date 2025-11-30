@@ -15,7 +15,7 @@ from langgraph.types import Command, interrupt
 from pydantic import BaseModel, Field
 
 from nova.llms import get_llm_by_type
-from nova.model.agent import Context, State
+from nova.model.agent import Context, Messages, State
 from nova.prompts.template import apply_prompt_template, get_prompt
 from nova.utils import get_today_str, log_error_set_color, log_info_set_color
 
@@ -46,7 +46,7 @@ async def theme_slicer(state: State, runtime: Runtime[Context]):
         # 变量
         _thread_id = runtime.context.thread_id
         _model_name = runtime.context.model
-        _messages = state.messages
+        _messages = state.messages.value
         _human_in_loop_node = state.human_in_loop_node
 
         # 提示词
@@ -70,16 +70,19 @@ async def theme_slicer(state: State, runtime: Runtime[Context]):
         _data = []
         for topic in response.topics:  # type: ignore
             _data.append(topic.model_dump())
-        return {
-            "code": 0,
-            "err_message": "ok",
-            "messages": AIMessage(content=_data),
-            "data": {_NODE_NAME: _data},
-        }
+        return Command(
+            goto="human_in_loop",
+            update={
+                "code": 0,
+                "err_message": "ok",
+                "messages": Messages(type="add", value=[AIMessage(content=_data)]),
+                "data": {_NODE_NAME: _data},
+            },
+        )
 
     except Exception as e:
         _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
-        return {"code": 1, "err_message": _err_message}
+        return Command(goto="__end__", update={"code": 1, "err_message": _err_message})
 
 
 async def human_in_loop(state: State, runtime: Runtime[Context]):
@@ -87,9 +90,6 @@ async def human_in_loop(state: State, runtime: Runtime[Context]):
 
     # 变量
     _thread_id = runtime.context.thread_id
-    _code = state.code
-    if _code != 0:
-        return Command(goto="__end__")
 
     value = interrupt(
         {
@@ -105,9 +105,6 @@ async def human_in_loop(state: State, runtime: Runtime[Context]):
         return Command(
             goto="theme_slicer", update={"human_in_loop_node": value["human_in_loop"]}
         )
-    # except Exception as e:
-    #     _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
-    #     return {"code": 1, "err_message": _err_message}
 
 
 # researcher subgraph

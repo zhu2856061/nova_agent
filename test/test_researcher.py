@@ -3,34 +3,56 @@
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
 import asyncio
-import sys
+import json
 
-sys.path.append("..")
-import os
-
-os.environ["CONFIG_PATH"] = "../config.yaml"
-from nova.agent.researcher import researcher_agent
-
-inputs = {
-    "researcher_messages": [
-        {
-            "role": "user",
-            "content": "请查询网络上的信息，深圳的最近一周内的经济新闻",
-        }
-    ],
-}
-context = {
-    "trace_id": 123,
-    "researcher_model": "basic",
-    "summarize_model": "basic",
-    "compress_research_model": "basic",
-    "max_react_tool_calls": 2,
-}
+import httpx
 
 
-async def async_generate_response():
-    tmp = await researcher_agent.ainvoke(inputs, context=context)  # type: ignore
-    print("Assistant:\n", tmp)
+async def agent_client():
+    request_data = {
+        "trace_id": "123",
+        "context": {
+            "thread_id": "Nova",
+            "task_dir": "merlin",
+            "model": "deepseek",
+        },
+        "state": {
+            "messages": {
+                "type": "override",
+                "value": [
+                    {
+                        "role": "user",
+                        "content": "请查询网络上的信息，深圳的最近一周内的经济新闻",
+                    },
+                ],
+            },
+        },
+        "stream": True,
+    }
+    # 使用 httpx 异步客户端发送请求
+    async with httpx.AsyncClient(timeout=600.0) as client:
+        # 发送 POST 请求到 /stream_llm 路由
+        async with client.stream(
+            "POST",
+            "http://0.0.0.0:2021/agent/researcher",
+            json=request_data,
+            timeout=600.0,
+        ) as response:
+            # 检查响应状态码
+            if response.status_code != 200:
+                print(f"Error: {response.status_code}")
+                return
+
+            async for chunk in response.aiter_bytes():
+                if chunk:
+                    # try:
+                    tmp = json.loads(chunk)
+                    if tmp["data"]["event"] == "on_chat_model_stream":
+                        continue
+                    print(tmp)
+                    # except:
+                    #     print(chunk)
 
 
-asyncio.run(async_generate_response())
+if __name__ == "__main__":
+    asyncio.run(agent_client())

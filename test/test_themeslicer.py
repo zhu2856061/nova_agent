@@ -14,15 +14,18 @@ async def agent_client():
         "context": {
             "thread_id": "Nova",
             "task_dir": "merlin",
-            "model": "basic",
+            "model": "deepseek",
         },
         "state": {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "请帮忙写一篇废土世界的 AI 叛乱，偏科幻的小说, 大概3章节，每章节大约2000字",
-                }
-            ],
+            "messages": {
+                "type": "add",
+                "value": [
+                    {
+                        "role": "user",
+                        "content": "请帮忙写一篇废土世界的 AI 叛乱，偏科幻的小说, 大概3章节，每章节大约2000字",  #
+                    },
+                ],
+            },
         },
         "stream": True,
     }
@@ -43,6 +46,8 @@ async def agent_client():
             async for chunk in response.aiter_bytes():
                 if chunk:
                     tmp = json.loads(chunk.decode("utf-8"))
+                    if tmp["data"]["event"] == "on_chat_model_stream":
+                        continue
                     print(tmp)
 
 
@@ -84,5 +89,5 @@ async def human_in_loop_client():
 
 
 if __name__ == "__main__":
-    # asyncio.run(agent_client())
-    asyncio.run(human_in_loop_client())
+    asyncio.run(agent_client())
+    # asyncio.run(human_in_loop_client())
