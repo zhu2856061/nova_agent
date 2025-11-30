@@ -1,19 +1,17 @@
 # -*- coding: utf-8 -*-
-# @Time   : 2025/10/09 10:24
+# @Time   : 2025/11/30 10:24
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
 import logging
-from dataclasses import dataclass, field
-from typing import Annotated, Literal
+from typing import Literal
 
 from langchain_core.messages import (
     AIMessage,
     HumanMessage,
-    MessageLikeRepresentation,
     get_buffer_string,
 )
 from langgraph.checkpoint.memory import InMemorySaver
-from langgraph.graph import START, StateGraph, add_messages
+from langgraph.graph import START, StateGraph
 from langgraph.runtime import Runtime
 from langgraph.types import Command
 from pydantic import BaseModel, Field
@@ -21,8 +19,8 @@ from pydantic import BaseModel, Field
 from nova.agent.ainovel_architect import ainovel_architecture_agent
 from nova.agent.ainovel_chapter import ainovel_chapter_agent
 from nova.llms import get_llm_by_type
+from nova.prompts.template import apply_prompt_template, get_prompt
 from nova.utils import (
-    override_reducer,
     set_color,
 )
 
@@ -33,52 +31,6 @@ logger = logging.getLogger(__name__)
 
 # ######################################################################################
 # 全局变量
-@dataclass(kw_only=True)
-class State:
-    err_message: str = field(
-        default="",
-        metadata={"description": "The error message to use for the agent."},
-    )
-    messages: Annotated[list[MessageLikeRepresentation], add_messages]
-    architecture_messages: Annotated[list[MessageLikeRepresentation], override_reducer]
-    number_of_chapters: int = field(
-        default=0,
-        metadata={"description": "The number of chapters in the novel."},
-    )
-    word_number: int = field(
-        default=0,
-        metadata={"description": "The word number of each chapter in the novel."},
-    )
-
-
-@dataclass(kw_only=True)
-class Context:
-    trace_id: str = field(
-        default="default",
-        metadata={"description": "The trace_id to use for the agent."},
-    )
-    task_dir: str = field(
-        default="merlin",
-        metadata={"description": "The task directory to use for the agent."},
-    )
-    clarify_model: str = field(
-        default="basic",
-        metadata={"description": "The name of llm to use for the agent. "},
-    )
-    architecture_model: str = field(
-        default="basic",
-        metadata={"description": "The name of llm to use for the agent. "},
-    )
-    chapter_model: str = field(
-        default="basic",
-        metadata={"description": "The name of llm to use for the agent. "},
-    )
-    number_of_creative_chapters: int = field(
-        default=1,
-        metadata={"description": "The end chapter number to use for the agent."},
-    )
-
-
 # clarify_with_user uses this
 class ClarifyWithUser(BaseModel):
     need_clarification: bool = Field(

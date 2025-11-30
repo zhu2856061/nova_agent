@@ -17,7 +17,7 @@ from langgraph.types import Command
 
 from nova.llms import get_llm_by_type
 from nova.memory import SQLITESTORE
-from nova.model.agent import Context, State
+from nova.model.agent import Context, Messages, State
 from nova.prompts.template import apply_prompt_template, get_prompt
 from nova.tools import upsert_memory_tool
 from nova.utils import get_today_str, log_error_set_color, log_info_set_color
@@ -105,7 +105,14 @@ async def memorizer(state: State, runtime: Runtime[Context]):
 
     except Exception as e:
         _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
-        return Command(goto="__end__", update={"code": 1, "err_message": _err_message})
+        return Command(
+            goto="__end__",
+            update={
+                "code": 1,
+                "err_message": _err_message,
+                "messages": Messages(type="end"),
+            },
+        )
 
 
 async def execute_tool_safely(tool, args):
@@ -128,7 +135,12 @@ async def memorizer_tools(state: State, runtime: Runtime[Context]):
                 _thread_id, _NODE_NAME, "user_id is empty"
             )
             return Command(
-                goto="__end__", update={"code": 1, "err_message": _err_message}
+                goto="__end__",
+                update={
+                    "code": 1,
+                    "err_message": _err_message,
+                    "messages": Messages(type="end"),
+                },
             )
 
         _user_id = cast(str, _config.get("user_id"))
@@ -140,7 +152,12 @@ async def memorizer_tools(state: State, runtime: Runtime[Context]):
                 _thread_id, _NODE_NAME, "no tool calls found"
             )
             return Command(
-                goto="__end__", update={"code": 1, "err_message": _err_message}
+                goto="__end__",
+                update={
+                    "code": 1,
+                    "err_message": _err_message,
+                    "messages": Messages(type="end"),
+                },
             )
 
         # Concurrently execute all upsert_memory calls

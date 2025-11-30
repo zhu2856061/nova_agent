@@ -47,14 +47,14 @@ async def theme_slicer(state: State, runtime: Runtime[Context]):
         _thread_id = runtime.context.thread_id
         _model_name = runtime.context.model
         _messages = state.messages.value
-        _human_in_loop_node = state.human_in_loop_node
+        _human_in_loop_value = state.user_guidance.get("human_in_loop_value", "")
 
         # 提示词
         def _assemble_prompt(messages):
             tmp = {
                 "date": get_today_str(),
                 "content": get_buffer_string(messages),
-                "user_guidance": _human_in_loop_node,
+                "user_guidance": _human_in_loop_value,
             }
 
             _prompt_tamplate = get_prompt("theme", _NODE_NAME)
@@ -82,7 +82,14 @@ async def theme_slicer(state: State, runtime: Runtime[Context]):
 
     except Exception as e:
         _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
-        return Command(goto="__end__", update={"code": 1, "err_message": _err_message})
+        return Command(
+            goto="__end__",
+            update={
+                "code": 1,
+                "err_message": _err_message,
+                "messages": Messages(type="end"),
+            },
+        )
 
 
 async def human_in_loop(state: State, runtime: Runtime[Context]):
@@ -103,7 +110,8 @@ async def human_in_loop(state: State, runtime: Runtime[Context]):
         return Command(goto="__end__")
     else:
         return Command(
-            goto="theme_slicer", update={"human_in_loop_node": value["human_in_loop"]}
+            goto="theme_slicer",
+            update={"user_guidance": {"human_in_loop_value": value["human_in_loop"]}},
         )
 
 

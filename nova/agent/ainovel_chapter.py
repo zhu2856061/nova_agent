@@ -19,8 +19,8 @@ from langgraph.types import Command, interrupt
 
 from nova import CONF
 from nova.llms import get_llm_by_type
-from nova.model.agent import Context, State
-from nova.prompts.template import apply_prompt_template
+from nova.model.agent import Context, Messages, State
+from nova.prompts.template import apply_prompt_template, get_prompt
 from nova.tools import read_file_tool, write_file_tool
 from nova.utils import log_error_set_color, log_info_set_color
 
@@ -35,11 +35,6 @@ logger = logging.getLogger(__name__)
 
 # ######################################################################################
 # 函数
-def get_prompt(current_tab):
-    _PROMPT_DIR = CONF["SYSTEM"]["prompt_template_dir"]
-    with open(f"{_PROMPT_DIR}/ainovel/{current_tab}.md") as f:
-        prompt_content = f.read()
-    return prompt_content
 
 
 def parse_chapter_blueprint(blueprint_text: str):
@@ -197,15 +192,18 @@ async def global_summary(state: State, runtime: Runtime[Context]):
     try:
         # 变量
         _thread_id = runtime.context.thread_id
-        _task_dir = runtime.context.task_dir
+        _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
         _model_name = runtime.context.model
-        _data = state.data
+        _user_guidance = state.user_guidance
+        _config = runtime.context.config
 
         _work_dir = os.path.join(_task_dir, _thread_id)
         os.makedirs(_work_dir, exist_ok=True)
 
+        prompt_dir = _config.get("prompt_dir")
+
         # 获得当前章节
-        _current_chapter_id = _data.get("current_chapter_id")
+        _current_chapter_id = _user_guidance.get("current_chapter_id")
         if not _current_chapter_id:
             _err_message = log_error_set_color(
                 _thread_id, _NODE_NAME, "current_chapter_id not found"
@@ -214,14 +212,14 @@ async def global_summary(state: State, runtime: Runtime[Context]):
         os.makedirs(f"{_work_dir}/chapter_{_current_chapter_id}", exist_ok=True)
 
         # 提示词
-        def _assemble_prompt():
+        async def _assemble_prompt():
             _previous_chapter_text = ""
             _previous_global_summary = ""
             if os.path.exists(f"{_work_dir}/chapter_{_current_chapter_id - 1}"):
                 if os.path.exists(
                     f"{_work_dir}/chapter_{_current_chapter_id - 1}/chapter.md"
                 ):
-                    _previous_chapter_text = read_file_tool.run(
+                    _previous_chapter_text = await read_file_tool.arun(
                         {
                             "file_path": f"{_work_dir}/chapter_{_current_chapter_id - 1}/chapter.md"
                         }
@@ -238,27 +236,33 @@ async def global_summary(state: State, runtime: Runtime[Context]):
                 "previous_chapter_text": _previous_chapter_text,
                 "previous_global_summary": _previous_global_summary,
             }
-            _prompt_tamplate = get_prompt(_NODE_NAME)
+            _prompt_tamplate = get_prompt("ainovel", _NODE_NAME, prompt_dir)
             return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
         # LLM
         def _get_llm():
             return get_llm_by_type(_model_name)
 
-        response = await _get_llm().ainvoke(_assemble_prompt())
+        response = await _get_llm().ainvoke(await _assemble_prompt())
         log_info_set_color(_thread_id, _NODE_NAME, response)
-        _middle_result = {_NODE_NAME: response.content}
+
+        _result = {_NODE_NAME: response.content}
+
         await write_file_tool.arun(
             {
                 "file_path": f"{_work_dir}/chapter_{_current_chapter_id}/{_NODE_NAME}.md",
-                "text": json.dumps(_middle_result, ensure_ascii=False),
+                "text": json.dumps(_result, ensure_ascii=False),
             }
         )
-        return {"code": 0, "err_message": "ok", "data": _middle_result}
+        return {"code": 0, "err_message": "ok", "data": _result}
 
     except Exception as e:
         _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
-        return {"code": 1, "err_message": _err_message}
+        return {
+            "code": 1,
+            "err_message": _err_message,
+            "messages": Messages(type="end"),
+        }
 
 
 # 创建角色状态
@@ -267,15 +271,18 @@ async def create_character_state(state: State, runtime: Runtime[Context]):
     try:
         # 变量
         _thread_id = runtime.context.thread_id
-        _task_dir = runtime.context.task_dir
+        _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
         _model_name = runtime.context.model
-        _data = state.data
+        _user_guidance = state.user_guidance
+        _config = runtime.context.config
 
         _work_dir = os.path.join(_task_dir, _thread_id)
         os.makedirs(_work_dir, exist_ok=True)
 
+        prompt_dir = _config.get("prompt_dir")
+
         # 获得当前章节
-        _current_chapter_id = _data.get("current_chapter_id")
+        _current_chapter_id = _user_guidance.get("current_chapter_id")
         if not _current_chapter_id:
             _err_message = log_error_set_color(
                 _thread_id, _NODE_NAME, "current_chapter_id not found"
@@ -292,12 +299,16 @@ async def create_character_state(state: State, runtime: Runtime[Context]):
             _err_message = log_error_set_color(
                 _thread_id, _NODE_NAME, "novel_architecture not found"
             )
-            return {"code": 1, "err_message": _err_message}
+            return {
+                "code": 1,
+                "err_message": _err_message,
+                "messages": Messages(type="end"),
+            }
 
         # 提示词
         def _assemble_prompt():
             tmp = {"novel_architecture": _novel_architecture}
-            _prompt_tamplate = get_prompt(_NODE_NAME)
+            _prompt_tamplate = get_prompt("ainovel", _NODE_NAME, prompt_dir)
             return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
         # LLM
@@ -306,19 +317,22 @@ async def create_character_state(state: State, runtime: Runtime[Context]):
 
         response = await _get_llm().ainvoke(_assemble_prompt())
         log_info_set_color(_thread_id, _NODE_NAME, response)
-        _middle_result = {"character_state": response.content}
+        _result = {"character_state": response.content}
         await write_file_tool.arun(
             {
                 "file_path": f"{_work_dir}/chapter_{_current_chapter_id}/character_state.md",
-                "text": json.dumps(_middle_result, ensure_ascii=False),
+                "text": json.dumps(_result, ensure_ascii=False),
             }
         )
-        _middle_result.update(_data)
-        return {"code": 0, "err_message": "ok", "data": _middle_result}
+        return {"code": 0, "err_message": "ok", "data": _result}
 
     except Exception as e:
         _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
-        return {"code": 1, "err_message": _err_message}
+        return {
+            "code": 1,
+            "err_message": _err_message,
+            "messages": Messages(type="end"),
+        }
 
 
 # 更新角色状态
@@ -327,15 +341,18 @@ async def update_character_state(state: State, runtime: Runtime[Context]):
     try:
         # 变量
         _thread_id = runtime.context.thread_id
-        _task_dir = runtime.context.task_dir
+        _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
         _model_name = runtime.context.model
-        _data = state.data
+        _user_guidance = state.user_guidance
+        _config = runtime.context.config
 
         _work_dir = os.path.join(_task_dir, _thread_id)
         os.makedirs(_work_dir, exist_ok=True)
 
+        prompt_dir = _config.get("prompt_dir")
+
         # 获得当前章节
-        _current_chapter_id = _data.get("current_chapter_id")
+        _current_chapter_id = _user_guidance.get("current_chapter_id")
         if not _current_chapter_id:
             _err_message = log_error_set_color(
                 _thread_id, _NODE_NAME, "current_chapter_id not found"
@@ -345,30 +362,23 @@ async def update_character_state(state: State, runtime: Runtime[Context]):
 
         # 提示词
         def _assemble_prompt():
-            _previous_chapter_text = ""
-            _previous_character_state = ""
-            if os.path.exists(f"{_work_dir}/chapter_{_current_chapter_id - 1}"):
-                if os.path.exists(
-                    f"{_work_dir}/chapter_{_current_chapter_id - 1}/chapter.md"
-                ):
-                    _previous_chapter_text = read_file_tool.run(
-                        {
-                            "file_path": f"{_work_dir}/chapter_{_current_chapter_id - 1}/chapter.md"
-                        }
-                    )
-                if os.path.exists(
-                    f"{_work_dir}/chapter_{_current_chapter_id - 1}/character_state.md"
-                ):
-                    _previous_character_state = read_file_tool.run(
-                        {
-                            "file_path": f"{_work_dir}/chapter_{_current_chapter_id - 1}/character_state.md"
-                        }
-                    )
+            _previous_chapter_text = read_file_tool.run(
+                {
+                    "file_path": f"{_work_dir}/chapter_{_current_chapter_id - 1}/chapter.md"
+                }
+            )
+
+            _previous_character_state = read_file_tool.run(
+                {
+                    "file_path": f"{_work_dir}/chapter_{_current_chapter_id - 1}/character_state.md"
+                }
+            )
+
             tmp = {
                 "previous_chapter_text": _previous_chapter_text,
                 "previous_character_state": _previous_character_state,
             }
-            _prompt_tamplate = get_prompt(_NODE_NAME)
+            _prompt_tamplate = get_prompt("ainovel", _NODE_NAME, prompt_dir)
             return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
         # LLM
@@ -377,19 +387,24 @@ async def update_character_state(state: State, runtime: Runtime[Context]):
 
         response = await _get_llm().ainvoke(_assemble_prompt())
         log_info_set_color(_thread_id, _NODE_NAME, response)
-        _middle_result = {"character_state": response.content}
+
+        _result = {"character_state": response.content}
+
         await write_file_tool.arun(
             {
                 "file_path": f"{_work_dir}/chapter_{_current_chapter_id}/character_state.md",
-                "text": json.dumps(_middle_result, ensure_ascii=False),
+                "text": json.dumps(_result, ensure_ascii=False),
             }
         )
-        _middle_result.update(_data)
-        return {"code": 0, "err_message": "ok", "data": _middle_result}
+        return {"code": 0, "err_message": "ok", "data": _result}
 
     except Exception as e:
         _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
-        return {"code": 1, "err_message": _err_message}
+        return {
+            "code": 1,
+            "err_message": _err_message,
+            "messages": Messages(type="end"),
+        }
 
 
 # 最近3章节，当前章节，下一章节，构建当前章节的摘要
@@ -398,20 +413,24 @@ async def summarize_recent_chapters(state: State, runtime: Runtime[Context]):
     try:
         # 变量
         _thread_id = runtime.context.thread_id
-        _task_dir = runtime.context.task_dir
+        _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
         _model_name = runtime.context.model
-        _data = state.data
+        _user_guidance = state.user_guidance
+        _config = runtime.context.config
 
         _work_dir = os.path.join(_task_dir, _thread_id)
         os.makedirs(_work_dir, exist_ok=True)
 
+        prompt_dir = _config.get("prompt_dir")
+
         # 获得当前章节id
-        _current_chapter_id = _data.get("current_chapter_id")
+        _current_chapter_id = _user_guidance.get("current_chapter_id")
         if not _current_chapter_id:
             _err_message = log_error_set_color(
                 _thread_id, _NODE_NAME, "current_chapter_id not found"
             )
             return {"code": 1, "err_message": _err_message}
+
         os.makedirs(f"{_work_dir}/chapter_{_current_chapter_id}", exist_ok=True)
 
         # 获得章节蓝图
@@ -475,7 +494,7 @@ async def summarize_recent_chapters(state: State, runtime: Runtime[Context]):
                     "plot_twist_level", "★☆☆☆☆"
                 ),
             }
-            _prompt_tamplate = get_prompt(_NODE_NAME)
+            _prompt_tamplate = get_prompt("ainovel", _NODE_NAME, prompt_dir)
             return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
         # LLM
@@ -484,15 +503,15 @@ async def summarize_recent_chapters(state: State, runtime: Runtime[Context]):
 
         response = await _get_llm().ainvoke(_assemble_prompt())
         log_info_set_color(_thread_id, _NODE_NAME, response)
-        _middle_result = {_NODE_NAME: response.content}
+        _result = {_NODE_NAME: response.content}
         await write_file_tool.arun(
             {
                 "file_path": f"{_work_dir}/chapter_{_current_chapter_id}/{_NODE_NAME}.md",
-                "text": json.dumps(_middle_result, ensure_ascii=False),
+                "text": json.dumps(_result, ensure_ascii=False),
             }
         )
-        _middle_result.update(_data)
-        return {"code": 0, "err_message": "ok", "data": _middle_result}
+
+        return {"code": 0, "err_message": "ok", "data": _result}
 
     except Exception as e:
         _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
@@ -508,9 +527,12 @@ async def first_chapter_draft(state: State, runtime: Runtime[Context]):
         _task_dir = runtime.context.task_dir
         _model_name = runtime.context.model
         _user_guidance = state.user_guidance
+        _config = runtime.context.config
 
         _work_dir = os.path.join(_task_dir, _thread_id)
         os.makedirs(_work_dir, exist_ok=True)
+
+        prompt_dir = _config.get("prompt_dir")
 
         # 获得当前章节id
         _current_chapter_id = 1
@@ -591,9 +613,9 @@ async def first_chapter_draft(state: State, runtime: Runtime[Context]):
                 "key_items": _key_items,
                 "scene_location": _scene_location,
                 "time_constraint": _time_constraint,
-                "user_guidance": _user_guidance.get("input", ""),
+                "user_guidance": _user_guidance.get("human_in_loop_value", ""),
             }
-            _prompt_tamplate = get_prompt(_NODE_NAME)
+            _prompt_tamplate = get_prompt("ainovel", _NODE_NAME, prompt_dir)
             return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
         # LLM
@@ -602,18 +624,22 @@ async def first_chapter_draft(state: State, runtime: Runtime[Context]):
 
         response = await _get_llm().ainvoke(_assemble_prompt())
         log_info_set_color(_thread_id, _NODE_NAME, response)
-        _middle_result = {"chapter_draft": response.content}
+        _result = {"chapter_draft": response.content}
         await write_file_tool.arun(
             {
                 "file_path": f"{_work_dir}/chapter_{_current_chapter_id}/chapter_draft.md",
                 "text": f"## 第{_current_chapter_id}章 {_chapter_info['chapter_title']}\n\n{response.content}",
             }
         )
-        return {"code": 0, "err_message": "ok", "data": _middle_result}
+        return {"code": 0, "err_message": "ok", "data": _result}
 
     except Exception as e:
         _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
-        return {"code": 1, "err_message": _err_message}
+        return {
+            "code": 1,
+            "err_message": _err_message,
+            "messages": Messages(type="end"),
+        }
 
 
 # 下一章节内容
@@ -625,13 +651,15 @@ async def next_chapter_draft(state: State, runtime: Runtime[Context]):
         _task_dir = runtime.context.task_dir
         _model_name = runtime.context.model
         _user_guidance = state.user_guidance
-        _data = state.data
+        _config = runtime.context.config
 
         _work_dir = os.path.join(_task_dir, _thread_id)
         os.makedirs(_work_dir, exist_ok=True)
 
+        prompt_dir = _config.get("prompt_dir")
+
         # 获得当前章节id
-        _current_chapter_id = _data.get("current_chapter_id")
+        _current_chapter_id = _user_guidance.get("current_chapter_id")
         if not _current_chapter_id:
             _err_message = log_error_set_color(
                 _thread_id, _NODE_NAME, "current_chapter_id not found"
@@ -791,7 +819,7 @@ async def next_chapter_draft(state: State, runtime: Runtime[Context]):
                 "time_constraint": _time_constraint,
                 "user_guidance": _user_guidance.get("input", ""),
             }
-            _prompt_tamplate = get_prompt(_NODE_NAME)
+            _prompt_tamplate = get_prompt("ainovel", _NODE_NAME, prompt_dir)
             return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
         # LLM
@@ -800,18 +828,22 @@ async def next_chapter_draft(state: State, runtime: Runtime[Context]):
 
         response = await _get_llm().ainvoke(_assemble_prompt())
         log_info_set_color(_thread_id, _NODE_NAME, response)
-        _middle_result = {"chapter_draft": response.content}
+        _result = {"chapter_draft": response.content}
         await write_file_tool.arun(
             {
                 "file_path": f"{_work_dir}/chapter_{_current_chapter_id}/chapter_draft.md",
                 "text": f"## 第{_current_chapter_id}章 {_chapter_info['chapter_title']}\n\n{response.content}",
             }
         )
-        return {"code": 0, "err_message": "ok", "data": _middle_result}
+        return {"code": 0, "err_message": "ok", "data": _result}
 
     except Exception as e:
         _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
-        return {"code": 1, "err_message": _err_message}
+        return {
+            "code": 1,
+            "err_message": _err_message,
+            "messages": Messages(type="end"),
+        }
 
 
 # 人工指导
@@ -825,14 +857,15 @@ async def human_in_loop_guidance(
 ]:
     # 变量
     _thread_id = runtime.context.thread_id
-    _task_dir = runtime.context.task_dir
+    _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
+    _human_in_loop_node = state.human_in_loop_node
 
     _work_dir = os.path.join(_task_dir, _thread_id)
     os.makedirs(_work_dir, exist_ok=True)
 
-    guidance_tip = "准备开始`生成章节`，是否需要人工指导，需要的话直接输入指导内容，不需要的话直接输入`不需要`"
+    guidance_tip = f"准备开始`{_human_in_loop_node}`，是否需要人工指导，需要的话直接输入指导内容，不需要的话直接输入`不需要`"
 
-    user_guidance = interrupt({"message_id": _thread_id, "content": guidance_tip})
+    value = interrupt({"message_id": _thread_id, "content": guidance_tip})
 
     # 确定当前属于第几章
     dir_path = Path(f"{_work_dir}")
@@ -848,8 +881,10 @@ async def human_in_loop_guidance(
         return Command(
             goto="first_chapter_draft_agent",  # type: ignore
             update={
-                "user_guidance": user_guidance,
-                "data": {"current_chapter_id": _current_chapter_id},
+                "user_guidance": {
+                    "human_in_loop_value": value["human_in_loop"],
+                    "current_chapter_id": _current_chapter_id,
+                },
                 "human_in_loop_node": "first_chapter_draft_agent",
             },
         )
@@ -857,8 +892,10 @@ async def human_in_loop_guidance(
         return Command(
             goto="next_chapter_draft_agent",  # type: ignore
             update={
-                "user_guidance": user_guidance,
-                "data": {"current_chapter_id": _current_chapter_id},
+                "user_guidance": {
+                    "human_in_loop_value": value["human_in_loop"],
+                    "current_chapter_id": _current_chapter_id,
+                },
                 "human_in_loop_node": "next_chapter_draft_agent",
             },
         )
@@ -888,20 +925,18 @@ async def human_in_loop_agree(
         return Command(goto="__end__")
 
     guidance_tip = "对于上述`章节内容`是否满意，不满意的话，可以输入修改建议，若是满意的话，可以输入`满意`"
-    user_guidance = interrupt({"message_id": _thread_id, "content": guidance_tip})
+    value = interrupt({"message_id": _thread_id, "content": guidance_tip})
     _current_node = _human_in_loop_node
 
-    if user_guidance["human_in_loop_value"] == "满意":
+    if value["human_in_loop"] == "满意":
         return Command(
             goto="human_in_loop_guidance",
         )
     else:
-        user_guidance["human_in_loop_value"] = (
-            f"<用户修改建议>\n\n{user_guidance['human_in_loop_value']}\n\n</用户修改建议>"
-        )
+        tmp = f"<用户修改建议>\n\n{value['human_in_loop']}\n\n</用户修改建议>"
         return Command(
             goto=_current_node,  # type: ignore
-            update={"user_guidance": user_guidance},
+            update={"user_guidance": {"human_in_loop_value": tmp}},
         )
 
 
