@@ -17,12 +17,15 @@ async def ainovel_agent_client():
             "model": "basic",
         },
         "state": {
-            "messages": [
-                {
-                    "role": "user",
-                    "content": "请帮忙写一篇废土世界的 AI 叛乱，偏科幻的小说, 大概3章节，每章节大约2000字",
-                }
-            ],
+            "messages": {
+                "type": "override",
+                "value": [
+                    {
+                        "role": "user",
+                        "content": "请帮忙写一篇废土世界的 AI 叛乱，偏科幻的小说, 大概3章节，每章节大约2000字",
+                    },
+                ],
+            },
         },
         "stream": True,
     }
@@ -31,7 +34,7 @@ async def ainovel_agent_client():
         # 发送 POST 请求到 /stream_llm 路由
         async with client.stream(
             "POST",
-            "http://0.0.0.0:2021/agent/ainovel_architect",
+            "http://0.0.0.0:2021/agent/ainovel_chapter",
             json=request_data,
             timeout=600.0,
         ) as response:
@@ -56,8 +59,8 @@ async def ainovel_human_in_loop_client():
         },
         "state": {
             "user_guidance": {
-                "human_in_loop": "不需要",
-                "agent_name": "ainovel_architect",
+                "human_in_loop": "满意",
+                "agent_name": "ainovel_chapter",
             },
         },
         "stream": True,

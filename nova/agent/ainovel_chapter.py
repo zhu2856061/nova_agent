@@ -9,9 +9,7 @@ import re
 from pathlib import Path
 from typing import Literal
 
-from langchain_core.messages import (
-    HumanMessage,
-)
+from langchain_core.messages import BaseMessage, HumanMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import Runtime
@@ -23,6 +21,7 @@ from nova.model.agent import Context, Messages, State
 from nova.prompts.template import apply_prompt_template, get_prompt
 from nova.tools import read_file_tool, write_file_tool
 from nova.utils import log_error_set_color, log_info_set_color
+from nova.utils.common import convert_base_message
 
 # ######################################################################################
 # 配置
@@ -211,27 +210,41 @@ async def global_summary(state: State, runtime: Runtime[Context]):
             return {"code": 1, "err_message": _err_message}
         os.makedirs(f"{_work_dir}/chapter_{_current_chapter_id}", exist_ok=True)
 
+        _previous_chapter_text = ""
+        _previous_global_summary = ""
+        if os.path.exists(f"{_work_dir}/chapter_{_current_chapter_id - 1}"):
+            if os.path.exists(
+                f"{_work_dir}/chapter_{_current_chapter_id - 1}/chapter_draft.md"
+            ):
+                _previous_chapter_text = await read_file_tool.arun(
+                    {
+                        "file_path": f"{_work_dir}/chapter_{_current_chapter_id - 1}/chapter_draft.md"
+                    }
+                )
+            if os.path.exists(
+                f"{_work_dir}/chapter_{_current_chapter_id - 1}/{_NODE_NAME}.md"
+            ):
+                _previous_global_summary = await read_file_tool.arun(
+                    {
+                        "file_path": f"{_work_dir}/chapter_{_current_chapter_id - 1}/{_NODE_NAME}.md"
+                    }
+                )
+
+        if _current_chapter_id > 1 and _previous_chapter_text == "":
+            return {
+                "code": 1,
+                "err_message": f"current_chapter_id={_current_chapter_id}, previous chapter text  not found",
+                "messages": Messages(type="end"),
+            }
+        if _current_chapter_id > 2 and _previous_global_summary == "":
+            return {
+                "code": 1,
+                "err_message": f"current_chapter_id={_current_chapter_id}, previous global summary not found",
+                "messages": Messages(type="end"),
+            }
+
         # 提示词
-        async def _assemble_prompt():
-            _previous_chapter_text = ""
-            _previous_global_summary = ""
-            if os.path.exists(f"{_work_dir}/chapter_{_current_chapter_id - 1}"):
-                if os.path.exists(
-                    f"{_work_dir}/chapter_{_current_chapter_id - 1}/chapter.md"
-                ):
-                    _previous_chapter_text = await read_file_tool.arun(
-                        {
-                            "file_path": f"{_work_dir}/chapter_{_current_chapter_id - 1}/chapter.md"
-                        }
-                    )
-                if os.path.exists(
-                    f"{_work_dir}/chapter_{_current_chapter_id - 1}/{_NODE_NAME}.md"
-                ):
-                    _previous_global_summary = read_file_tool.run(
-                        {
-                            "file_path": f"{_work_dir}/chapter_{_current_chapter_id - 1}/{_NODE_NAME}.md"
-                        }
-                    )
+        def _assemble_prompt():
             tmp = {
                 "previous_chapter_text": _previous_chapter_text,
                 "previous_global_summary": _previous_global_summary,
@@ -243,7 +256,7 @@ async def global_summary(state: State, runtime: Runtime[Context]):
         def _get_llm():
             return get_llm_by_type(_model_name)
 
-        response = await _get_llm().ainvoke(await _assemble_prompt())
+        response = await _get_llm().ainvoke(_assemble_prompt())
         log_info_set_color(_thread_id, _NODE_NAME, response)
 
         _result = {_NODE_NAME: response.content}
@@ -287,7 +300,11 @@ async def create_character_state(state: State, runtime: Runtime[Context]):
             _err_message = log_error_set_color(
                 _thread_id, _NODE_NAME, "current_chapter_id not found"
             )
-            return {"code": 1, "err_message": _err_message}
+            return {
+                "code": 1,
+                "err_message": _err_message,
+                "messages": Messages(type="end"),
+            }
         os.makedirs(f"{_work_dir}/chapter_{_current_chapter_id}", exist_ok=True)
 
         # 获得大纲
@@ -360,20 +377,26 @@ async def update_character_state(state: State, runtime: Runtime[Context]):
             return {"code": 1, "err_message": _err_message}
         os.makedirs(f"{_work_dir}/chapter_{_current_chapter_id}", exist_ok=True)
 
+        _previous_chapter_text = read_file_tool.run(
+            {
+                "file_path": f"{_work_dir}/chapter_{_current_chapter_id - 1}/chapter_draft.md"
+            }
+        )
+
+        _previous_character_state = read_file_tool.run(
+            {
+                "file_path": f"{_work_dir}/chapter_{_current_chapter_id - 1}/character_state.md"
+            }
+        )
+        if _previous_chapter_text == "" or _previous_character_state == "":
+            return {
+                "code": 1,
+                "err_message": f"current_chapter_id={_current_chapter_id}, previous chapter text or previous_character_state not found",
+                "messages": Messages(type="end"),
+            }
+
         # 提示词
         def _assemble_prompt():
-            _previous_chapter_text = read_file_tool.run(
-                {
-                    "file_path": f"{_work_dir}/chapter_{_current_chapter_id - 1}/chapter.md"
-                }
-            )
-
-            _previous_character_state = read_file_tool.run(
-                {
-                    "file_path": f"{_work_dir}/chapter_{_current_chapter_id - 1}/character_state.md"
-                }
-            )
-
             tmp = {
                 "previous_chapter_text": _previous_chapter_text,
                 "previous_character_state": _previous_character_state,
@@ -429,7 +452,11 @@ async def summarize_recent_chapters(state: State, runtime: Runtime[Context]):
             _err_message = log_error_set_color(
                 _thread_id, _NODE_NAME, "current_chapter_id not found"
             )
-            return {"code": 1, "err_message": _err_message}
+            return {
+                "code": 1,
+                "err_message": _err_message,
+                "messages": Messages(type="end"),
+            }
 
         os.makedirs(f"{_work_dir}/chapter_{_current_chapter_id}", exist_ok=True)
 
@@ -442,7 +469,11 @@ async def summarize_recent_chapters(state: State, runtime: Runtime[Context]):
             _err_message = log_error_set_color(
                 _thread_id, _NODE_NAME, "novel_chapter_blueprint not found"
             )
-            return {"code": 1, "err_message": _err_message}
+            return {
+                "code": 1,
+                "err_message": _err_message,
+                "messages": Messages(type="end"),
+            }
 
         # 提示词
         def _assemble_prompt():
@@ -543,6 +574,7 @@ async def first_chapter_draft(state: State, runtime: Runtime[Context]):
             _novel_setting = await read_file_tool.arun(
                 {"file_path": f"{_work_dir}/novel_extract_setting.md"}
             )
+            _novel_setting = json.loads(_novel_setting)
         else:
             _err_message = log_error_set_color(
                 _thread_id, _NODE_NAME, "novel_extract_setting not found"
@@ -672,6 +704,7 @@ async def next_chapter_draft(state: State, runtime: Runtime[Context]):
             _novel_setting = await read_file_tool.arun(
                 {"file_path": f"{_work_dir}/novel_extract_setting.md"}
             )
+            _novel_setting = json.loads(_novel_setting)
         else:
             _err_message = log_error_set_color(
                 _thread_id, _NODE_NAME, "novel_extract_setting not found"
@@ -858,14 +891,9 @@ async def human_in_loop_guidance(
     # 变量
     _thread_id = runtime.context.thread_id
     _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
-    _human_in_loop_node = state.human_in_loop_node
 
     _work_dir = os.path.join(_task_dir, _thread_id)
     os.makedirs(_work_dir, exist_ok=True)
-
-    guidance_tip = f"准备开始`{_human_in_loop_node}`，是否需要人工指导，需要的话直接输入指导内容，不需要的话直接输入`不需要`"
-
-    value = interrupt({"message_id": _thread_id, "content": guidance_tip})
 
     # 确定当前属于第几章
     dir_path = Path(f"{_work_dir}")
@@ -875,7 +903,26 @@ async def human_in_loop_guidance(
         if item.is_dir() and item.name.startswith("chapter")
     )
     _current_chapter_id = file_count + 1
+
+    guidance_tip = f"准备开始`第{_current_chapter_id}章节撰写`，是否需要人工指导，需要的话直接输入指导内容，不需要的话直接输入`不需要`"
+
+    value = interrupt({"message_id": _thread_id, "content": guidance_tip})
+
+    # # 确定当前属于第几章
+    # dir_path = Path(f"{_work_dir}")
+    # file_count = sum(
+    #     1
+    #     for item in dir_path.iterdir()
+    #     if item.is_dir() and item.name.startswith("chapter")
+    # )
+    # _current_chapter_id = file_count + 1
     os.makedirs(f"{_work_dir}/chapter_{_current_chapter_id}", exist_ok=True)
+
+    _new_v = []
+    for v in state.messages.value:
+        if isinstance(v, BaseMessage):
+            v = convert_base_message(v)
+        _new_v.append(v)
 
     if _current_chapter_id == 1:
         return Command(
@@ -886,6 +933,7 @@ async def human_in_loop_guidance(
                     "current_chapter_id": _current_chapter_id,
                 },
                 "human_in_loop_node": "first_chapter_draft_agent",
+                "messages": Messages(type="override", value=_new_v),
             },
         )
     else:
@@ -897,6 +945,7 @@ async def human_in_loop_guidance(
                     "current_chapter_id": _current_chapter_id,
                 },
                 "human_in_loop_node": "next_chapter_draft_agent",
+                "messages": Messages(type="override", value=_new_v),
             },
         )
 
@@ -928,15 +977,46 @@ async def human_in_loop_agree(
     value = interrupt({"message_id": _thread_id, "content": guidance_tip})
     _current_node = _human_in_loop_node
 
+    _new_v = []
+    for v in state.messages.value:
+        if isinstance(v, BaseMessage):
+            v = convert_base_message(v)
+        _new_v.append(v)
+
     if value["human_in_loop"] == "满意":
+        # 获得小说设定
+
+        _novel_setting = await read_file_tool.arun(
+            {"file_path": f"{_work_dir}/novel_extract_setting.md"}
+        )
+        _number_of_chapters = json.loads(_novel_setting)["number_of_chapters"]
+        _current_chapter_id = state.user_guidance.get(
+            "current_chapter_id", float("inf")
+        )
+        if _current_chapter_id >= _number_of_chapters:
+            return Command(
+                goto="__end__",
+                update={
+                    "code": 1,
+                    "err_message": "current_chapter_id >= number_of_chapters",
+                    "messages": Messages(type="end"),
+                },
+            )
+
         return Command(
             goto="human_in_loop_guidance",
+            update={
+                "messages": Messages(type="override", value=_new_v),
+            },
         )
     else:
         tmp = f"<用户修改建议>\n\n{value['human_in_loop']}\n\n</用户修改建议>"
         return Command(
             goto=_current_node,  # type: ignore
-            update={"user_guidance": {"human_in_loop_value": tmp}},
+            update={
+                "user_guidance": {"human_in_loop_value": tmp},
+                "messages": Messages(type="override", value=_new_v),
+            },
         )
 
 

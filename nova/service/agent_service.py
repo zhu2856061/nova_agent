@@ -9,22 +9,22 @@ import aiohttp
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import BaseMessage
+from langchain_core.runnables.config import RunnableConfig
 from langgraph.types import Command
 from pydantic import BaseModel
 
 from nova.agent.ainovel import ainovel
-from nova.agent.ainovel_architect import ainovel_architecture_agent
-from nova.agent.ainovel_chapter import ainovel_chapter_agent
-from nova.agent.ainovel_interact import (
+from nova.agent.ainovel_architect import (
+    ainovel_architecture_agent,
+    build_architecture_agent,
     chapter_blueprint_agent,
-    chapter_draft_agent,
     character_dynamics_agent,
     core_seed_agent,
     extract_setting_agent,
     plot_arch_agent,
-    summarize_architecture_agent,
     world_building_agent,
 )
+from nova.agent.ainovel_chapter import ainovel_chapter_agent
 from nova.agent.deepresearcher import deepresearcher
 from nova.agent.memorizer import memorizer_agent
 from nova.agent.researcher import researcher_agent, wechat_researcher_agent
@@ -49,16 +49,15 @@ AGENT_REGISTRY = {
     "researcher": researcher_agent,
     "deepresearcher": deepresearcher,
     "wechat_researcher": wechat_researcher_agent,
-    "ainovel_architect": ainovel_architecture_agent,
-    "ainovel_chapter": ainovel_chapter_agent,
     "ainovel_extract_setting": extract_setting_agent,
     "ainovel_core_seed": core_seed_agent,
-    "ainovel_character_dynamics": character_dynamics_agent,
     "ainovel_world_building": world_building_agent,
+    "ainovel_character_dynamics": character_dynamics_agent,
     "ainovel_plot_arch": plot_arch_agent,
     "ainovel_chapter_blueprint": chapter_blueprint_agent,
-    "ainovel_summarize_architecture": summarize_architecture_agent,
-    "ainovel_chapter_draft": chapter_draft_agent,
+    "ainovel_build_architecture": build_architecture_agent,
+    "ainovel_architect": ainovel_architecture_agent,
+    "ainovel_chapter": ainovel_chapter_agent,
     "ainovel": ainovel,
 }
 
@@ -149,7 +148,7 @@ async def human_in_loop(request: AgentRequest):
         state = request.state
         stream = request.stream
         thread_id = context.thread_id
-        config = {"configurable": {"thread_id": thread_id}}
+        config = RunnableConfig(configurable={"thread_id": thread_id})
         user_guidance = state.user_guidance
 
         if not user_guidance:

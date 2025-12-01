@@ -9,7 +9,7 @@ import operator
 import time
 from datetime import datetime
 from functools import wraps
-from typing import Any, Dict, List, cast
+from typing import Any, Dict, List, Union, cast
 
 from langchain_core.messages import (
     AIMessage,
@@ -140,3 +140,93 @@ def annotated_to_raw(annotated_messages: List[AnyMessage]) -> List[Dict]:
             raw.append({"role": "unknown", "content": str(msg.content)})
 
     return raw
+
+
+def convert_base_message(
+    base_msg: BaseMessage,
+    target_type=None,  # 可选：手动指定目标类型（优先级高于 type 字段）
+) -> Union[
+    HumanMessage,
+    AIMessage,
+    SystemMessage,
+    FunctionMessage,
+    ToolMessage,
+    ChatMessage,
+]:
+    """
+    将 BaseMessage 转换为指定的目标消息类型（根据 type 字段自动匹配，支持手动指定）
+
+    Args:
+        base_msg: 待转换的 BaseMessage 实例
+        target_type: 可选，手动指定目标类型（如 HumanMessage），优先级高于 base_msg.type
+
+    Returns:
+        对应类型的消息实例（HumanMessage/AIMessage 等）
+
+    Raises:
+        ValueError: 当 type 字段无效、目标类型不支持，或手动指定的类型与 BaseMessage 类型不匹配时
+        AttributeError: 当 BaseMessage 缺少 type 字段时
+    """
+    # 1. 校验输入：确保 base_msg 是 BaseMessage 实例
+    if not isinstance(base_msg, BaseMessage):
+        raise ValueError(
+            f"输入必须是 BaseMessage 实例，当前类型：{type(base_msg).__name__}"
+        )
+
+    # 2. 获取目标类型（手动指定优先，否则从 base_msg.type 自动匹配）
+    if target_type is not None:
+        # 手动指定时，校验目标类型是否是 BaseMessage 的子类
+        if not issubclass(target_type, BaseMessage):
+            raise ValueError(
+                f"目标类型必须是 BaseMessage 的子类，当前类型：{target_type.__name__}"
+            )
+    else:
+        # 自动匹配：type 字段 -> 目标类型的映射关系
+        type_mapping = {
+            "human": HumanMessage,
+            "ai": AIMessage,
+            "system": SystemMessage,
+            "function": FunctionMessage,
+            "tool": ToolMessage,
+            "chat": ChatMessage,
+        }
+        # 获取 base_msg 的 type 字段（处理可能的缺失）
+        msg_type = getattr(base_msg, "type", None)
+        if msg_type not in type_mapping:
+            raise ValueError(
+                f"BaseMessage 的 type 字段无效：{msg_type}。"
+                f"支持的 type 值：{list(type_mapping.keys())}"
+            )
+        target_type = type_mapping[msg_type]
+
+    # 3. 提取 BaseMessage 的核心属性（所有目标类型都兼容的属性）
+    common_kwargs = {
+        "content": base_msg.content,
+        "additional_kwargs": base_msg.additional_kwargs.copy(),  # 浅拷贝避免原对象修改
+        "response_metadata": base_msg.response_metadata.copy(),
+    }
+
+    # 4. 处理特殊类型的额外必填属性（如 FunctionMessage 需要 name 字段）
+    if target_type == FunctionMessage:
+        # FunctionMessage 必须包含 name 属性（从 additional_kwargs 提取或报错）
+        func_name = common_kwargs["additional_kwargs"].pop("name", None)
+        if not func_name:
+            raise ValueError(
+                "转换为 FunctionMessage 时，BaseMessage 的 additional_kwargs 必须包含 'name' 字段"
+            )
+        common_kwargs["name"] = func_name
+
+    elif target_type == ChatMessage:
+        # ChatMessage 的 role 字段优先使用 base_msg.type，若 additional_kwargs 有则覆盖
+        chat_role = common_kwargs["additional_kwargs"].pop("role", base_msg.type)
+        common_kwargs["role"] = chat_role
+
+    # 5. 实例化目标类型并返回（过滤目标类型不支持的参数）
+    try:
+        # 动态创建目标实例，自动过滤不支持的参数（如 BaseMessage 的 type 字段）
+        return target_type(**common_kwargs)  # type: ignore
+    except TypeError as e:
+        raise ValueError(
+            f"创建 {target_type.__name__} 实例失败，可能是缺少必填参数或参数不兼容。"
+            f"错误详情：{str(e)}"
+        ) from e

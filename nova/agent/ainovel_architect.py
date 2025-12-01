@@ -8,6 +8,7 @@ import os
 from typing import Literal
 
 from langchain_core.messages import (
+    BaseMessage,
     HumanMessage,
     get_buffer_string,
 )
@@ -23,6 +24,7 @@ from nova.model.agent import Context, Messages, State
 from nova.prompts.template import apply_prompt_template, get_prompt
 from nova.tools import read_file_tool, write_file_tool
 from nova.utils import log_error_set_color, log_info_set_color
+from nova.utils.common import convert_base_message
 
 # ######################################################################################
 # 配置
@@ -62,7 +64,8 @@ async def extract_setting(state: State, runtime: Runtime[Context]):
         _model_name = runtime.context.model
         _config = runtime.context.config
         _user_guidance = state.user_guidance
-        _messages = state.messages
+        _messages = state.messages.value
+
         _work_dir = os.path.join(_task_dir, _thread_id)
         os.makedirs(_work_dir, exist_ok=True)
         prompt_dir = _config.get("prompt_dir")
@@ -71,7 +74,7 @@ async def extract_setting(state: State, runtime: Runtime[Context]):
         # 提示词
         def _assemble_prompt():
             tmp = {
-                "messages": get_buffer_string(_messages),  # type: ignore
+                "messages": get_buffer_string(_messages) if _messages else "",  # type: ignore
                 "user_guidance": _human_in_loop_value,
             }
             _prompt_tamplate = get_prompt("ainovel", _NODE_NAME, prompt_dir)
@@ -448,118 +451,18 @@ async def chapter_blueprint(state: State, runtime: Runtime[Context]):
 
         _work_dir = os.path.join(_task_dir, _thread_id)
         os.makedirs(_work_dir, exist_ok=True)
-        prompt_dir = _config.get("prompt_dir")
-        _human_in_loop_value = _user_guidance.get("human_in_loop_value", "")
-
-        # 提示词
-        async def _assemble_prompt():
-            # 抽取设置结果
-            _extract_setting_result = await read_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/middle/extract_setting.md",
-                }
-            )
-            _extract_setting_result = json.loads(_extract_setting_result)[
-                "extract_setting"
-            ]
-
-            # 种子结果
-            _core_seed_result = await read_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/middle/core_seed.md",
-                }
-            )
-            _core_seed_result = json.loads(_core_seed_result)
-
-            # 世界观结果
-            _world_building_result = await read_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/middle/world_building.md",
-                }
-            )
-            _world_building_result = json.loads(_world_building_result)
-
-            # 角色信息
-            _character_dynamics_result = await read_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/middle/character_dynamics.md",
-                }
-            )
-            _character_dynamics_result = json.loads(_character_dynamics_result)
-
-            # 三幕式情节架构
-            _plot_arch_result = await read_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/middle/plot_arch.md",
-                }
-            )
-            _plot_arch_result = json.loads(_plot_arch_result)
-
-            # 聚合所有信息
-            _extract_setting_result.update(_core_seed_result)
-            _extract_setting_result.update(_world_building_result)
-            _extract_setting_result.update(_character_dynamics_result)
-            _extract_setting_result.update(_plot_arch_result)
-
-            tmp = {**_extract_setting_result, "user_guidance": _human_in_loop_value}
-            _prompt_tamplate = get_prompt("ainovel", _NODE_NAME, prompt_dir)
-            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
-
-        # LLM
-        def _get_llm():
-            return get_llm_by_type(_model_name)
-
-        response = await _get_llm().ainvoke(await _assemble_prompt())
-        log_info_set_color(_thread_id, _NODE_NAME, response)
-
-        _result = {_NODE_NAME: response.content}
-
-        os.makedirs(f"{_work_dir}/middle", exist_ok=True)
-        await write_file_tool.arun(
-            {
-                "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
-                "text": json.dumps(_result, ensure_ascii=False),
-            }
-        )
-        return {
-            "code": 0,
-            "err_message": "ok",
-            "data": _result,
-            "human_in_loop_node": _NODE_NAME,
-        }
-
-    except Exception as e:
-        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
-        return {
-            "code": 1,
-            "err_message": _err_message,
-            "messages": Messages(type="end"),
-        }
-
-
-# 分片章节目录
-async def chunk_chapter_blueprint(state: State, runtime: Runtime[Context]):
-    _NODE_NAME = "chapter_blueprint"
-    try:
-        # 变量
-        _thread_id = runtime.context.thread_id
-        _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
-        _model_name = runtime.context.model
-        _user_guidance = state.user_guidance
-        _config = runtime.context.config
-
-        _work_dir = os.path.join(_task_dir, _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
 
         prompt_dir = _user_guidance.get("prompt_dir")
         _human_in_loop_value = _config.get("human_in_loop_value", "")
 
         _number_of_chapters = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/interact/core_seed.md",
+                "file_path": f"{_work_dir}/middle/extract_setting.md",
             }
         )
-        _number_of_chapters = json.loads(_number_of_chapters)["number_of_chapters"]
+        _number_of_chapters = json.loads(_number_of_chapters)["extract_setting"][
+            "number_of_chapters"
+        ]
 
         # 提示词
         async def _assemble_prompt(chapter_list, start, end):
@@ -680,7 +583,16 @@ async def build_architecture(state: State, runtime: Runtime[Context]):
                 "file_path": f"{_work_dir}/middle/extract_setting.md",
             }
         )
+
         _extract_setting_result = json.loads(_extract_setting_result)["extract_setting"]
+
+        # 小说设定
+        await write_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/novel_extract_setting.md",
+                "text": _extract_setting_result,
+            }
+        )
 
         # 种子结果
         _core_seed_result = await read_file_tool.arun(
@@ -801,9 +713,19 @@ async def human_in_loop_guidance(
 
     guidance_tip = f"基于上述生成信息准备开始`{_human_in_loop_node}`，是否需要人工指导，需要的话直接输入指导内容，不需要的话直接输入`不需要`"
     value = interrupt({"message_id": _thread_id, "content": guidance_tip})
+
+    _new_v = []
+    for v in state.messages.value:
+        if isinstance(v, BaseMessage):
+            v = convert_base_message(v)
+        _new_v.append(v)
+
     return Command(
         goto=_human_in_loop_node,  # type: ignore
-        update={"user_guidance": {"human_in_loop_value": value["human_in_loop"]}},
+        update={
+            "user_guidance": {"human_in_loop_value": value["human_in_loop"]},
+            "messages": Messages(type="override", value=_new_v),
+        },
     )
 
 
@@ -848,10 +770,10 @@ async def human_in_loop_agree(
     if _current_node == "extract_setting":
         _next_node = "core_seed"
     elif _current_node == "core_seed":
-        _next_node = "character_dynamics"
-    elif _current_node == "character_dynamics":
         _next_node = "world_building"
     elif _current_node == "world_building":
+        _next_node = "character_dynamics"
+    elif _current_node == "character_dynamics":
         _next_node = "plot_arch"
     elif _current_node == "plot_arch":
         _next_node = "chapter_blueprint"
@@ -861,24 +783,84 @@ async def human_in_loop_agree(
         return Command(
             goto="__end__", update={"code": 1, "err_message": "node not found"}
         )
+    _new_v = []
+    for v in state.messages.value:
+        if isinstance(v, BaseMessage):
+            v = convert_base_message(v)
+        _new_v.append(v)
 
-    if value["human_in_loop"] == "满意":
+    if value["human_in_loop"] == "满意" and _next_node == "build_architecture":
+        return Command(goto="build_architecture")
+
+    elif value["human_in_loop"] == "满意":
         return Command(
             goto="human_in_loop_guidance",
             update={
+                "messages": Messages(type="override", value=_new_v),
                 "human_in_loop_node": _next_node,
             },
         )
+
     else:
         tmp = json.dumps(_data, ensure_ascii=False)
         tmp = f"<上一次生成的结果>\n\n{tmp}\n\n</上一次生成的结果>\n\n<用户修改建议>\n\n{value['human_in_loop']}\n\n</用户修改建议>"
         return Command(
             goto=_current_node,  # type: ignore
-            update={"user_guidance": {"human_in_loop_value": tmp}},
+            update={
+                "messages": Messages(type="override", value=_new_v),
+                "user_guidance": {"human_in_loop_value": tmp},
+            },
         )
 
 
-# architecture subgraph
+# 抽取设定 subgraph
+_extract_setting = StateGraph(State, context_schema=Context)
+_extract_setting.add_node("extract_setting", extract_setting)
+_extract_setting.add_edge(START, "extract_setting")
+extract_setting_agent = _extract_setting.compile()
+
+
+# 核心种子 subgraph
+_core_seed = StateGraph(State, context_schema=Context)
+_core_seed.add_node("core_seed", core_seed)
+_core_seed.add_edge(START, "core_seed")
+core_seed_agent = _core_seed.compile()
+
+
+# 角色动力学 subgraph
+_character_dynamics = StateGraph(State, context_schema=Context)
+_character_dynamics.add_node("character_dynamics", character_dynamics)
+_character_dynamics.add_edge(START, "character_dynamics")
+character_dynamics_agent = _character_dynamics.compile()
+
+
+# 世界观 subgraph
+_world_building = StateGraph(State, context_schema=Context)
+_world_building.add_node("world_building", world_building)
+_world_building.add_edge(START, "world_building")
+world_building_agent = _world_building.compile()
+
+
+# 三幕式情节架构 subgraph
+_plot_arch = StateGraph(State, context_schema=Context)
+_plot_arch.add_node("plot_arch", plot_arch)
+_plot_arch.add_edge(START, "plot_arch")
+plot_arch_agent = _plot_arch.compile()
+
+
+# 章节目录 subgraph
+_chapter_blueprint = StateGraph(State, context_schema=Context)
+_chapter_blueprint.add_node("chapter_blueprint", chapter_blueprint)
+_chapter_blueprint.add_edge(START, "chapter_blueprint")
+chapter_blueprint_agent = _chapter_blueprint.compile()
+
+# 组织结果 subgraph
+_build_architecture = StateGraph(State, context_schema=Context)
+_build_architecture.add_node("build_architecture", build_architecture)
+_build_architecture.add_edge(START, "build_architecture")
+build_architecture_agent = _build_architecture.compile()
+
+# 全流程 graph
 _agent = StateGraph(State, context_schema=Context)
 _agent.add_node("extract_setting", extract_setting)
 _agent.add_node("core_seed", core_seed)

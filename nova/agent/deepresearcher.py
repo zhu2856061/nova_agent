@@ -8,7 +8,6 @@ import os
 from typing import Annotated
 
 from langchain_core.messages import (
-    AIMessage,
     HumanMessage,
     SystemMessage,
     ToolMessage,
@@ -134,7 +133,7 @@ async def clarify_with_user(state: State, runtime: Runtime[Context]):
                 update={
                     "code": 0,
                     "err_message": "ok",
-                    "messages": [AIMessage(content=response.verification)],
+                    "messages": [HumanMessage(content=response.verification)],
                     "data": {_NODE_NAME: response.model_dump()},
                 },
             )
