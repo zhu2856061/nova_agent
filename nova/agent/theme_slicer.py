@@ -7,7 +7,12 @@ from __future__ import annotations
 import logging
 from typing import List
 
-from langchain_core.messages import AIMessage, HumanMessage, get_buffer_string
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    HumanMessage,
+    get_buffer_string,
+)
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import START, StateGraph
 from langgraph.runtime import Runtime
@@ -18,6 +23,7 @@ from nova.llms import get_llm_by_type
 from nova.model.agent import Context, Messages, State
 from nova.prompts.template import apply_prompt_template, get_prompt
 from nova.utils import get_today_str, log_error_set_color, log_info_set_color
+from nova.utils.common import convert_base_message
 
 logger = logging.getLogger(__name__)
 # ######################################################################################
@@ -106,12 +112,21 @@ async def human_in_loop(state: State, runtime: Runtime[Context]):
     )
     log_info_set_color(_thread_id, _NODE_NAME, value)
 
+    _new_v = []
+    for v in state.messages.value:
+        if isinstance(v, BaseMessage):
+            v = convert_base_message(v)
+        _new_v.append(v)
+
     if value["human_in_loop"] == "确定":
         return Command(goto="__end__")
     else:
         return Command(
             goto="theme_slicer",
-            update={"user_guidance": {"human_in_loop_value": value["human_in_loop"]}},
+            update={
+                "user_guidance": {"human_in_loop_value": value["human_in_loop"]},
+                "messages": Messages(type="override", value=_new_v),
+            },
         )
 
 

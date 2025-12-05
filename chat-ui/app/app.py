@@ -4,11 +4,7 @@
 # @Moto   : Knowledge comes from decomposition
 import reflex as rx
 
-# from app.pages.agent_memorizer_page import memorizer_page
 from app.pages.agent_page import page_set
-
-# from app.pages.agent_themeslicer_page import themeslicer_page
-from app.pages.chat_page import chat_page
 
 
 def redirect_component():
@@ -52,19 +48,18 @@ app.add_page(
     image="novaait.png",
 )
 
-# chat模式
-app.add_page(
-    component=chat_page,
-    title="Nova chat",
-    route="/chat/llm",
-    image="novaait.png",
-)
-
-# agent 模式
 for item, value in page_set.items():
-    app.add_page(
-        component=value,
-        title="Nova Agent",
-        route=f"/agent/{item}",
-        image="novaait.png",
-    )
+    if item == "llm":
+        app.add_page(
+            component=value,
+            title="Nova LLM",
+            route=f"/chat/{item}",
+            image="novaait.png",
+        )
+    else:
+        app.add_page(
+            component=value,
+            title="Nova Agent",
+            route=f"/agent/{item}",
+            image="novaait.png",
+        )

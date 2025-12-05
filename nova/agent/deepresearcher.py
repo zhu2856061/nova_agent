@@ -427,7 +427,7 @@ async def final_report_generation(state: State, runtime: Runtime[Context]):
                         "output_file": os.path.join(_work_dir, "final_report.html"),
                     }
                 )
-
+                log_info_set_color(_thread_id, _NODE_NAME, final_report)
                 return Command(
                     goto="__end__",
                     update={

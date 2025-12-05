@@ -2,19 +2,23 @@
 # @Time   : 2025/08/01 10:24
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
-from typing import Union
+from typing import List, Union
 
 import reflex as rx
 from app.components.common.head_components import headbar
-from app.components.common.sidebar_components import sidebar
+from app.components.common.sidebar_components import SideMenu, sidebar
 from app.components.common.tailbar_components import footer
 
 
 def basic_page(
-    badge: Union[rx.Var[str], str], main_compoent: rx.Component
+    brand: Union[rx.Var[str], str],
+    logo: Union[rx.Var[str], str],
+    menu: List[SideMenu],
+    badge: Union[rx.Var[str], str],
+    main_compoent: rx.Component,
 ) -> rx.Component:
     return rx.hstack(
-        sidebar(),
+        sidebar(brand, logo, menu),
         rx.vstack(
             headbar(badge),
             # # ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←

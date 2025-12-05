@@ -4,7 +4,7 @@
 # # @Moto   : Knowledge comes from decomposition
 from __future__ import annotations
 
-from typing import List, Optional, cast
+from typing import List, Optional, Union, cast
 
 import reflex as rx
 
@@ -152,14 +152,16 @@ def accordion_item_child(child_item: SideMenu) -> rx.Component:
 
 
 # -------------------------- 5. 侧边栏主组件（优化显隐逻辑、响应式）--------------------------
-def sidebar() -> rx.Component:
+def sidebar(
+    brand: Union[rx.Var[str], str], logo: Union[rx.Var[str], str], menu: List[SideMenu]
+) -> rx.Component:
     return rx.box(
         # 外层容器：相对定位，作为Logo和箭头的定位参考
         rx.box(
             # 1. 顶部固定Logo：始终显示（展开/收起都有）
             rx.avatar(
-                name=SideState.brand,
-                src=SideState.logo,
+                name=brand,
+                src=logo,
                 border_radius="8px",
                 size="3",  # 收起时Logo尺寸
                 # 绝对定位固定在顶部
@@ -176,12 +178,12 @@ def sidebar() -> rx.Component:
                 # 展开时：Logo与品牌文字横向并排
                 rx.hstack(
                     rx.avatar(
-                        name=SideState.brand,
-                        src=SideState.logo,
+                        name=brand,
+                        src=logo,
                         border_radius="8px",
                         size="3",
                     ),
-                    rx.text(SideState.brand, size="6", weight="bold"),
+                    rx.text(brand, size="6", weight="bold"),
                     justify_content="center",
                     align_items="center",
                     margin_top="0.5em",
@@ -191,7 +193,7 @@ def sidebar() -> rx.Component:
                 # 菜单区域
                 rx.scroll_area(
                     rx.accordion.root(
-                        rx.foreach(SideState.menu, accordion_item),
+                        rx.foreach(menu, accordion_item),
                         collapsible=True,
                         type="multiple",
                         width="100%",

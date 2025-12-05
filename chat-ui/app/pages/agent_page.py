@@ -1,4 +1,9 @@
-# -*- coding: utf-8 -*-
+# # -*- coding: utf-8 -*-
+# # @Time   : 2025/09/24 10:24
+# # @Author : zip
+# # @Moto   : Knowledge comes from decomposition
+from __future__ import annotations
+
 import json
 import uuid
 from typing import Any
@@ -9,6 +14,7 @@ from app.api.nova_agent_api import AGENT_BACKEND_URL, get_nova_agent_api
 from app.components.chat.dialogue_bar import Message, dialoguebar
 from app.components.chat.input_bar import Parameters, inputbar
 from app.components.common.baisc_components import basic_page
+from app.components.common.sidebar_components import SideMenu
 
 
 def create_agent_page(title: str, agent_name: str) -> rx.Component:
@@ -26,12 +32,16 @@ def create_agent_page(title: str, agent_name: str) -> rx.Component:
     class AgentState(rx.State):
         """聊天页面状态"""
 
+        brand = "NovaAI"
+        logo = "../novaai.png"
+
         default_chat_name = "Nova"
         current_chat = "Nova"
         is_processing = False
 
         params_fields: list[Parameters] = []
         chat_instance: dict[str, list[Message]] = {}
+        menu: list[SideMenu] = []
 
         _is_human_in_loop = False
 
@@ -59,6 +69,76 @@ def create_agent_page(title: str, agent_name: str) -> rx.Component:
                     Message(role="assistant", content=_DEFAULT_INTRO)
                 ]
             }
+            self.menu = [
+                SideMenu(
+                    title="Chat",
+                    icon="message-circle-more",
+                    children=[
+                        SideMenu(
+                            title="llm",
+                            icon="message-circle-more",
+                            tobe="/chat/llm",
+                        ),
+                    ],
+                ),
+                SideMenu(
+                    title="Agent",
+                    icon="bot-message-square",
+                    children=[
+                        SideMenu(
+                            title="memorizer",
+                            icon="bot-message-square",
+                            tobe="/agent/memorizer",
+                        ),
+                        SideMenu(
+                            title="themeslicer",
+                            icon="bot-message-square",
+                            tobe="/agent/themeslicer",
+                        ),
+                        SideMenu(
+                            title="web_searcher",
+                            icon="bot-message-square",
+                            tobe="/agent/researcher",
+                        ),
+                        SideMenu(
+                            title="wechat_searcher",
+                            icon="bot-message-square",
+                            tobe="/agent/wechat_researcher",
+                        ),
+                        SideMenu(
+                            title="deepresearcher",
+                            icon="clipboard-list",
+                            tobe="/agent/deepresearcher",
+                        ),
+                        SideMenu(
+                            title="ainovel",
+                            icon="clipboard-list",
+                            tobe="/agent/ainovel",
+                        ),
+                        SideMenu(
+                            title="ainovel_architect",
+                            icon="bot-message-square",
+                            tobe="/agent/ainovel_architect",
+                        ),
+                        SideMenu(
+                            title="ainovel_chapter",
+                            icon="bot-message-square",
+                            tobe="/agent/ainovel_chapter",
+                        ),
+                    ],
+                ),
+                SideMenu(
+                    title="Interact",
+                    icon="layout-dashboard",
+                    children=[
+                        SideMenu(
+                            title="ainovel",
+                            icon="layout-dashboard",
+                            tobe="/interact/ainovel",
+                        ),
+                    ],
+                ),
+            ]
 
         # 获得badge
         @rx.var
@@ -225,7 +305,7 @@ def create_agent_page(title: str, agent_name: str) -> rx.Component:
             if messages_len > _MAX_MESSAGE_LENGTH:
                 self.chat_instance[self.current_chat].pop(0)
 
-            return messages
+            return {"type": "override", "value": messages}
 
     def chat_page_main():
         return rx.vstack(
@@ -271,7 +351,13 @@ def create_agent_page(title: str, agent_name: str) -> rx.Component:
         )
 
     def page() -> rx.Component:
-        return basic_page(AgentState.get_badge, chat_page_main())
+        return basic_page(
+            AgentState.brand,
+            AgentState.logo,
+            AgentState.menu,
+            AgentState.get_badge,
+            chat_page_main(),
+        )
 
     return page()
 
