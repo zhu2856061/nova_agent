@@ -38,22 +38,43 @@ def message_content(text, color: ColorType) -> rx.Component:
         max_width="80%",
         # 超长文本自动换行（针对无空格的长字符串）
         word_break="break-word",
+        font_size="0.94rem",
+        font_family="system-ui, -apple-system, sans-serif",
+        letter_spacing="0.01em",
         # 优化代码块样式
         style={
+            # === 代码块样式优化 ===
             "pre": {
                 "overflow-x": "auto",
-                "white-space": "pre",
+                "white-space": "pre-wrap",  # 允许长行换行，更友好
                 "width": "100%",
-                "background-color": rx.color("gray", 2),  # 代码块独立背景
-                "padding": "0.75rem",  # 代码块内边距
-                "border-radius": "8px",  # 代码块圆角
-                "font-size": "0.9rem",  # 代码字体大小
+                "background-color": rx.color("gray", 2),
+                "padding": "0.85rem",
+                "border-radius": "10px",
+                "font-size": "0.86rem",  # 代码块字体略小（清晰但不抢戏）
+                "line-height": "1.45",
+                "margin": "0.75rem 0",
             },
-            # 优化链接样式
+            "code": {
+                "font-size": "0.86rem",  # 内联代码也同步缩小
+                "background-color": rx.color("gray", 3),
+                "padding": "0.15em 0.35em",
+                "border-radius": "4px",
+            },
+            # === 链接样式 ===
             "a": {
                 "color": rx.color(color, 10),
                 "text-decoration": "underline",
                 "text-underline-offset": "2px",
+                "font-weight": "500",
+            },
+            # === 段落与标题微调（可选更清晰层次）===
+            "p": {
+                "margin": "0.4em 0",
+            },
+            "h1, h2, h3, h4, h5, h6": {
+                "margin": "0.6em 0 0.4em 0",
+                "font-weight": "600",
             },
         },
     )

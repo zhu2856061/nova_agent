@@ -27,6 +27,16 @@ AGENT_BACKEND_URL = {
     "human_in_loop": "http://0.0.0.0:2021/agent/human_in_loop",
 }
 
+# INTERACT_BACKEND_URL = {
+#     "ainovel_extract_setting": "http://0.0.0.0:2021/agent/ainovel_extract_setting",
+#     "ainovel_core_seed": "http://0.0.0.0:2021/agent/ainovel_core_seed",
+#     "ainovel_world_building": "http://0.0.0.0:2021/agent/ainovel_world_building",
+#     "ainovel_character_dynamics": "http://0.0.0.0:2021/agent/ainovel_character_dynamics",
+#     "ainovel_plot_arch": "http://0.0.0.0:2021/agent/ainovel_plot_arch",
+#     "ainovel_chapter_blueprint": "http://0.0.0.0:2021/agent/ainovel_chapter_blueprint",
+#     "ainovel_chapter": "http://0.0.0.0:2021/agent/ainovel_chapter",
+# }
+
 
 async def get_nova_agent_api(url_name: str, trace_id: str, state: dict, context: dict):
     """

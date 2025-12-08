@@ -5,6 +5,7 @@
 import reflex as rx
 
 from app.pages.agent_page import page_set
+from app.pages.interact_page import interact_page
 
 
 def redirect_component():
@@ -34,7 +35,7 @@ def redirect_component():
             height="100vh",
             background_color=rx.color("mauve", 3),
         ),
-        on_mount=lambda: rx.redirect("/chat/llm"),
+        on_mount=lambda: rx.redirect("/agent/llm"),
     )
 
 
@@ -48,18 +49,19 @@ app.add_page(
     image="novaait.png",
 )
 
+# agent
 for item, value in page_set.items():
-    if item == "llm":
-        app.add_page(
-            component=value,
-            title="Nova LLM",
-            route=f"/chat/{item}",
-            image="novaait.png",
-        )
-    else:
-        app.add_page(
-            component=value,
-            title="Nova Agent",
-            route=f"/agent/{item}",
-            image="novaait.png",
-        )
+    app.add_page(
+        component=value,
+        title="Nova Agent",
+        route=f"/agent/{item}",
+        image="novaait.png",
+    )
+
+# interact
+app.add_page(
+    component=interact_page,
+    title="Nova Interact",
+    route="/interact/ainovel",
+    image="novaait.png",
+)

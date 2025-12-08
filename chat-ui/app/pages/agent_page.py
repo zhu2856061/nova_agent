@@ -12,27 +12,29 @@ import reflex as rx
 
 from app.api.nova_agent_api import AGENT_BACKEND_URL, get_nova_agent_api
 from app.components.chat.dialogue_bar import Message, dialoguebar
-from app.components.chat.input_bar import Parameters, inputbar
+from app.components.chat.input_bar import chat_input_bar
 from app.components.common.baisc_components import basic_page
+from app.components.common.context_settings import Parameters
 from app.components.common.sidebar_components import SideMenu
+from app.globel_var import MENUS, PARAMS_FIELDS
 
 
-def create_agent_page(title: str, agent_name: str) -> rx.Component:
+def create_agent_page(title_name: str, agent_name: str) -> rx.Component:
     """
     工厂函数：为每个不同的 Agent 创建完全独立的页面 + 状态
     """
-    _SELECTED_MODELS = ["basic", "reasoning", "basic_no_thinking", "deepseek", "gemini"]
+
     _MAX_MESSAGE_LENGTH = 50_000
 
-    _TITLE = title
     _AGENT_NAME = agent_name
 
-    _DEFAULT_INTRO = f"""Hi! I'm **{_TITLE}**, a helpful assistant."""
+    _DEFAULT_INTRO = f"""Hi! I'm **{title_name}**, a helpful assistant."""
 
-    class AgentState(rx.State):
+    class State(rx.State):
         """聊天页面状态"""
 
         brand = "NovaAI"
+        title = title_name
         logo = "../novaai.png"
 
         default_chat_name = "Nova"
@@ -41,114 +43,31 @@ def create_agent_page(title: str, agent_name: str) -> rx.Component:
 
         params_fields: list[Parameters] = []
         chat_instance: dict[str, list[Message]] = {}
-        menu: list[SideMenu] = []
+        menus: list[SideMenu] = []
 
         _is_human_in_loop = False
 
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
             # 初始状态
-            self.params_fields: list[Parameters] = [
-                Parameters(
-                    mkey="model",
-                    mtype="select",
-                    mvalue="basic",
-                    mvaluetype="str",
-                    mselected=_SELECTED_MODELS,
-                ),
-                Parameters(
-                    mkey="config",
-                    mtype="text_area",
-                    mvalue=json.dumps({"user_id": "merlin"}),
-                    mvaluetype="dict",
-                    mselected=None,
-                ),
-            ]
+            self.menus = MENUS
+            self.params_fields: list[Parameters] = PARAMS_FIELDS
+
             self.chat_instance = {
                 self.default_chat_name: [
                     Message(role="assistant", content=_DEFAULT_INTRO)
                 ]
             }
-            self.menu = [
-                SideMenu(
-                    title="Chat",
-                    icon="message-circle-more",
-                    children=[
-                        SideMenu(
-                            title="llm",
-                            icon="message-circle-more",
-                            tobe="/chat/llm",
-                        ),
-                    ],
-                ),
-                SideMenu(
-                    title="Agent",
-                    icon="bot-message-square",
-                    children=[
-                        SideMenu(
-                            title="memorizer",
-                            icon="bot-message-square",
-                            tobe="/agent/memorizer",
-                        ),
-                        SideMenu(
-                            title="themeslicer",
-                            icon="bot-message-square",
-                            tobe="/agent/themeslicer",
-                        ),
-                        SideMenu(
-                            title="web_searcher",
-                            icon="bot-message-square",
-                            tobe="/agent/researcher",
-                        ),
-                        SideMenu(
-                            title="wechat_searcher",
-                            icon="bot-message-square",
-                            tobe="/agent/wechat_researcher",
-                        ),
-                        SideMenu(
-                            title="deepresearcher",
-                            icon="clipboard-list",
-                            tobe="/agent/deepresearcher",
-                        ),
-                        SideMenu(
-                            title="ainovel",
-                            icon="clipboard-list",
-                            tobe="/agent/ainovel",
-                        ),
-                        SideMenu(
-                            title="ainovel_architect",
-                            icon="bot-message-square",
-                            tobe="/agent/ainovel_architect",
-                        ),
-                        SideMenu(
-                            title="ainovel_chapter",
-                            icon="bot-message-square",
-                            tobe="/agent/ainovel_chapter",
-                        ),
-                    ],
-                ),
-                SideMenu(
-                    title="Interact",
-                    icon="layout-dashboard",
-                    children=[
-                        SideMenu(
-                            title="ainovel",
-                            icon="layout-dashboard",
-                            tobe="/interact/ainovel",
-                        ),
-                    ],
-                ),
-            ]
 
         # 获得badge
         @rx.var
         def get_badge(self) -> str:
             """获得badge"""
-            return _TITLE + " - " + self.current_chat
+            return self.title + " - " + self.current_chat
 
         # 创建会话窗口的提交事件
         @rx.event
-        def submit_create_chat_instance(self, form_data: dict[str, Any]):
+        def create_chat_instance(self, form_data: dict[str, Any]):
             new_chat_name = form_data["new_chat_name"]
             self.current_chat = new_chat_name
             self.chat_instance[new_chat_name] = [
@@ -312,12 +231,12 @@ def create_agent_page(title: str, agent_name: str) -> rx.Component:
             # ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←
             # 这一行是触发同步的“钩子”
             # rx.box(
-            #     on_mount=AgentState.init_state,  # 页面加载时执行一次
+            #     on_mount=State.init_state,  # 页面加载时执行一次
             #     display="none",  # 完全隐藏，不影响布局
             # ),
             # ↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑↑
             rx.box(
-                dialoguebar(AgentState.get_chat_instance),
+                dialoguebar(State.get_chat_instance),
                 flex="1",  # 自动填充剩余高度
                 overflow_y="auto",  # 消息过多时局部滚动
                 overflow_x="hidden",
@@ -325,16 +244,11 @@ def create_agent_page(title: str, agent_name: str) -> rx.Component:
                 width="100%",  # 对话栏占满宽度，保证内容左对齐/自适应
             ),
             rx.box(
-                inputbar(
-                    _TITLE,
-                    AgentState.submit_create_chat_instance,
-                    AgentState.get_chat_names,
-                    AgentState.set_chat_name,
-                    AgentState.del_chat_instance,
-                    AgentState.submit_input_bar_question,
-                    AgentState.params_fields,
-                    AgentState.submit_input_bar_settings,
-                    AgentState.is_processing,
+                chat_input_bar(
+                    State.submit_input_bar_question,
+                    State.params_fields,
+                    State.submit_input_bar_settings,
+                    State.is_processing,
                 ),
                 # 关键：限制inputbar的宽度，否则100%宽度无法体现居中
                 width="80%",  # 可根据需求调整为固定值（如600px）或百分比
@@ -352,10 +266,15 @@ def create_agent_page(title: str, agent_name: str) -> rx.Component:
 
     def page() -> rx.Component:
         return basic_page(
-            AgentState.brand,
-            AgentState.logo,
-            AgentState.menu,
-            AgentState.get_badge,
+            State.brand,
+            State.title,
+            State.create_chat_instance,
+            State.get_chat_names,
+            State.set_chat_name,
+            State.del_chat_instance,
+            State.logo,
+            State.menus,
+            State.get_badge,
             chat_page_main(),
         )
 

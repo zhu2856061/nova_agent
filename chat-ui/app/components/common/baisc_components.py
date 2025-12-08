@@ -2,7 +2,7 @@
 # @Time   : 2025/08/01 10:24
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
-from typing import List, Union
+from typing import Callable, List, Union
 
 import reflex as rx
 from app.components.common.head_components import headbar
@@ -12,6 +12,11 @@ from app.components.common.tailbar_components import footer
 
 def basic_page(
     brand: Union[rx.Var[str], str],
+    title: Union[rx.Var[str], str],
+    create_workspace,
+    workspace_names,
+    set_workspace,
+    del_workspace,
     logo: Union[rx.Var[str], str],
     menu: List[SideMenu],
     badge: Union[rx.Var[str], str],
@@ -20,7 +25,14 @@ def basic_page(
     return rx.hstack(
         sidebar(brand, logo, menu),
         rx.vstack(
-            headbar(badge),
+            headbar(
+                badge,
+                title,
+                create_workspace,
+                workspace_names,
+                set_workspace,
+                del_workspace,
+            ),
             # # ←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←←
             # # 这一行是触发同步的“钩子”，必须加！
             # rx.box(
@@ -33,7 +45,7 @@ def basic_page(
                 flex="1",  # 自动填充剩余高度
                 overflow_y="auto",  # 消息过多时局部滚动
                 overflow_x="hidden",
-                padding_bottom="10px",  # 为tailbar预留80px空间（根据tailbar高度调整）
+                # padding_bottom="10px",  # 为tailbar预留80px空间（根据tailbar高度调整）
             ),
             # 底部固定区：包含操作栏和页脚，避免粘性定位冲突
             footer(),

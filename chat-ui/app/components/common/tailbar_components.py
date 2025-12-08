@@ -28,7 +28,7 @@ def footer() -> rx.Component:
         backdrop_filter="auto",
         backdrop_blur="lg",
         border_top=f"1px solid {rx.color('mauve', 3)}",
-        background_color=rx.color("mauve", 2),
+        background_color=rx.color("mauve", 3),
         align="stretch",
         width="100%",
     )

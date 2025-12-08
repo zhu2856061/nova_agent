@@ -62,3 +62,32 @@ def tab_content(tab: TabMenu, component) -> rx.Component:
         width="100%",
         height="100%",
     )
+
+
+# # 6. 工作区主组件（核心逻辑）--------------------------
+def tab_main(state, component) -> rx.Component:
+    """小说工作区（优化后的垂直标签页组件）"""
+    # 1. 定义标签列表（可动态从state读取，此处示例静态配置）
+    return rx.tabs.root(
+        # 标签列表（垂直布局）
+        rx.tabs.list(
+            rx.foreach(state._tabs, tab_trigger),
+            width="12em",
+            height="100%",
+            background_color=rx.color("mauve", 2),  # 标签列表背景色
+            border_radius="5px",
+            padding="0.5em",
+            gap="1.5em",
+            flex_direction="column",  # 垂直排列
+        ),
+        # 标签内容区
+        rx.foreach(state._tabs, lambda _: tab_content(_, component)),
+        on_change=state.change_tab_value,
+        # 标签页核心配置
+        default_value=state.current_tab,  # 默认选中第一个标签
+        orientation="vertical",  # 垂直布局
+        width="100%",
+        height="100%",
+        display="flex",
+        gap="0.5em",
+    )

@@ -17,80 +17,6 @@ class SideMenu(rx.Model):
 
 
 class SideState(rx.State):
-    brand = "NovaAI"
-    logo = "../novaai.png"
-
-    menu: List[SideMenu] = [
-        SideMenu(
-            title="Chat",
-            icon="message-circle-more",
-            children=[
-                SideMenu(
-                    title="llm",
-                    icon="message-circle-more",
-                    tobe="/chat/llm",
-                ),
-            ],
-        ),
-        SideMenu(
-            title="Agent",
-            icon="bot-message-square",
-            children=[
-                SideMenu(
-                    title="memorizer",
-                    icon="bot-message-square",
-                    tobe="/agent/memorizer",
-                ),
-                SideMenu(
-                    title="themeslicer",
-                    icon="bot-message-square",
-                    tobe="/agent/themeslicer",
-                ),
-                SideMenu(
-                    title="web_searcher",
-                    icon="bot-message-square",
-                    tobe="/agent/researcher",
-                ),
-                SideMenu(
-                    title="wechat_searcher",
-                    icon="bot-message-square",
-                    tobe="/agent/wechat_researcher",
-                ),
-                SideMenu(
-                    title="deepresearcher",
-                    icon="clipboard-list",
-                    tobe="/task/deepresearcher",
-                ),
-                SideMenu(
-                    title="ainovel",
-                    icon="clipboard-list",
-                    tobe="/task/ainovel",
-                ),
-                SideMenu(
-                    title="ainovel_architect",
-                    icon="bot-message-square",
-                    tobe="/agent/ainovel_architect",
-                ),
-                SideMenu(
-                    title="ainovel_chapter",
-                    icon="bot-message-square",
-                    tobe="/agent/ainovel_chapter",
-                ),
-            ],
-        ),
-        SideMenu(
-            title="Interact",
-            icon="layout-dashboard",
-            children=[
-                SideMenu(
-                    title="ainovel",
-                    icon="layout-dashboard",
-                    tobe="/interact/ainovel",
-                ),
-            ],
-        ),
-    ]
-
     visible: bool = True  # 侧边栏是否展开
 
     @rx.event
@@ -103,7 +29,7 @@ def accordion_item(item: SideMenu) -> rx.Component:
     return rx.accordion.item(
         header=rx.hstack(
             rx.box(
-                rx.icon(item.icon, size=24, color=rx.color("mauve", 8)),
+                rx.icon(item.icon, size=20, color=rx.color("mauve", 8)),
                 width="2rem",  # 图标容器固定尺寸（适配16px图标，留足边距）
                 height="2rem",
                 display="flex",
@@ -113,7 +39,7 @@ def accordion_item(item: SideMenu) -> rx.Component:
             # 文本在收起时隐藏，添加过渡动画
             rx.text(
                 item.title,
-                font_size="1.2em",
+                font_size="1.0em",
                 color=rx.color("mauve", 12),
             ),
             width="100%",
@@ -163,10 +89,10 @@ def sidebar(
                 name=brand,
                 src=logo,
                 border_radius="8px",
-                size="3",  # 收起时Logo尺寸
+                size="2",  # 收起时Logo尺寸
                 # 绝对定位固定在顶部
                 position="absolute",
-                top="1em",  # 距离顶部1em
+                top="0.3em",  # 距离顶部1em
                 left="50%",  # 水平居中
                 transform="translateX(-50%)",
                 z_index="11",  # 确保Logo在最上层
@@ -180,15 +106,20 @@ def sidebar(
                     rx.avatar(
                         name=brand,
                         src=logo,
-                        border_radius="8px",
-                        size="3",
+                        size="2",  # 从 "3" 改为 "2"，更小巧
+                        border_radius="6px",  # 轻微圆角，更现代
                     ),
-                    rx.text(brand, size="6", weight="bold"),
+                    rx.text(
+                        brand,
+                        size="5",  # 从 "6" 改为 "5"，字体更协调
+                        weight="bold",
+                        color=rx.color("mauve", 12),  # 深色，更清晰不刺眼
+                    ),
+                    spacing="3",  # 头像和文字间距，刚刚好
                     justify_content="center",
-                    align_items="center",
-                    margin_top="0.5em",
-                    margin_bottom="0.5em",
+                    align="center",
                     width="100%",
+                    padding_y="0.3rem",  # 上下留白更小（原 margin 0.5em → 0.4rem）
                 ),
                 # 菜单区域
                 rx.scroll_area(
@@ -206,9 +137,24 @@ def sidebar(
                     flex_grow="1",
                     max_height="calc(100vh - 4em)",  # 限制最大高度（视口高度 - 顶部/底部预留空间）
                     style={
-                        "overflow-y": "auto",
-                        "overflow-x": "hidden",
-                        # "padding_right": "0.5em",  # 为滚动条预留空间
+                        # Firefox
+                        "scrollbar-width": "thin",
+                        "scrollbar-color": f"{rx.color('mauve', 7)} transparent",
+                        # WebKit (Chrome, Safari, Edge)
+                        "&::-webkit-scrollbar": {
+                            "width": "6px",
+                        },
+                        "&::-webkit-scrollbar-track": {
+                            "background": "transparent",
+                            "border-radius": "3px",
+                        },
+                        "&::-webkit-scrollbar-thumb": {
+                            "background": rx.color("mauve", 7),
+                            "border-radius": "3px",
+                        },
+                        "&::-webkit-scrollbar-thumb:hover": {
+                            "background": rx.color("mauve", 9),
+                        },
                     },
                 ),
                 # 外层容器样式：禁止自身滚动
@@ -247,7 +193,7 @@ def sidebar(
             overflow="hidden",  # 关键：外层侧边栏不滚动，仅内部scroll_area滚动
         ),
         # 动态宽度：展开16em，收起4rem（容纳Logo+箭头）
-        width=rx.cond(SideState.visible, "14em", "4rem"),
+        width=rx.cond(SideState.visible, "13em", "3rem"),
         height="100vh",  # 占满视口高度
         position="sticky",
         top="0",
@@ -256,5 +202,5 @@ def sidebar(
         overflow="hidden",
         z_index="10",
         box_shadow="0 0 10px rgba(0,0,0,0.05)",
-        border_radius="0 8px 8px 0",
+        # border_radius="0 8px 8px 0",
     )
