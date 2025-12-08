@@ -166,16 +166,23 @@ def dialoguebar(messages) -> rx.Component:
         border_radius="8px",  # 聊天区整体圆角
         # 优化滚动条样式（可选，提升桌面端体验）
         style={
-            "::-webkit-scrollbar": {
+            # Firefox
+            "scrollbar-width": "thin",
+            "scrollbar-color": f"{rx.color('mauve', 7)} transparent",
+            # WebKit (Chrome, Safari, Edge)
+            "&::-webkit-scrollbar": {
                 "width": "6px",
-                "height": "6px",
             },
-            "::-webkit-scrollbar-thumb": {
-                "background-color": rx.color("gray", 3),
+            "&::-webkit-scrollbar-track": {
+                "background": "transparent",
                 "border-radius": "3px",
             },
-            "::-webkit-scrollbar-track": {
-                "background-color": rx.color("gray", 1),
+            "&::-webkit-scrollbar-thumb": {
+                "background": rx.color("mauve", 7),
+                "border-radius": "3px",
+            },
+            "&::-webkit-scrollbar-thumb:hover": {
+                "background": rx.color("mauve", 9),
             },
         },
     )

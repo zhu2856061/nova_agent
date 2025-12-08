@@ -25,6 +25,7 @@ from nova.agent.ainovel_architect import (
     world_building_agent,
 )
 from nova.agent.ainovel_chapter import ainovel_chapter_agent
+from nova.agent.chat import chat_agent
 from nova.agent.deepresearcher import deepresearcher
 from nova.agent.memorizer import memorizer_agent
 from nova.agent.researcher import researcher_agent, wechat_researcher_agent
@@ -44,6 +45,7 @@ agent_router = APIRouter(
 
 # Central agent registry - maintains all agent mappings
 AGENT_REGISTRY = {
+    "chat": chat_agent,
     "memorizer": memorizer_agent,
     "themeslicer": theme_slicer_agent,
     "researcher": researcher_agent,
@@ -107,7 +109,7 @@ async def stream_agent_events(
                             ).model_dump_json()
                         except Exception:
                             res = AgentResponse(
-                                code=0,
+                                code=1,
                                 err_message="data is not json serializable",
                             ).model_dump_json()
 
@@ -118,7 +120,7 @@ async def stream_agent_events(
                         res = AgentResponse(code=0, data=response).model_dump_json()
                     except Exception:
                         res = AgentResponse(
-                            code=0, err_message="data is not json serializable"
+                            code=1, err_message="data is not json serializable"
                         ).model_dump_json()
 
                     yield res
@@ -189,7 +191,7 @@ async def human_in_loop(request: AgentRequest):
                                     ).model_dump_json()
                                 except Exception:
                                     res = AgentResponse(
-                                        code=0,
+                                        code=1,
                                         err_message="data is not json serializable",
                                         data=convert_langchain_objects_to_dict(
                                             response
@@ -205,7 +207,7 @@ async def human_in_loop(request: AgentRequest):
                                 ).model_dump_json()
                             except Exception:
                                 res = AgentResponse(
-                                    code=0,
+                                    code=1,
                                     err_message="data is not json serializable",
                                 ).model_dump_json()
 

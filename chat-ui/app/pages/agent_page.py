@@ -211,6 +211,12 @@ def create_agent_page(title_name: str, agent_name: str) -> rx.Component:
                         self.chat_instance[self.current_chat][-1].content += value[
                             "content"
                         ]
+                    if value["type"] == "error":
+                        self.chat_instance[self.current_chat][
+                            -1
+                        ].content += (
+                            f"<span style='color:red'>{value['content']}</span>"
+                        )
                     yield
             self.is_processing = False
 

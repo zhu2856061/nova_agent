@@ -9,7 +9,7 @@ from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
 from nova.llms import get_llm_by_type
-from nova.model.chat import ChatRequest, ChatResponse
+from nova.model.agent import AgentRequest, AgentResponse
 
 logger = logging.getLogger(__name__)
 
@@ -23,14 +23,14 @@ chat_router = APIRouter(
 
 
 async def _stream_responses(
-    model, messages: List[Dict], config: Dict, model_kwargs: Dict
+    model, messages: List, config: Dict, model_kwargs: Dict
 ) -> AsyncGenerator[str, None]:
     """抽取流式响应处理逻辑，消除代码冗余"""
     try:
         async for response in model.astream(messages, config=config, **model_kwargs):
             if response.content:
                 yield (
-                    ChatResponse(
+                    AgentResponse(
                         code=0,
                         data={
                             "event": "llm_stream",
@@ -41,7 +41,7 @@ async def _stream_responses(
                 )
             if response.additional_kwargs:
                 yield (
-                    ChatResponse(
+                    AgentResponse(
                         code=0,
                         data={
                             "event": "llm_stream",
@@ -54,7 +54,7 @@ async def _stream_responses(
         logger.error(f"Streaming error: {e}", exc_info=True)
         # 生成错误响应供客户端捕获
         yield (
-            ChatResponse(
+            AgentResponse(
                 code=1, data={"error": f"Streaming failed: {str(e)}"}
             ).model_dump_json()
             + "\n"
@@ -63,7 +63,7 @@ async def _stream_responses(
 
 
 @chat_router.post("/llm")
-async def llm_server(request: ChatRequest):
+async def llm_server(request: AgentRequest):
     """LLM 服务接口，支持流式和非流式响应"""
     if not request:
         raise HTTPException(status_code=400, detail="Input cannot be empty")
@@ -89,15 +89,15 @@ async def llm_server(request: ChatRequest):
         # 非流式处理
         if not stream:
             response = await model.ainvoke(
-                state.messages,
+                state.messages.value,
                 config=config,  # type: ignore
                 **model_kwargs,
             )
-            return ChatResponse(code=0, data={"content": response.content})
+            return AgentResponse(code=0, data={"content": response.content})
 
         # 流式处理
         return StreamingResponse(
-            _stream_responses(model, state.messages, config, model_kwargs),
+            _stream_responses(model, state.messages.value, config, model_kwargs),
             media_type="application/json",
         )
 
