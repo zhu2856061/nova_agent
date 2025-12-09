@@ -66,10 +66,15 @@ async def extract_setting(state: State, runtime: Runtime[Context]):
         _user_guidance = state.user_guidance
         _messages = state.messages.value
 
-        _work_dir = os.path.join(_task_dir, _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
         prompt_dir = _config.get("prompt_dir")
+        result_dir = _config.get("result_dir")
         _human_in_loop_value = _user_guidance.get("human_in_loop_value", "")
+
+        if result_dir:
+            _work_dir = result_dir
+        else:
+            _work_dir = os.path.join(_task_dir, _thread_id)
+        os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
         def _assemble_prompt():
@@ -130,10 +135,15 @@ async def core_seed(state: State, runtime: Runtime[Context]):
         _user_guidance = state.user_guidance
         _config = runtime.context.config
 
-        _work_dir = os.path.join(_task_dir, _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
         prompt_dir = _config.get("prompt_dir")
+        result_dir = _config.get("result_dir")
         _human_in_loop_value = _user_guidance.get("human_in_loop_value", "")
+
+        if result_dir:
+            _work_dir = result_dir
+        else:
+            _work_dir = os.path.join(_task_dir, _thread_id)
+        os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
         async def _assemble_prompt():
@@ -195,10 +205,15 @@ async def world_building(state: State, runtime: Runtime[Context]):
         _user_guidance = state.user_guidance
         _config = runtime.context.config
 
-        _work_dir = os.path.join(_task_dir, _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
         prompt_dir = _config.get("prompt_dir")
+        result_dir = _config.get("result_dir")
         _human_in_loop_value = _user_guidance.get("human_in_loop_value", "")
+
+        if result_dir:
+            _work_dir = result_dir
+        else:
+            _work_dir = os.path.join(_task_dir, _thread_id)
+        os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
         async def _assemble_prompt():
@@ -271,10 +286,15 @@ async def character_dynamics(state: State, runtime: Runtime[Context]):
         _user_guidance = state.user_guidance
         _config = runtime.context.config
 
-        _work_dir = os.path.join(_task_dir, _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
         prompt_dir = _config.get("prompt_dir")
+        result_dir = _config.get("result_dir")
         _human_in_loop_value = _user_guidance.get("human_in_loop_value", "")
+
+        if result_dir:
+            _work_dir = result_dir
+        else:
+            _work_dir = os.path.join(_task_dir, _thread_id)
+        os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
         async def _assemble_prompt():
@@ -355,10 +375,15 @@ async def plot_arch(state: State, runtime: Runtime[Context]):
         _user_guidance = state.user_guidance
         _config = runtime.context.config
 
-        _work_dir = os.path.join(_task_dir, _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
         prompt_dir = _config.get("prompt_dir")
+        result_dir = _config.get("result_dir")
         _human_in_loop_value = _user_guidance.get("human_in_loop_value", "")
+
+        if result_dir:
+            _work_dir = result_dir
+        else:
+            _work_dir = os.path.join(_task_dir, _thread_id)
+        os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
         async def _assemble_prompt():
@@ -449,11 +474,15 @@ async def chapter_blueprint(state: State, runtime: Runtime[Context]):
         _user_guidance = state.user_guidance
         _config = runtime.context.config
 
-        _work_dir = os.path.join(_task_dir, _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
+        prompt_dir = _config.get("prompt_dir")
+        result_dir = _config.get("result_dir")
+        _human_in_loop_value = _user_guidance.get("human_in_loop_value", "")
 
-        prompt_dir = _user_guidance.get("prompt_dir")
-        _human_in_loop_value = _config.get("human_in_loop_value", "")
+        if result_dir:
+            _work_dir = result_dir
+        else:
+            _work_dir = os.path.join(_task_dir, _thread_id)
+        os.makedirs(_work_dir, exist_ok=True)
 
         _number_of_chapters = await read_file_tool.arun(
             {
@@ -573,8 +602,14 @@ async def build_architecture(state: State, runtime: Runtime[Context]):
         # 变量
         _thread_id = runtime.context.thread_id
         _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
+        _config = runtime.context.config
 
-        _work_dir = os.path.join(_task_dir, _thread_id)
+        result_dir = _config.get("result_dir")
+
+        if result_dir:
+            _work_dir = result_dir
+        else:
+            _work_dir = os.path.join(_task_dir, _thread_id)
         os.makedirs(_work_dir, exist_ok=True)
 
         # 抽取设置结果
@@ -590,7 +625,7 @@ async def build_architecture(state: State, runtime: Runtime[Context]):
         await write_file_tool.arun(
             {
                 "file_path": f"{_work_dir}/novel_extract_setting.md",
-                "text": _extract_setting_result,
+                "text": json.dumps(_extract_setting_result, ensure_ascii=False),
             }
         )
 

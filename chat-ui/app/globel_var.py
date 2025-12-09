@@ -100,7 +100,7 @@ PARAMS_FIELDS = [
 ]
 
 DEFAULT_CHAT = "Nova"
-TASK_DIR = "../merlin"
+INSTERACT_TASK_DIR = "../merlin/insteract"
 PROMPT_DIR = "../prompts"
 
 
@@ -118,15 +118,15 @@ AINOVEL_TABMENU = [
         component="editor",
     ),
     TabMenu(
-        value="character_dynamics",
-        label="角色设定",
-        icon="bike",  # 图标（Reflex内置图标名）
-        component="editor",
-    ),
-    TabMenu(
         value="world_building",
         label="世界观构建",
         icon="earth",  # 图标（Reflex内置图标名）
+        component="editor",
+    ),
+    TabMenu(
+        value="character_dynamics",
+        label="角色设定",
+        icon="bike",  # 图标（Reflex内置图标名）
         component="editor",
     ),
     TabMenu(
@@ -142,14 +142,20 @@ AINOVEL_TABMENU = [
         component="editor",
     ),
     TabMenu(
-        value="architecture",
+        value="build_architecture",
         label="汇总骨架",
         icon="calendar-plus",  # 图标（Reflex内置图标名）
         component="editor",
     ),
     TabMenu(
-        value="chapter_draft",
-        label="章节内容",
+        value="first_chapter",
+        label="第一章节内容",
+        icon="clipboard-pen-line",  # 图标（Reflex内置图标名）
+        component="editor",
+    ),
+    TabMenu(
+        value="next_chapter",
+        label="下一章节内容",
         icon="clipboard-pen-line",  # 图标（Reflex内置图标名）
         component="editor",
     ),

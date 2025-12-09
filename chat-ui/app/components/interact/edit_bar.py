@@ -13,45 +13,6 @@ from app.components.interact.prompt_settings import (
     prompt_settings_modal,
 )
 
-# class EditState(rx.State):
-#     is_saving = False
-#     current_tab = "extract_setting"
-#     _workspace = {}
-
-
-#     # 获得当前会话内容 input_content
-#     @rx.var
-#     async def get_workspace_input_content(self) -> str:
-#         return self._workspace[self.current_tab]["input_content"]
-
-#     # 获得当前会话内容 output_content
-#     @rx.var
-#     async def get_workspace_output_content(self) -> str:
-#         return self._workspace[self.current_tab]["output_content"]
-
-#     # 获得当前会话内容 final_content
-#     @rx.var
-#     async def get_workspace_final_content(self) -> str:
-#         return self._workspace[self.current_tab]["final_content"]
-
-#     # 设置 final_content
-#     @rx.event
-#     async def set_workspace_final_content(self, val):
-#         self._workspace[self.current_tab]["final_content"] = val
-
-#     # 展示 input_content 和 output_content 和 final_content 会话内容
-#     @rx.event
-#     async def show_workspace_all_content(self):
-#         pass
-
-#     # 保存 input_content 和 output_content 和 final_content 会话内容
-#     @rx.event
-#     async def save_workspace_all_content(self):
-#         pass
-
-#     async def submit_create_workspace(self):
-#         pass
-
 
 def editor_prompt_bar(
     label,
@@ -108,6 +69,8 @@ def editor_prompt_bar(
 
 
 def editor_input_bar(
+    input_text,
+    set_input_text: Callable,
     submit_input_bar_question: Callable,
     params_fields: list[Parameters],
     submit_input_bar_settings: Callable,
@@ -119,6 +82,8 @@ def editor_input_bar(
             rx.vstack(
                 rx.text_area(
                     placeholder="发消息...",
+                    value=input_text,  # 绑定 State
+                    on_change=set_input_text,  # 更新 State
                     id="question",
                     flex="1",
                     width="100%",
@@ -221,26 +186,29 @@ def editor_show_bar(
                 border=f"1px solid {rx.color('mauve', 4)}",
                 padding="1em",
                 font_size="1.05em",
-                resize="vertical",
             ),
-            threshold=80,  # 如果用户在 100px 内底部，自动滚动
-            padding="0",  # 避免额外内边距
             width="100%",
             height="100%",
             # 优化滚动条样式（可选，提升桌面端体验）
             style={
-                "::-webkit-scrollbar": {
+                # Firefox
+                "scrollbar-width": "thin",
+                "scrollbar-color": f"{rx.color('mauve', 7)} transparent",
+                # WebKit (Chrome, Safari, Edge)
+                "&::-webkit-scrollbar": {
                     "width": "6px",
-                    "height": "6px",
                 },
-                "::-webkit-scrollbar-thumb": {
-                    "background-color": rx.color("gray", 3),
+                "&::-webkit-scrollbar-track": {
+                    "background": "transparent",
                     "border-radius": "3px",
                 },
-                "::-webkit-scrollbar-track": {
-                    "background-color": rx.color("gray", 1),
+                "&::-webkit-scrollbar-thumb": {
+                    "background": rx.color("mauve", 7),
+                    "border-radius": "3px",
                 },
-                "min_height": "300px",
+                "&::-webkit-scrollbar-thumb:hover": {
+                    "background": rx.color("mauve", 9),
+                },
             },
         ),
         rx.vstack(
@@ -254,7 +222,6 @@ def editor_show_bar(
                 border=f"1px solid {rx.color('mauve', 4)}",
                 padding="1em",
                 font_size="1.05em",
-                resize="vertical",
                 id="answer",
                 style={
                     "overflow-y": "auto",  # 垂直溢出时显示滚动条

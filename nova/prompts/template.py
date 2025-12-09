@@ -10,9 +10,10 @@ def apply_prompt_template(template, state={}) -> str:
 
 def get_prompt(task, current_tab, dir=None):
     if not dir:
-        _PROMPT_DIR = CONF["SYSTEM"]["prompt_template_dir"]
+        _prompt_dir = CONF["SYSTEM"]["prompt_template_dir"]
+        _prompt_dir = f"{_prompt_dir}/{task}"
     else:
-        _PROMPT_DIR = dir
-    with open(f"{_PROMPT_DIR}/{task}/{current_tab}.md") as f:
+        _prompt_dir = f"{dir}"
+    with open(f"{_prompt_dir}/{current_tab}.md") as f:
         prompt_content = f.read()
     return prompt_content

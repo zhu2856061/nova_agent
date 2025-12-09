@@ -175,9 +175,9 @@ def get_last_n_chapters_text(work_dir: str, current_chapter_num: int, n: int = 3
     texts = []
     start_chap = max(1, current_chapter_num - n)
     for c in range(start_chap, current_chapter_num):
-        if os.path.exists(f"{work_dir}/chapter_{c}/第{c}章.md"):
+        if os.path.exists(f"{work_dir}/chapter/chapter_{c}/chapter_draft.md"):
             chap_text = read_file_tool.run(
-                {"file_path": f"{work_dir}/chapter_{c}/第{c}章.md"}
+                {"file_path": f"{work_dir}/chapter_{c}/chapter_draft.md"}
             )
             texts.append(chap_text)
         else:
@@ -196,10 +196,14 @@ async def global_summary(state: State, runtime: Runtime[Context]):
         _user_guidance = state.user_guidance
         _config = runtime.context.config
 
-        _work_dir = os.path.join(_task_dir, _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
-
         prompt_dir = _config.get("prompt_dir")
+        result_dir = _config.get("result_dir")
+
+        if result_dir:
+            _work_dir = result_dir
+        else:
+            _work_dir = os.path.join(_task_dir, _thread_id)
+        os.makedirs(_work_dir, exist_ok=True)
 
         # 获得当前章节
         _current_chapter_id = _user_guidance.get("current_chapter_id")
@@ -208,25 +212,25 @@ async def global_summary(state: State, runtime: Runtime[Context]):
                 _thread_id, _NODE_NAME, "current_chapter_id not found"
             )
             return {"code": 1, "err_message": _err_message}
-        os.makedirs(f"{_work_dir}/chapter_{_current_chapter_id}", exist_ok=True)
+        os.makedirs(f"{_work_dir}/chapter/chapter_{_current_chapter_id}", exist_ok=True)
 
         _previous_chapter_text = ""
         _previous_global_summary = ""
-        if os.path.exists(f"{_work_dir}/chapter_{_current_chapter_id - 1}"):
+        if os.path.exists(f"{_work_dir}/chapter/chapter_{_current_chapter_id - 1}"):
             if os.path.exists(
-                f"{_work_dir}/chapter_{_current_chapter_id - 1}/chapter_draft.md"
+                f"{_work_dir}/chapter/chapter_{_current_chapter_id - 1}/chapter_draft.md"
             ):
                 _previous_chapter_text = await read_file_tool.arun(
                     {
-                        "file_path": f"{_work_dir}/chapter_{_current_chapter_id - 1}/chapter_draft.md"
+                        "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id - 1}/chapter_draft.md"
                     }
                 )
             if os.path.exists(
-                f"{_work_dir}/chapter_{_current_chapter_id - 1}/{_NODE_NAME}.md"
+                f"{_work_dir}/chapter/chapter_{_current_chapter_id - 1}/{_NODE_NAME}.md"
             ):
                 _previous_global_summary = await read_file_tool.arun(
                     {
-                        "file_path": f"{_work_dir}/chapter_{_current_chapter_id - 1}/{_NODE_NAME}.md"
+                        "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id - 1}/{_NODE_NAME}.md"
                     }
                 )
 
@@ -263,7 +267,7 @@ async def global_summary(state: State, runtime: Runtime[Context]):
 
         await write_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/chapter_{_current_chapter_id}/{_NODE_NAME}.md",
+                "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/{_NODE_NAME}.md",
                 "text": json.dumps(_result, ensure_ascii=False),
             }
         )
@@ -289,10 +293,14 @@ async def create_character_state(state: State, runtime: Runtime[Context]):
         _user_guidance = state.user_guidance
         _config = runtime.context.config
 
-        _work_dir = os.path.join(_task_dir, _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
-
         prompt_dir = _config.get("prompt_dir")
+        result_dir = _config.get("result_dir")
+
+        if result_dir:
+            _work_dir = result_dir
+        else:
+            _work_dir = os.path.join(_task_dir, _thread_id)
+        os.makedirs(_work_dir, exist_ok=True)
 
         # 获得当前章节
         _current_chapter_id = _user_guidance.get("current_chapter_id")
@@ -305,7 +313,7 @@ async def create_character_state(state: State, runtime: Runtime[Context]):
                 "err_message": _err_message,
                 "messages": Messages(type="end"),
             }
-        os.makedirs(f"{_work_dir}/chapter_{_current_chapter_id}", exist_ok=True)
+        os.makedirs(f"{_work_dir}/chapter/chapter_{_current_chapter_id}", exist_ok=True)
 
         # 获得大纲
         if os.path.exists(f"{_work_dir}/novel_architecture.md"):
@@ -337,7 +345,7 @@ async def create_character_state(state: State, runtime: Runtime[Context]):
         _result = {"character_state": response.content}
         await write_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/chapter_{_current_chapter_id}/character_state.md",
+                "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/character_state.md",
                 "text": json.dumps(_result, ensure_ascii=False),
             }
         )
@@ -363,10 +371,14 @@ async def update_character_state(state: State, runtime: Runtime[Context]):
         _user_guidance = state.user_guidance
         _config = runtime.context.config
 
-        _work_dir = os.path.join(_task_dir, _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
-
         prompt_dir = _config.get("prompt_dir")
+        result_dir = _config.get("result_dir")
+
+        if result_dir:
+            _work_dir = result_dir
+        else:
+            _work_dir = os.path.join(_task_dir, _thread_id)
+        os.makedirs(_work_dir, exist_ok=True)
 
         # 获得当前章节
         _current_chapter_id = _user_guidance.get("current_chapter_id")
@@ -375,17 +387,17 @@ async def update_character_state(state: State, runtime: Runtime[Context]):
                 _thread_id, _NODE_NAME, "current_chapter_id not found"
             )
             return {"code": 1, "err_message": _err_message}
-        os.makedirs(f"{_work_dir}/chapter_{_current_chapter_id}", exist_ok=True)
+        os.makedirs(f"{_work_dir}/chapter/chapter_{_current_chapter_id}", exist_ok=True)
 
         _previous_chapter_text = read_file_tool.run(
             {
-                "file_path": f"{_work_dir}/chapter_{_current_chapter_id - 1}/chapter_draft.md"
+                "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id - 1}/chapter_draft.md"
             }
         )
 
         _previous_character_state = read_file_tool.run(
             {
-                "file_path": f"{_work_dir}/chapter_{_current_chapter_id - 1}/character_state.md"
+                "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id - 1}/character_state.md"
             }
         )
         if _previous_chapter_text == "" or _previous_character_state == "":
@@ -415,7 +427,7 @@ async def update_character_state(state: State, runtime: Runtime[Context]):
 
         await write_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/chapter_{_current_chapter_id}/character_state.md",
+                "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/character_state.md",
                 "text": json.dumps(_result, ensure_ascii=False),
             }
         )
@@ -441,10 +453,14 @@ async def summarize_recent_chapters(state: State, runtime: Runtime[Context]):
         _user_guidance = state.user_guidance
         _config = runtime.context.config
 
-        _work_dir = os.path.join(_task_dir, _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
-
         prompt_dir = _config.get("prompt_dir")
+        result_dir = _config.get("result_dir")
+
+        if result_dir:
+            _work_dir = result_dir
+        else:
+            _work_dir = os.path.join(_task_dir, _thread_id)
+        os.makedirs(_work_dir, exist_ok=True)
 
         # 获得当前章节id
         _current_chapter_id = _user_guidance.get("current_chapter_id")
@@ -458,7 +474,7 @@ async def summarize_recent_chapters(state: State, runtime: Runtime[Context]):
                 "messages": Messages(type="end"),
             }
 
-        os.makedirs(f"{_work_dir}/chapter_{_current_chapter_id}", exist_ok=True)
+        os.makedirs(f"{_work_dir}/chapter/chapter_{_current_chapter_id}", exist_ok=True)
 
         # 获得章节蓝图
         if os.path.exists(f"{_work_dir}/novel_chapter_blueprint.md"):
@@ -537,7 +553,7 @@ async def summarize_recent_chapters(state: State, runtime: Runtime[Context]):
         _result = {_NODE_NAME: response.content}
         await write_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/chapter_{_current_chapter_id}/{_NODE_NAME}.md",
+                "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/{_NODE_NAME}.md",
                 "text": json.dumps(_result, ensure_ascii=False),
             }
         )
@@ -560,14 +576,18 @@ async def first_chapter_draft(state: State, runtime: Runtime[Context]):
         _user_guidance = state.user_guidance
         _config = runtime.context.config
 
-        _work_dir = os.path.join(_task_dir, _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
-
         prompt_dir = _config.get("prompt_dir")
+        result_dir = _config.get("result_dir")
+
+        if result_dir:
+            _work_dir = result_dir
+        else:
+            _work_dir = os.path.join(_task_dir, _thread_id)
+        os.makedirs(_work_dir, exist_ok=True)
 
         # 获得当前章节id
         _current_chapter_id = 1
-        os.makedirs(f"{_work_dir}/chapter_{_current_chapter_id}", exist_ok=True)
+        os.makedirs(f"{_work_dir}/chapter/chapter_{_current_chapter_id}", exist_ok=True)
 
         # 获得小说设定
         if os.path.exists(f"{_work_dir}/novel_extract_setting.md"):
@@ -605,11 +625,11 @@ async def first_chapter_draft(state: State, runtime: Runtime[Context]):
 
         # 获得角色状态
         if os.path.exists(
-            f"{_work_dir}/chapter_{_current_chapter_id}/character_state.md"
+            f"{_work_dir}/chapter/chapter_{_current_chapter_id}/character_state.md"
         ):
             _character_state = await read_file_tool.arun(
                 {
-                    "file_path": f"{_work_dir}/chapter_{_current_chapter_id}/character_state.md"
+                    "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/character_state.md"
                 }
             )
         else:
@@ -659,7 +679,7 @@ async def first_chapter_draft(state: State, runtime: Runtime[Context]):
         _result = {"chapter_draft": response.content}
         await write_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/chapter_{_current_chapter_id}/chapter_draft.md",
+                "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/chapter_draft.md",
                 "text": f"## 第{_current_chapter_id}章 {_chapter_info['chapter_title']}\n\n{response.content}",
             }
         )
@@ -685,10 +705,14 @@ async def next_chapter_draft(state: State, runtime: Runtime[Context]):
         _user_guidance = state.user_guidance
         _config = runtime.context.config
 
-        _work_dir = os.path.join(_task_dir, _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
-
         prompt_dir = _config.get("prompt_dir")
+        result_dir = _config.get("result_dir")
+
+        if result_dir:
+            _work_dir = result_dir
+        else:
+            _work_dir = os.path.join(_task_dir, _thread_id)
+        os.makedirs(_work_dir, exist_ok=True)
 
         # 获得当前章节id
         _current_chapter_id = _user_guidance.get("current_chapter_id")
@@ -697,7 +721,7 @@ async def next_chapter_draft(state: State, runtime: Runtime[Context]):
                 _thread_id, _NODE_NAME, "current_chapter_id not found"
             )
             return {"code": 1, "err_message": _err_message}
-        os.makedirs(f"{_work_dir}/chapter_{_current_chapter_id}", exist_ok=True)
+        os.makedirs(f"{_work_dir}/chapter/chapter_{_current_chapter_id}", exist_ok=True)
 
         # 获得小说设定
         if os.path.exists(f"{_work_dir}/novel_extract_setting.md"):
@@ -735,11 +759,11 @@ async def next_chapter_draft(state: State, runtime: Runtime[Context]):
 
         # 获得角色状态
         if os.path.exists(
-            f"{_work_dir}/chapter_{_current_chapter_id}/character_state.md"
+            f"{_work_dir}/chapter/chapter_{_current_chapter_id}/character_state.md"
         ):
             _character_state = await read_file_tool.arun(
                 {
-                    "file_path": f"{_work_dir}/chapter_{_current_chapter_id}/character_state.md"
+                    "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/character_state.md"
                 }
             )
         else:
@@ -750,11 +774,11 @@ async def next_chapter_draft(state: State, runtime: Runtime[Context]):
 
         # 获得全局摘要
         if os.path.exists(
-            f"{_work_dir}/chapter_{_current_chapter_id}/global_summary.md"
+            f"{_work_dir}/chapter/chapter_{_current_chapter_id}/global_summary.md"
         ):
             _global_summary = await read_file_tool.arun(
                 {
-                    "file_path": f"{_work_dir}/chapter_{_current_chapter_id}/global_summary.md"
+                    "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/global_summary.md"
                 }
             )
         else:
@@ -765,11 +789,11 @@ async def next_chapter_draft(state: State, runtime: Runtime[Context]):
 
         # 当前章节摘要
         if os.path.exists(
-            f"{_work_dir}/chapter_{_current_chapter_id}/summarize_recent_chapters.md"
+            f"{_work_dir}/chapter/chapter_{_current_chapter_id}/summarize_recent_chapters.md"
         ):
             _short_summary = await read_file_tool.arun(
                 {
-                    "file_path": f"{_work_dir}/chapter_{_current_chapter_id}/summarize_recent_chapters.md"
+                    "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/summarize_recent_chapters.md"
                 }
             )
         else:
@@ -850,7 +874,7 @@ async def next_chapter_draft(state: State, runtime: Runtime[Context]):
                 "key_items": _key_items,
                 "scene_location": _scene_location,
                 "time_constraint": _time_constraint,
-                "user_guidance": _user_guidance.get("input", ""),
+                "user_guidance": _user_guidance.get("human_in_loop_value", ""),
             }
             _prompt_tamplate = get_prompt("ainovel", _NODE_NAME, prompt_dir)
             return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
@@ -864,7 +888,7 @@ async def next_chapter_draft(state: State, runtime: Runtime[Context]):
         _result = {"chapter_draft": response.content}
         await write_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/chapter_{_current_chapter_id}/chapter_draft.md",
+                "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/chapter_draft.md",
                 "text": f"## 第{_current_chapter_id}章 {_chapter_info['chapter_title']}\n\n{response.content}",
             }
         )
@@ -916,7 +940,7 @@ async def human_in_loop_guidance(
     #     if item.is_dir() and item.name.startswith("chapter")
     # )
     # _current_chapter_id = file_count + 1
-    os.makedirs(f"{_work_dir}/chapter_{_current_chapter_id}", exist_ok=True)
+    os.makedirs(f"{_work_dir}/chapter/chapter_{_current_chapter_id}", exist_ok=True)
 
     _new_v = []
     for v in state.messages.value:
@@ -1053,6 +1077,7 @@ ainovel_chapter_agent.add_edge(START, "human_in_loop_guidance")
 ainovel_chapter_agent.add_edge("first_chapter_draft_agent", "human_in_loop_agree")
 ainovel_chapter_agent.add_edge("next_chapter_draft_agent", "human_in_loop_agree")
 ainovel_chapter_agent = ainovel_chapter_agent.compile(checkpointer=checkpointer)
+
 
 png_bytes = ainovel_chapter_agent.get_graph(xray=True).draw_mermaid()
 logger.info(f"ainovel_chapter_agent: \n\n{png_bytes}")

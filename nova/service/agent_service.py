@@ -24,7 +24,11 @@ from nova.agent.ainovel_architect import (
     plot_arch_agent,
     world_building_agent,
 )
-from nova.agent.ainovel_chapter import ainovel_chapter_agent
+from nova.agent.ainovel_chapter import (
+    _first_chapter_draft_agent,
+    _next_chapter_draft_agent,
+    ainovel_chapter_agent,
+)
 from nova.agent.chat import chat_agent
 from nova.agent.deepresearcher import deepresearcher
 from nova.agent.memorizer import memorizer_agent
@@ -59,6 +63,8 @@ AGENT_REGISTRY = {
     "ainovel_chapter_blueprint": chapter_blueprint_agent,
     "ainovel_build_architecture": build_architecture_agent,
     "ainovel_architect": ainovel_architecture_agent,
+    "ainovel_first_chapter": _first_chapter_draft_agent,
+    "ainovel_next_chapter": _next_chapter_draft_agent,
     "ainovel_chapter": ainovel_chapter_agent,
     "ainovel": ainovel,
 }

@@ -4,75 +4,11 @@
 # @Moto   : Knowledge comes from decomposition
 from __future__ import annotations
 
-from typing import Any
-
 import reflex as rx
 from app.components.common.workspace_manager import (
     create_workspace_modal,
     workspace_drawer,
 )
-
-
-class HeaderBarState(rx.State):
-    is_settings_modal_open: bool = False
-    is_create_chat_modal_open: bool = False
-    badge = ""
-    title = ""
-    _shared = None
-
-    def init_header_bar_state(self, shared):
-        """初始化状态"""
-        self.is_settings_modal_open = False
-        self.is_create_chat_modal_open = False
-        self.badge = ""
-        self.title = ""
-        self._shared = shared
-
-    # 设置徽章
-    @rx.event
-    def set_badge(self, name: str):
-        self.badge = name
-
-    # 设置创建聊天的模态框的标题
-    @rx.event
-    def set_title(self, name: str):
-        self.title = name
-
-    # 创建新聊天的模态框开关
-    @rx.event
-    def set_is_create_chat_modal_open(self, is_open: bool):
-        self.is_create_chat_modal_open = is_open
-
-    # 设置参数值的模态框开关
-    @rx.event
-    def set_is_settings_modal_open(self, is_open: bool):
-        self.is_settings_modal_open = is_open
-
-    # 创建会话窗口的提交事件
-    @rx.event
-    async def create_workspace(self, form_data: dict[str, Any]):
-        _name = form_data["new_chat_name"]
-        if self._shared:
-            self._shared.create_workspace(_name)
-
-    # 设置当前工作区
-    @rx.event
-    async def set_workspace(self, name: str):
-        if self._shared:
-            self._shared.set_workspace(name)
-
-    # 删除当前工作区
-    @rx.event
-    async def del_workspace(self, name: str):
-        if self._shared:
-            self._shared.del_workspace(name)
-
-    # 获得所有会话窗口名称
-    @rx.var
-    async def get_workspace_names(self) -> list[str]:
-        if self._shared:
-            return self._shared.get_workspace_names()
-        return []
 
 
 def headbar(

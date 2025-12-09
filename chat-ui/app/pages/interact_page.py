@@ -5,8 +5,12 @@
 from __future__ import annotations
 
 import json
-from re import S
-from typing import Any
+import logging
+import os
+import shutil
+import uuid
+from pathlib import Path
+from typing import Any, cast
 
 import reflex as rx
 
@@ -21,7 +25,16 @@ from app.components.interact.edit_bar import (
     editor_show_bar,
 )
 from app.components.interact.prompt_settings import PromptSettingsState
-from app.globel_var import AINOVEL_TABMENU, DEFAULT_CHAT, MENUS, PARAMS_FIELDS
+from app.globel_var import (
+    _SELECTED_MODELS,
+    AINOVEL_TABMENU,
+    DEFAULT_CHAT,
+    INSTERACT_TASK_DIR,
+    MENUS,
+    PROMPT_DIR,
+)
+
+logger = logging.getLogger(__name__)
 
 
 def _create_interact_page(title_name: str) -> rx.Component:
@@ -47,6 +60,8 @@ def _create_interact_page(title_name: str) -> rx.Component:
         tabs: list[TabMenu] = []
         current_tab = "extract_setting"
         _workspace = {}
+        _task_dir = INSTERACT_TASK_DIR
+        _prompt_dir = PROMPT_DIR
 
         _is_human_in_loop = False
 
@@ -54,21 +69,22 @@ def _create_interact_page(title_name: str) -> rx.Component:
             super().__init__(*args, **kwargs)
             # 初始状态
             self.menus = MENUS
-            self.params_fields: list[Parameters] = PARAMS_FIELDS
+            self.params_fields: list[Parameters] = [
+                Parameters(
+                    mkey="model",
+                    mtype="select",
+                    mvalue="basic",
+                    mvaluetype="str",
+                    mselected=_SELECTED_MODELS,
+                ),
+            ]
 
             # 初始化参数
             self.tabs: list[TabMenu] = AINOVEL_TABMENU
 
-            self._init_workspace_content(self.current_chat)
+            self._init_workspace(self.current_chat)
 
-        # async def on_load(self):  # 新增页面加载时执行的异步初始化
-        #     shared1 = await self.get_state(HeaderBarState)
-        #     shared1.init_header_bar_state(self)
-
-        #     shared2 = await self.get_state(EditState)
-        #     shared2.init_edit_state(self)
-
-        def _init_workspace_content(self, val: str):
+        def _init_workspace(self, val: str):
             self._workspace[val] = {}
             for tab in self.tabs:
                 self._workspace[val][tab.value] = {
@@ -76,6 +92,8 @@ def _create_interact_page(title_name: str) -> rx.Component:
                     "output_content": "",
                     "final_content": "",
                 }
+            self.current_chat = val
+            self._show_workspace_all_content()
 
         # 获得badge
         @rx.var
@@ -87,17 +105,14 @@ def _create_interact_page(title_name: str) -> rx.Component:
         @rx.event
         async def create_workspace(self, form_data: dict[str, Any]):
             new_chat_name = form_data["new_chat_name"]
-            self._init_workspace_content(new_chat_name)
-            await self.set_workspace_name(new_chat_name)
+            self._init_workspace(new_chat_name)
+            shared = await self.get_state(PromptSettingsState)
+            shared._init_workspace(new_chat_name)
 
         # 获得所有会话窗口名称
         @rx.var
         async def get_workspace_names(self) -> list[str]:
             return list(self._workspace.keys())
-
-        # @rx.var
-        # async def get_workspace(self) -> list[str]:
-        #     return self._workspace[self.current_chat]
 
         # 设置当前会话窗口名称
         @rx.event
@@ -105,27 +120,41 @@ def _create_interact_page(title_name: str) -> rx.Component:
             self.current_chat = name
             # 获取 State1 实例，修改其变量
             shared = await self.get_state(PromptSettingsState)
-            shared._init_prompt_content_and_current_chat(name)
+            await shared.set_workspace_name(name)
 
         # 删除会话窗口
         @rx.event
         async def del_workspace(self, name: str):
-            """Delete the current chat."""
-            if name not in self._workspace:
-                return
-            del self._workspace[name]
+            try:
+                """Delete the current chat."""
+                if name not in self._workspace:
+                    return
+                del self._workspace[name]
+                if os.path.exists(f"{self._task_dir}/{self.current_chat}"):
+                    shutil.rmtree(f"{self._task_dir}/{self.current_chat}")
 
-            if len(self._workspace) == 0:
-                self._init_workspace_content(self.default_chat_name)
-                self.current_chat = self.default_chat_name
+                if len(self._workspace) == 0:
+                    self._init_workspace(DEFAULT_CHAT)
+                    self.current_chat = DEFAULT_CHAT
 
-            if self.current_chat not in self._workspace:
-                self.current_chat = list(self._workspace.keys())[0]
+                if self.current_chat not in self._workspace:
+                    self.current_chat = list(self._workspace.keys())[0]
+
+                shared = await self.get_state(PromptSettingsState)
+                await shared.del_prompt_content(name, self.current_chat)
+
+            except Exception as e:
+                yield rx.toast("删除失败")
+                logger.error(e)
 
         # 获得当前会话内容 input_content
         @rx.var
         async def get_workspace_input_content(self) -> str:
             return self._workspace[self.current_chat][self.current_tab]["input_content"]
+
+        @rx.event
+        async def set_workspace_input_content(self, val):
+            self._workspace[self.current_chat][self.current_tab]["input_content"] = val
 
         # 获得当前会话内容 output_content
         @rx.var
@@ -165,20 +194,162 @@ def _create_interact_page(title_name: str) -> rx.Component:
             except Exception as e:
                 return rx.window_alert(str(e))
 
-        @rx.event
-        async def show_workspace_all_content(self):
-            pass
+        def _show_workspace_all_content(self):
+            try:
+                for item in self.tabs:
+                    if os.path.exists(
+                        f"{self._task_dir}/{self.current_chat}/history/{item.value}.md"
+                    ):
+                        with open(
+                            f"{self._task_dir}/{self.current_chat}/history/{item.value}.md",
+                            "r",
+                        ) as f:
+                            self._workspace[self.current_chat][item.value] = json.loads(
+                                f.read()
+                            )
+
+            except Exception as e:
+                logger.error(e)
 
         @rx.event
         async def save_workspace_all_content(self):
-            pass
+            try:
+                self.is_saving = True
+                os.makedirs(
+                    f"{self._task_dir}/{self.current_chat}/history", exist_ok=True
+                )
+                with open(
+                    f"{self._task_dir}/{self.current_chat}/history/{self.current_tab}.md",
+                    "w",
+                ) as f:
+                    tmp = self._workspace[self.current_chat][self.current_tab]
+                    f.write(json.dumps(tmp, ensure_ascii=False))
+                self.is_saving = False
+                yield rx.toast("内容已成功保存")
+            except Exception as e:
+                self.is_saving = False
+                logger.error(e)
+                yield rx.toast(f"保存失败: {e}")
 
         # 对话框的提交事件
         @rx.event
         async def submit_input_bar_question(self, form_data: dict[str, Any]):
-            self.is_processing = True
+            try:
+                question = form_data["question"]
 
-            self.is_processing = False
+                context = {
+                    "thread_id": self.current_chat,
+                    "config": {
+                        "prompt_dir": f"{INSTERACT_TASK_DIR}/{self.current_chat}/prompt",
+                        "result_dir": f"{INSTERACT_TASK_DIR}/{self.current_chat}",
+                    },
+                }
+                for item in self.params_fields:
+                    if item.mvaluetype == "dict":
+                        context[item.mkey] = json.loads(item.mvalue)
+                    elif item.mvaluetype == "int":
+                        context[item.mkey] = int(item.mvalue)
+                    elif item.mvaluetype == "float":
+                        context[item.mkey] = float(item.mvalue)
+                    else:
+                        context[item.mkey] = item.mvalue
+
+                is_start_answer = True
+                is_start_thinking = True
+                uid4 = str(uuid.uuid4())
+
+                self.is_processing = True
+                _current_chapter_id = 1
+                if os.path.exists(f"{INSTERACT_TASK_DIR}/{self.current_chat}/chapter"):
+                    # 确定当前属于第几章
+                    dir_path = Path(f"{INSTERACT_TASK_DIR}/{self.current_chat}/chapter")
+                    file_count = sum(
+                        1
+                        for item in dir_path.iterdir()
+                        if item.is_dir() and item.name.startswith("chapter")
+                    )
+                    if file_count == 0:
+                        _current_chapter_id = 1
+                    else:
+                        if os.path.exists(
+                            f"{INSTERACT_TASK_DIR}/{self.current_chat}/chapter/chapter_{file_count}/chapter_draft.md"
+                        ):
+                            _current_chapter_id = file_count + 1
+                        else:
+                            _current_chapter_id = file_count
+
+                self._workspace[self.current_chat][self.current_tab][
+                    "output_content"
+                ] = ""
+
+                # 初始化
+                state = {
+                    "messages": {
+                        "type": "override",
+                        "value": [
+                            {
+                                "role": "user",
+                                "content": question,
+                            },
+                        ],
+                    },
+                    "user_guidance": {
+                        "human_in_loop_value": question,
+                        "current_chapter_id": _current_chapter_id,
+                    },
+                }
+
+                async for value in get_nova_agent_api(
+                    url_name=f"ainovel_{self.current_tab}",
+                    trace_id=uid4,
+                    state=state,
+                    context=context,
+                ):
+                    # 获取最终结果
+                    if value and value.get("is_final"):
+                        for _, item in cast(dict, value["final_content"]).items():
+                            self._workspace[self.current_chat][self.current_tab][
+                                "final_content"
+                            ] = str(item)
+
+                    if value and value.get("type", None) is not None:
+                        if value["type"] == "system":
+                            self._workspace[self.current_chat][self.current_tab][
+                                "output_content"
+                            ] += value["content"]
+
+                        if value["type"] == "thought":
+                            if is_start_thinking:
+                                self._workspace[self.current_chat][self.current_tab][
+                                    "output_content"
+                                ] += "\n\n🤔 Thinking...\n\n"
+                                is_start_thinking = False
+
+                            self._workspace[self.current_chat][self.current_tab][
+                                "output_content"
+                            ] += value["content"]
+
+                        if value["type"] == "answer":
+                            if is_start_answer:
+                                self._workspace[self.current_chat][self.current_tab][
+                                    "output_content"
+                                ] += "\n\n✨ Answering...\n\n"
+                                is_start_answer = False
+
+                            self._workspace[self.current_chat][self.current_tab][
+                                "output_content"
+                            ] += value["content"]
+                        if value["type"] == "error":
+                            self._workspace[self.current_chat][self.current_tab][
+                                "output_content"
+                            ] += f"<span style='color:red'>{value['content']}</span>"
+                        yield
+
+                self.is_processing = False
+            except Exception as e:
+                logger.error(e)
+                self.is_processing = False
+                yield rx.toast("处理失败")
 
     def _editor_page_main() -> rx.Component:
         return rx.vstack(
@@ -189,6 +360,8 @@ def _create_interact_page(title_name: str) -> rx.Component:
                 State.save_workspace_all_content,
             ),
             editor_input_bar(
+                State.get_workspace_input_content,
+                State.set_workspace_input_content,
                 State.submit_input_bar_question,
                 State.params_fields,
                 State.submit_input_bar_settings,

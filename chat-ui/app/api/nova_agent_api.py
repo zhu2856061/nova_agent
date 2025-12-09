@@ -22,6 +22,8 @@ AGENT_BACKEND_URL = {
     "ainovel_chapter_blueprint": "http://0.0.0.0:2021/agent/ainovel_chapter_blueprint",
     "ainovel_build_architecture": "http://0.0.0.0:2021/agent/ainovel_build_architecture",
     "ainovel_architect": "http://0.0.0.0:2021/agent/ainovel_architect",
+    "ainovel_first_chapter": "http://0.0.0.0:2021/agent/ainovel_first_chapter",
+    "ainovel_next_chapter": "http://0.0.0.0:2021/agent/ainovel_next_chapter",
     "ainovel_chapter": "http://0.0.0.0:2021/agent/ainovel_chapter",
     "ainovel": "http://0.0.0.0:2021/agent/ainovel",
     "human_in_loop": "http://0.0.0.0:2021/agent/human_in_loop",
@@ -138,6 +140,13 @@ def extract_event_data(line_data):
                     return {"type": "error", "content": _output["err_message"]}
                 _data = _output.get("data")
                 content += f"{_data}\n\n"
+
+            return {
+                "type": "system",
+                "content": content,
+                "is_final": True,
+                "final_content": _output.get("data"),
+            }
 
         return {"type": "system", "content": content}
 

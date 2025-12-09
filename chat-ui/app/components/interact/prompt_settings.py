@@ -7,7 +7,12 @@ import os
 
 import reflex as rx
 from app.components.common.tab_components import TabMenu, tab_content, tab_trigger
-from app.globel_var import AINOVEL_PROMPT_TABMENU, DEFAULT_CHAT, PROMPT_DIR, TASK_DIR
+from app.globel_var import (
+    AINOVEL_PROMPT_TABMENU,
+    DEFAULT_CHAT,
+    INSTERACT_TASK_DIR,
+    PROMPT_DIR,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -20,18 +25,18 @@ class PromptSettingsState(rx.State):
     current_tab = "extract_setting"
     is_prompt_settings_modal_open = False
     _workspace = {}
-    _task_dir = TASK_DIR
+    _task_dir = INSTERACT_TASK_DIR
     _prompt_dir = PROMPT_DIR
-
-    _raw_prompt_conyent = {}
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.tabs: list[TabMenu] = AINOVEL_PROMPT_TABMENU
 
-        self._init_prompt_content_and_current_chat(self.current_chat)
+        self._init_workspace(self.current_chat)
 
-    def _init_prompt_content_and_current_chat(self, val: str):
+    def _init_workspace(self, val: str):
+        self.current_chat = val
+        _raw_prompt_conyent = {}
         for item in self.tabs:
             if os.path.exists(
                 f"{self._task_dir}/{self.current_chat}/prompt/{item.value}.md"
@@ -39,36 +44,48 @@ class PromptSettingsState(rx.State):
                 with open(
                     f"{self._task_dir}/{self.current_chat}/prompt/{item.value}.md"
                 ) as f:
-                    self._raw_prompt_conyent[item.value] = f.read()
+                    _raw_prompt_conyent[item.value] = f.read()
             else:
                 with open(f"{self._prompt_dir}/ainovel/{item.value}.md") as f:
-                    self._raw_prompt_conyent[item.value] = f.read()
+                    _raw_prompt_conyent[item.value] = f.read()
 
-        self._workspace[val] = self._raw_prompt_conyent
+        self._workspace[self.current_chat] = _raw_prompt_conyent
 
-        self.current_chat = val
+        os.makedirs(f"{self._task_dir}/{self.current_chat}/prompt", exist_ok=True)
+
+        # 保存到本地存储（或提交到后端）
+        for item in self.tabs:
+            with open(
+                f"{self._task_dir}/{self.current_chat}/prompt/{item.value}.md", "w"
+            ) as f:
+                tmp = self._workspace[self.current_chat][item.value]
+                f.write(tmp)
 
     @rx.event
-    def set_is_prompt_settings_modal_open(self, is_open: bool):
+    async def set_is_prompt_settings_modal_open(self, is_open: bool):
         self.is_prompt_settings_modal_open = is_open
 
     @rx.event
-    def set_tab_value(self, val):
+    async def set_tab_value(self, val):
         self.current_tab = val
+
+    @rx.event
+    async def set_workspace_name(self, name: str):
+        self.current_chat = name
 
     # 修改内容
     @rx.event
-    def update_prompt_content(self, value: str):
+    async def update_prompt_content(self, value: str):
         self._workspace[self.current_chat][self.current_tab] = value
 
     # 获取内容
     @rx.var
-    def get_prompt_content(self) -> str:
+    async def get_prompt_content(self) -> str:
         return self._workspace[self.current_chat][self.current_tab]
 
-    # 保存输出内容
+    # 保存prompt内容
     @rx.event
-    def save_prompt_content(self):
+    async def save_prompt_content(self):
         try:
             os.makedirs(f"{self._task_dir}/{self.current_chat}/prompt", exist_ok=True)
             self.saving = True
@@ -86,7 +103,31 @@ class PromptSettingsState(rx.State):
 
         except Exception as e:
             self.saving = False
-            yield rx.toast("保存失败")
+            logger.error(e)
+            yield rx.toast(f"保存失败: {e}")
+
+    # 删除prompt内容
+    @rx.event
+    async def del_prompt_content(self, name: str, val: str):
+        try:
+            self.saving = True
+            if name not in self._workspace:
+                return
+            del self._workspace[name]
+
+            if len(self._workspace) == 0:
+                self._init_workspace(DEFAULT_CHAT)
+                self.current_chat = DEFAULT_CHAT
+
+            self.current_chat = val
+
+            if self.current_chat not in self._workspace:
+                self.current_chat = list(self._workspace.keys())[0]
+
+            self.saving = False
+
+        except Exception as e:
+            self.saving = False
             logger.error(e)
 
 
