@@ -53,13 +53,13 @@ class PromptSettingsState(rx.State):
 
         os.makedirs(f"{self._task_dir}/{self.current_chat}/prompt", exist_ok=True)
 
-        # 保存到本地存储（或提交到后端）
-        for item in self.tabs:
-            with open(
-                f"{self._task_dir}/{self.current_chat}/prompt/{item.value}.md", "w"
-            ) as f:
-                tmp = self._workspace[self.current_chat][item.value]
-                f.write(tmp)
+        # # 保存到本地存储（或提交到后端）
+        # for item in self.tabs:
+        #     with open(
+        #         f"{self._task_dir}/{self.current_chat}/prompt/{item.value}.md", "w"
+        #     ) as f:
+        #         tmp = self._workspace[self.current_chat][item.value]
+        #         f.write(tmp)
 
     @rx.event
     async def set_is_prompt_settings_modal_open(self, is_open: bool):

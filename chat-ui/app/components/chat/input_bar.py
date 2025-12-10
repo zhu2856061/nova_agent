@@ -4,10 +4,18 @@
 # @Moto   : Knowledge comes from decomposition
 from __future__ import annotations
 
-from typing import Callable
+from typing import Any, Callable
 
 import reflex as rx
 from app.components.common.context_settings import Parameters, settings_modal
+
+
+def handle_key_down(key: str):
+    if key == "Enter":
+        print("Enter pressed!")
+        # 这里可以做任何事，比如 rx.toast("发送了！")
+    # 其他键不处理
+    return rx.noop()
 
 
 def chat_input_bar(
@@ -17,12 +25,24 @@ def chat_input_bar(
     is_processing: bool,
 ) -> rx.Component:
     """The action bar to send a new message."""
+
+    def handle_enter_key(event: Any):
+        """只处理 Enter 键"""
+        # 阻止默认换行行为
+        rx.cond(
+            event._key == "Enter",
+            submit_input_bar_question.stop_propagation(),
+        )
+        # 其他键：不处理
+        return rx.noop()
+
     return rx.box(
         rx.form(
             rx.vstack(
                 rx.text_area(
                     placeholder="发消息...",
                     id="question",
+                    name="question",  # 必须：form 提交时用 name 取值
                     flex="1",
                     width="100%",
                     # 核心：取消边框 + 透明背景
@@ -43,6 +63,8 @@ def chat_input_bar(
                         "overflow-y": "hidden",  # 隐藏垂直滚动条
                         "lineHeight": "1.5",  # 行高，保证文字排版舒适
                     },
+                    auto_focus=True,
+                    enter_key_submit=True,
                 ),
                 rx.hstack(
                     settings_modal(
@@ -83,6 +105,7 @@ def chat_input_bar(
                 margin="0",  # 消除vstack自身的外边距
                 padding="0",  # 消除vstack自身的内边距
             ),
+            id="chat-form",  # 关键：form 必须有 id
             reset_on_submit=True,
             on_submit=submit_input_bar_question,
             padding_x="6px",  # 保留左右内边距

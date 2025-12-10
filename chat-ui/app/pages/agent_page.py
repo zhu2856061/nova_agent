@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import json
 import uuid
-from typing import Any
+from typing import Any, cast
 
 import reflex as rx
 
@@ -133,6 +133,17 @@ def create_agent_page(title_name: str, agent_name: str) -> rx.Component:
                 yield rx.window_alert("输入不能为空")
                 return
 
+            # === 1. 添加用户消息 ===
+            self.chat_instance[self.current_chat].append(
+                Message(role="user", content=question)
+            )
+
+            # === 2. 初始化 assistant 占位（最终会替换）===
+            self.chat_instance[self.current_chat].append(
+                Message(role="assistant", content="")
+            )
+
+            # === 3. 准备上下文 ===
             context = {"thread_id": self.current_chat}
             for item in self.params_fields:
                 if item.mvaluetype == "dict":
@@ -144,27 +155,24 @@ def create_agent_page(title_name: str, agent_name: str) -> rx.Component:
                 else:
                     context[item.mkey] = item.mvalue
 
-            self.chat_instance[self.current_chat].append(
-                Message(role="user", content=question)
-            )
             self.is_processing = True
             messages = self._session_contxet_control_and_get_message()
 
+            # === 4. 临时变量：收集最终答案 ===
+            # intermediate_content = ""  # 所有中间过程
+            # final_answer = ""  # 最终答案
             is_start_answer = True
             is_start_thinking = True
             uid4 = str(uuid.uuid4())
 
-            # 初始化assistant的内容
-            self.chat_instance[self.current_chat].append(
-                Message(role="assistant", content="")
-            )
-
+            # === 5. 准备url ===
             _url_name = _AGENT_NAME
             if self._is_human_in_loop:
                 _url_name = "human_in_loop"
 
             self._is_human_in_loop = False
 
+            # === 6. 流式接收，但只收集 answer ===
             async for value in get_nova_agent_api(
                 url_name=_url_name,
                 trace_id=uid4,
@@ -177,18 +185,38 @@ def create_agent_page(title_name: str, agent_name: str) -> rx.Component:
                 },
                 context=context,
             ):
-                if value and value.get("type", None) is not None:
-                    if value["type"] == "system":
-                        self.chat_instance[self.current_chat][-1].content += value[
-                            "content"
-                        ]
-                    if value["type"] == "human_in_loop":
+                if not value or value.get("type") not in [
+                    "answer",
+                    "thought",
+                    "system",
+                    "error",
+                ]:
+                    continue
+
+                vtype = value["type"]
+                content = value["content"]
+
+                if value.get("is_final"):
+                    _final_answer = ""
+                    for _, item in cast(dict, value["final_content"]).items():
+                        tmp = item.get("content") if item.get("content") else item
+                        _final_answer = str(tmp)
+
+                    self.chat_instance[self.current_chat][-1].content = _final_answer
+                    yield
+                else:
+                    if vtype == "system":
+                        self.chat_instance[self.current_chat][-1].content += content
+                        yield
+
+                    if vtype == "human_in_loop":
                         self.chat_instance[self.current_chat][
                             -1
                         ].content += (
                             f"<span style='color:yellow'>{value['content']}</span>"
                         )
                         self._is_human_in_loop = True
+                        yield
 
                     if value["type"] == "thought":
                         if is_start_thinking:
@@ -200,6 +228,7 @@ def create_agent_page(title_name: str, agent_name: str) -> rx.Component:
                         self.chat_instance[self.current_chat][-1].content += value[
                             "content"
                         ]
+                        yield
 
                     if value["type"] == "answer":
                         if is_start_answer:
@@ -211,13 +240,16 @@ def create_agent_page(title_name: str, agent_name: str) -> rx.Component:
                         self.chat_instance[self.current_chat][-1].content += value[
                             "content"
                         ]
+                        yield
+
                     if value["type"] == "error":
                         self.chat_instance[self.current_chat][
                             -1
                         ].content += (
                             f"<span style='color:red'>{value['content']}</span>"
                         )
-                    yield
+                        yield
+
             self.is_processing = False
 
         def _session_contxet_control_and_get_message(self):
