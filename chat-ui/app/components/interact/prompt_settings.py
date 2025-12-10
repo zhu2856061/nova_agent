@@ -51,7 +51,7 @@ class PromptSettingsState(rx.State):
 
         self._workspace[self.current_chat] = _raw_prompt_conyent
 
-        os.makedirs(f"{self._task_dir}/{self.current_chat}/prompt", exist_ok=True)
+        # os.makedirs(f"{self._task_dir}/{self.current_chat}/prompt", exist_ok=True)
 
         # # 保存到本地存储（或提交到后端）
         # for item in self.tabs:
