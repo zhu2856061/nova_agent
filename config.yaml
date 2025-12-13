@@ -5,9 +5,9 @@ SYSTEM:
 
   log_dir: "./logs"
   env_path: "./env"
-  task_dir: "../merlin"
+  task_dir: $TASK_DIR
   cache_dir: "./cache"
-  prompt_template_dir: "../prompts"
+  prompt_template_dir: $PROMPT_PATH
 
 LLM:
   - model_name: "basic"

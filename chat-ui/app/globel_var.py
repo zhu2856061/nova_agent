@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import json
+import os
 
 from app.components.common.context_settings import Parameters
 from app.components.common.sidebar_components import SideMenu
@@ -100,8 +101,9 @@ PARAMS_FIELDS = [
 ]
 
 DEFAULT_CHAT = "Nova"
-INSTERACT_TASK_DIR = "../merlin/insteract"
-PROMPT_DIR = "../prompts"
+TASK_DIR = os.environ.get("TASK_DIR", "../merlin")
+INSTERACT_TASK_DIR = os.path.join(TASK_DIR, "insteract")
+PROMPT_DIR = os.environ.get("PROMPT_PATH", "../prompts")
 
 
 AINOVEL_TABMENU = [

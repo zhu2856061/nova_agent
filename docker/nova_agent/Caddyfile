@@ -1,0 +1,25 @@
+# Caddyfile —— 完全遵循 Reflex 官方最新写法
+:{$PORT}
+
+encode gzip zstd
+
+# 把 Reflex 所有需要实时通信的路径全部代理到内部 8000
+@reflex_backend {
+    path /_event/* /ping /_upload /_upload/*
+    # Reflex 最新版还可能用到下面这几个（保险起见全加上）
+    path /api/* /_reflex/*
+}
+handle @reflex_backend {
+    reverse_proxy localhost:8000
+}
+
+# 静态前端（SPA）
+root * /srv
+
+route {
+    # SPA 路由：所有非文件路径都 fallback 到 index.html
+    try_files {path} {path}/ /index.html
+
+    # 静态文件服务
+    file_server
+}

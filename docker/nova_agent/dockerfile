@@ -43,7 +43,7 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 # 设置时区为 Asia/Shanghai # 安装nginx
 RUN apt-get update && \
-    apt-get install -y --no-install-recommends tzdata curl nginx zip unzip && \
+    apt-get install -y --no-install-recommends tzdata curl supervisor unzip caddy redis-server && \
     ln -snf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
     echo "Asia/Shanghai" > /etc/timezone && \
     apt-get clean && \
@@ -51,21 +51,28 @@ RUN apt-get update && \
 
 
 # ===Stage 4: 复制项目代码。这通常是变化最频繁的部分。===
-COPY entrypoint.sh build/server.tar.gz /app 
-RUN tar -xzvf /app/server.tar.gz -C /app && rm -rf /app/server.tar.gz
-# nova 服务
-RUN mkdir /app/engine && cp config.yaml *so /app/engine && mv -f /app/engine/*so /app/.venv/lib/python3.12/site-packages/
 
-# 复制并解压 frontend.zip → /usr/share/nginx/html
-RUN unzip -o /app/frontend.zip -d /usr/share/nginx/html && \
-    rm /app/frontend.zip && \
-    chown -R www-data:www-data /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/nginx.conf
+COPY entrypoint.sh supervisord.conf Caddyfile /app/
+COPY build/ /app/
 
-# 复制并解压 backend.zip → /app/backend
-RUN mkdir /app/backend && unzip -o /app/backend.zip -d /app/backend && rm /app/backend.zip
+RUN mkdir /app/engine && mkdir /app/backend && mkdir /app/frontend
+# 解压 server.tar.gz Agent 引擎
+RUN tar -xzf /app/server.tar.gz -C /app/engine && rm /app/server.tar.gz
 
-COPY nginx.conf /etc/nginx/conf.d/default.conf
+# 复制并解压 backend.zip（用于重新导出前端）
+RUN unzip -o /app/backend.zip -d /app/backend && rm /app/backend.zip
+
+# 关键：frontend.zip 解压到 Caddy 官方推荐的 /srv 目录
+RUN mkdir -p /srv && \
+    unzip -o /app/frontend.zip -d /srv/ && \
+    rm /app/frontend.zip
+
+# 把 Caddyfile 放到官方默认位置（也可以用 --config 参数，这里最简单）
+COPY Caddyfile /etc/caddy/Caddyfile
+# 复制并解压 frontend.zip（用于重新导出前端）
+# RUN unzip -o /app/frontend/frontend.zip -d /usr/share/nginx/html/ && rm /app/frontend/frontend.zip && chown -R www-data:www-data /usr/share/nginx/html
+# COPY nginx.conf /etc/nginx/nginx.conf
+# COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # =======================================
 
@@ -73,11 +80,22 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 WORKDIR /app
 
 # 暴露应用端口 (如果需要)
-EXPOSE 2021
-
+EXPOSE 2021 2022
+# Caddy 读取这个环境变量
+ENV PORT=2022
+ENV ENV_PATH="/app/.env"
+ENV CONFIG_PATH="/app/engine/config.yaml"
+ENV PROMPT_PATH="/app/prompts"
+ENV TASK_DIR="/app/merlin"
 # Run the FastAPI application by default
-CMD ./entrypoint.sh
+# 给脚本加执行权限
+RUN chmod +x /app/entrypoint.sh
+CMD ["/app/entrypoint.sh"]
 # CMD ["/bin/bash", "-c", "sleep infinity"]
 
-# docker build -f dockerfile -t nova:0.1 .
+# 构建镜像
+# docker build -f Dockerfile -t nova:0.1 .
+# 保存镜像
 # docker save -o nova.tar nova:0.1
+# 创建容器
+# docker run -d -p 2022:2022 -p 8000:8000 --name nova nova:0.1
