@@ -17,6 +17,18 @@ handle @reflex_backend {
 root * /srv
 
 route {
+    # 强制所有 .js 文件返回正确 MIME（正则匹配结尾 .js）
+    @js_files path_regexp ^(.*\.js)$
+    header @js_files Content-Type application/javascript
+
+    # 额外覆盖所有 _next 路径（Reflex/Next.js 模块脚本都在这里）
+    @next_files path /_next/*
+    header @next_files Content-Type application/javascript
+
+    # 可选：如果有 .mjs 文件（现代 JS 模块）
+    @mjs_files path_regexp ^(.*\.mjs)$
+    header @mjs_files Content-Type application/javascript
+
     # SPA 路由：所有非文件路径都 fallback 到 index.html
     try_files {path} {path}/ /index.html
 

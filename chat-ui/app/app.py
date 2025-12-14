@@ -40,7 +40,13 @@ def redirect_component():
 
 
 # Add state and page to the app.
-app = rx.App(theme=rx.theme(appearance="dark", accent_color="green"))
+app = rx.App(
+    theme=rx.theme(appearance="dark", accent_color="green"),
+    style={
+        "div[class*='reflex-badge']": {"display": "none !important"},
+        "a[href*='reflex.dev']": {"display": "none !important"},  # 如果有链接
+    },
+)
 
 app.add_page(
     component=redirect_component,

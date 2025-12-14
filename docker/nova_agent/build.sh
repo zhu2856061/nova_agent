@@ -4,7 +4,7 @@ set -e  # 任何命令失败时立即退出
 # build package
 module=nova
 project_name=nova_agent
-API_URL=http://localhost:2022
+API_URL=http://8.163.8.207:2022
 
 # 0. 构建 chat-ui 的项目
 OLD_PWD=$(pwd)
