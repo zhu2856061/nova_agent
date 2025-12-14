@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 
 def set_dotenv():
     env_path = str((Path(__file__).parent.parent.parent / ".env").resolve())
-    env_path = os.environ.get("LLM_ENV_PATH", env_path)
+    env_path = os.environ.get("ENV_PATH", env_path)
     load_dotenv(env_path)
 
     logger.info("从.env 文件导入环境成功")
