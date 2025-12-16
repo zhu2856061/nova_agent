@@ -11,21 +11,23 @@ import requests
 request_data = {
     "trace_id": "12345",
     "context": {
-        "model": "basic",
+        "model": "deepseek",
         "thread_id": "nova",
         "config": {"temperature": 0.7},
     },
     "state": {
-        "messages": [
-            {
-                "role": "system",
-                "content": "You are a helpful assistant.",
-            },
-            {
-                "role": "user",
-                "content": "What is the capital of France?",
-            },
-        ],
+        "messages": {
+            "value": [
+                {
+                    "role": "system",
+                    "content": "You are a helpful assistant.",
+                },
+                {
+                    "role": "user",
+                    "content": "What is the capital of France?",
+                },
+            ],
+        }
     },
     "stream": True,
 }

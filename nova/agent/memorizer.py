@@ -19,8 +19,9 @@ from nova.llms import get_llm_by_type
 from nova.memory import SQLITESTORE
 from nova.model.agent import Context, Messages, State
 from nova.prompts.template import apply_prompt_template, get_prompt
-from nova.tools import upsert_memory_tool
-from nova.utils import get_today_str, log_error_set_color, log_info_set_color
+from nova.tools.memory_manager import upsert_memory_tool
+from nova.utils.common import get_today_str
+from nova.utils.log_utils import log_error_set_color, log_info_set_color
 
 logger = logging.getLogger(__name__)
 # ######################################################################################

@@ -22,8 +22,8 @@ from pydantic import BaseModel, Field
 from nova.llms import get_llm_by_type
 from nova.model.agent import Context, Messages, State
 from nova.prompts.template import apply_prompt_template, get_prompt
-from nova.utils import get_today_str, log_error_set_color, log_info_set_color
-from nova.utils.common import convert_base_message
+from nova.utils.common import convert_base_message, get_today_str
+from nova.utils.log_utils import log_error_set_color, log_info_set_color
 
 logger = logging.getLogger(__name__)
 # ######################################################################################

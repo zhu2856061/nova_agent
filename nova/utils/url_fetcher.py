@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-# @Time   : 2025/09/19 10:24
+# @Time   : 2025/09/12
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
+from __future__ import annotations
 
 import hashlib
 import logging

@@ -4,7 +4,6 @@ SYSTEM:
   TIMEOUT: 1800
 
   log_dir: "./logs"
-  env_path: "./env"
   task_dir: $TASK_DIR
   cache_dir: "./cache"
   prompt_template_dir: $PROMPT_PATH

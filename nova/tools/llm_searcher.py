@@ -2,6 +2,8 @@
 # @Time   : 2025/08/19 10:24
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
+from __future__ import annotations
+
 import asyncio
 import logging
 import re
@@ -15,7 +17,7 @@ from pydantic import BaseModel, Field
 
 from nova.llms import get_llm_by_type
 from nova.prompts.template import apply_prompt_template, get_prompt
-from nova.utils import get_today_str
+from nova.utils.common import get_today_str
 
 from .baidu_serper import serp_baidu_tool
 from .web_crawler import web_crawler_tool

@@ -2,6 +2,8 @@
 # @Time   : 2025/08/19 10:24
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
+from __future__ import annotations
+
 import asyncio
 import logging
 import random
@@ -15,7 +17,7 @@ from markdownify import markdownify
 from playwright.async_api import Browser, BrowserContext, Page, async_playwright
 from pydantic import BaseModel, Field
 
-from nova.utils import SogouUrlFetcher
+from nova.utils.url_fetcher import SogouUrlFetcher
 
 logger = logging.getLogger(__name__)
 

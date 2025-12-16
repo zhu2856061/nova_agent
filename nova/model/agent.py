@@ -28,8 +28,9 @@ class Messages(BaseModel):
 def override_reducer(current_value: Messages, new_value: Any):
     """
     支持两种写入方式：
-    - 普通追加：直接返回 BaseMessage 或 List[BaseMessage]
-    - 强制覆盖：返回 {"type": "override", "value": [...]}
+    - 普通追加（默认）：直接返回 BaseMessage 或 List[BaseMessage]
+    - 强制覆盖（override）：返回 {"type": "override", "value": [...]}
+    - 强制清除（end）: 返回空值，有时候并不需要上下文信息，免得冗余
     """
     if isinstance(new_value, Messages):
         if new_value.type == "end":

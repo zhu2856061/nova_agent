@@ -2,6 +2,8 @@
 # @Time   : 2025/05/12
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
+from __future__ import annotations
+
 import logging
 from typing import AsyncGenerator, Dict, List
 

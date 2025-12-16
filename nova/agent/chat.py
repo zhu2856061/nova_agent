@@ -13,7 +13,7 @@ from langgraph.types import Command
 
 from nova.llms import get_llm_by_type
 from nova.model.agent import Context, Messages, State
-from nova.utils import log_error_set_color, log_info_set_color
+from nova.utils.log_utils import log_error_set_color, log_info_set_color
 
 logger = logging.getLogger(__name__)
 # ######################################################################################

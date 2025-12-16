@@ -13,15 +13,11 @@ dependencies = [
     "fastapi>=0.116.1",
     "gunicorn>=23.0.0",
     "json-repair>=0.48.0",
-    "langchain==0.3.27",
-    "langchain-community==0.3.27",
-    "langchain-deepseek==0.1.4",
-    "langchain-google-genai==2.1.9",
-    "langchain-litellm==0.2.2",
-    "langgraph==0.6.4",
-    "langgraph-cli[inmem]==0.4.2",
-    "langsmith==0.4.10",
-    "litellm>=1.74.12",
+    "langchain==1.1.3",
+    "langchain-community==0.4.1",
+    "langchain-litellm==0.3.5",
+    "langgraph==1.0.5",
+    "litellm==1.74.12",
     "markdown>=3.8.2",
     "markdownify>=1.2.0",
     "matplotlib>=3.10.7",
@@ -39,3 +35,7 @@ default = true
 
 [[tool.uv.index]]
 url = "https://download.pytorch.org/whl/cpu"
+
+[tool.uv]
+# 全局设置 uv 的索引策略（对 add/install 等命令均生效）
+index-strategy = "unsafe-best-match"
