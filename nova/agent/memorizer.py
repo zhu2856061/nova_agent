@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from typing import cast
+from typing import Literal, cast
 
 from langchain_core.messages import SystemMessage
 from langgraph.checkpoint.memory import InMemorySaver
@@ -36,7 +36,9 @@ logger = logging.getLogger(__name__)
 
 
 # 函数
-async def memorizer(state: State, runtime: Runtime[Context]):
+async def memorizer(
+    state: State, runtime: Runtime[Context]
+) -> Command[Literal["memorizer_tools", "__end__"]]:
     _NODE_NAME = "memorizer"
     try:
         # 变量
@@ -123,7 +125,9 @@ async def execute_tool_safely(tool, args):
         return f"Error executing tool: {str(e)}"
 
 
-async def memorizer_tools(state: State, runtime: Runtime[Context]):
+async def memorizer_tools(
+    state: State, runtime: Runtime[Context]
+) -> Command[Literal["__end__"]]:
     _NODE_NAME = "memorizer_tools"
     try:
         # 变量

@@ -5,7 +5,7 @@
 import asyncio
 import logging
 import os
-from typing import Annotated
+from typing import Annotated, Literal
 
 from langchain_core.messages import (
     HumanMessage,
@@ -82,7 +82,9 @@ class ResearcherOutputState(BaseModel):
 
 
 # 用户澄清
-async def clarify_with_user(state: State, runtime: Runtime[Context]):
+async def clarify_with_user(
+    state: State, runtime: Runtime[Context]
+) -> Command[Literal["write_research_brief", "__end__"]]:
     _NODE_NAME = "clarify_with_user"
     try:
         # 变量
@@ -146,7 +148,9 @@ async def clarify_with_user(state: State, runtime: Runtime[Context]):
 
 
 # 转换问题
-async def write_research_brief(state: State, runtime: Runtime[Context]):
+async def write_research_brief(
+    state: State, runtime: Runtime[Context]
+) -> Command[Literal["supervisor", "__end__"]]:
     _NODE_NAME = "write_research_brief"
     try:
         # 变量
@@ -204,7 +208,9 @@ async def write_research_brief(state: State, runtime: Runtime[Context]):
 
 
 # 监督员
-async def supervisor(state: State, runtime: Runtime[Context]):
+async def supervisor(
+    state: State, runtime: Runtime[Context]
+) -> Command[Literal["supervisor_tools", "__end__"]]:
     _NODE_NAME = "supervisor"
     try:
         # 变量
@@ -267,7 +273,9 @@ async def supervisor(state: State, runtime: Runtime[Context]):
 
 
 # 监督员工具
-async def supervisor_tools(state: State, runtime: Runtime[Context]):
+async def supervisor_tools(
+    state: State, runtime: Runtime[Context]
+) -> Command[Literal["final_report_generation", "supervisor", "__end__"]]:
     _NODE_NAME = "supervisor_tools"
     try:
         # 变量
@@ -370,7 +378,9 @@ async def supervisor_tools(state: State, runtime: Runtime[Context]):
 
 
 # 报告员
-async def final_report_generation(state: State, runtime: Runtime[Context]):
+async def final_report_generation(
+    state: State, runtime: Runtime[Context]
+) -> Command[Literal["__end__"]]:
     _NODE_NAME = "final_report_generation"
     try:
         # 变量
@@ -476,3 +486,5 @@ graph_builder.add_edge(START, "clarify_with_user")
 checkpointer = InMemorySaver()
 deepresearcher = graph_builder.compile(checkpointer=checkpointer)
 # deepresearcher = graph_builder.compile()
+# png_bytes = deepresearcher.get_graph(xray=True).draw_mermaid()
+# logger.info(f"ainovel_architecture_agent: \n\n{png_bytes}")
