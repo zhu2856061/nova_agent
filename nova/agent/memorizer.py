@@ -15,7 +15,8 @@ from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import Command
 
-from nova.llms import get_llm_by_type
+from nova.agent.utils import node_with_hooks
+from nova.llms import llm_with_hooks
 from nova.memory import SQLITESTORE
 from nova.model.agent import Context, Messages, State
 from nova.prompts.template import apply_prompt_template, get_prompt
@@ -36,69 +37,137 @@ logger = logging.getLogger(__name__)
 
 
 # 函数
+# async def memorizer(
+#     state: State, runtime: Runtime[Context]
+# ) -> Command[Literal["memorizer_tools", "__end__"]]:
+#     _NODE_NAME = "memorizer"
+#     try:
+#         # 变量
+#         _thread_id = runtime.context.thread_id
+#         _model_name = runtime.context.model
+#         _config = runtime.context.config
+#         _messages = state.messages.value
+
+#         if _config.get("user_id") is None or len(_messages) <= 0:
+#             _err_message = log_error_set_color(
+#                 _thread_id, _NODE_NAME, "user_id is empty"
+#             )
+#             return Command(
+#                 goto="__end__", update={"code": 1, "err_message": _err_message}
+#             )
+
+#         _user_id = cast(str, _config.get("user_id"))
+
+#         # 提示词
+#         async def _assemble_prompt(messages):
+#             # Retrieve the most recent memories for context
+#             memories = await cast(BaseStore, SQLITESTORE).asearch(
+#                 ("memories", _user_id),
+#                 query=str([m.content for m in _messages[-3:]]),  # type: ignore
+#                 limit=10,
+#             )
+
+#             # Format memories for inclusion in the prompt
+#             tmp = {
+#                 "user_info": "\n".join(f"[{mem.key}]: {mem.value}" for mem in memories),
+#                 "date": get_today_str(),
+#             }
+
+#             _prompt_tamplate = get_prompt("memorizer", _NODE_NAME)
+#             return [
+#                 SystemMessage(content=apply_prompt_template(_prompt_tamplate, tmp))
+#             ] + messages
+
+#         # LLM
+#         def _get_llm():
+#             return get_llm_by_type(_model_name).bind_tools([upsert_memory_tool])
+
+#         response = await _get_llm().ainvoke(await _assemble_prompt(_messages))
+#         log_info_set_color(_thread_id, _NODE_NAME, response)
+
+#         # 判断是否有工具调用
+#         tool_calls = getattr(response, "tool_calls", [])
+
+#         if not tool_calls:  # 如果没有工具调用，则正常返回 - 回复结果
+#             return Command(
+#                 goto="__end__",
+#                 update={
+#                     "code": 0,
+#                     "err_message": "ok",
+#                     "data": {_NODE_NAME: response},
+#                 },
+#             )
+
+#         return Command(
+#             goto="memorizer_tools",
+#             update={
+#                 "code": 0,
+#                 "err_message": "ok",
+#                 "data": {_NODE_NAME: response},
+#             },
+#         )
+
+#     except Exception as e:
+#         _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
+#         return Command(
+#             goto="__end__",
+#             update={
+#                 "code": 1,
+#                 "err_message": _err_message,
+#                 "messages": Messages(type="end"),
+#             },
+#         )
+
+
+# 函数
 async def memorizer(
-    state: State, runtime: Runtime[Context]
+    state: State, runtime: Runtime[Context], **kwargs
 ) -> Command[Literal["memorizer_tools", "__end__"]]:
     _NODE_NAME = "memorizer"
-    try:
-        # 变量
-        _thread_id = runtime.context.thread_id
-        _model_name = runtime.context.model
-        _config = runtime.context.config
-        _messages = state.messages.value
 
-        if _config.get("user_id") is None or len(_messages) <= 0:
-            _err_message = log_error_set_color(
-                _thread_id, _NODE_NAME, "user_id is empty"
-            )
-            return Command(
-                goto="__end__", update={"code": 1, "err_message": _err_message}
-            )
+    # 变量
+    _thread_id = runtime.context.thread_id
+    _model_name = runtime.context.model
+    _config = runtime.context.config
+    _messages = state.messages.value
 
-        _user_id = cast(str, _config.get("user_id"))
+    if _config.get("user_id") is None or len(_messages) <= 0:
+        _err_message = log_error_set_color(_thread_id, _NODE_NAME, "user_id is empty")
+        return Command(goto="__end__", update={"code": 1, "err_message": _err_message})
 
-        # 提示词
-        async def _assemble_prompt(messages):
-            # Retrieve the most recent memories for context
-            memories = await cast(BaseStore, SQLITESTORE).asearch(
-                ("memories", _user_id),
-                query=str([m.content for m in _messages[-3:]]),  # type: ignore
-                limit=10,
-            )
+    _user_id = cast(str, _config.get("user_id"))
 
-            # Format memories for inclusion in the prompt
-            tmp = {
-                "user_info": "\n".join(f"[{mem.key}]: {mem.value}" for mem in memories),
-                "date": get_today_str(),
-            }
+    # 提示词
+    async def _assemble_prompt(messages):
+        # Retrieve the most recent memories for context
+        memories = await cast(BaseStore, SQLITESTORE).asearch(
+            ("memories", _user_id),
+            query=str([m.content for m in _messages[-3:]]),  # type: ignore
+            limit=10,
+        )
 
-            _prompt_tamplate = get_prompt("memorizer", _NODE_NAME)
-            return [
-                SystemMessage(content=apply_prompt_template(_prompt_tamplate, tmp))
-            ] + messages
+        # Format memories for inclusion in the prompt
+        tmp = {
+            "user_info": "\n".join(f"[{mem.key}]: {mem.value}" for mem in memories),
+            "date": get_today_str(),
+        }
+
+        _prompt_tamplate = get_prompt("memorizer", _NODE_NAME)
+        return [
+            SystemMessage(content=apply_prompt_template(_prompt_tamplate, tmp))
+        ] + messages
 
         # LLM
-        def _get_llm():
-            return get_llm_by_type(_model_name).bind_tools([upsert_memory_tool])
 
-        response = await _get_llm().ainvoke(await _assemble_prompt(_messages))
-        log_info_set_color(_thread_id, _NODE_NAME, response)
+    response = await llm_with_hooks(
+        _thread_id, _NODE_NAME, await _assemble_prompt(_messages), _model_name
+    )
 
-        # 判断是否有工具调用
-        tool_calls = getattr(response, "tool_calls", [])
-
-        if not tool_calls:  # 如果没有工具调用，则正常返回 - 回复结果
-            return Command(
-                goto="__end__",
-                update={
-                    "code": 0,
-                    "err_message": "ok",
-                    "data": {_NODE_NAME: response},
-                },
-            )
-
+    # 判断是否有工具调用
+    tool_calls = getattr(response, "tool_calls", [])
+    if not tool_calls:  # 如果没有工具调用，则正常返回 - 回复结果
         return Command(
-            goto="memorizer_tools",
+            goto="__end__",
             update={
                 "code": 0,
                 "err_message": "ok",
@@ -106,16 +175,14 @@ async def memorizer(
             },
         )
 
-    except Exception as e:
-        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
-        return Command(
-            goto="__end__",
-            update={
-                "code": 1,
-                "err_message": _err_message,
-                "messages": Messages(type="end"),
-            },
-        )
+    return Command(
+        goto="memorizer_tools",
+        update={
+            "code": 0,
+            "err_message": "ok",
+            "data": {_NODE_NAME: response},
+        },
+    )
 
 
 async def execute_tool_safely(tool, args):
@@ -126,7 +193,7 @@ async def execute_tool_safely(tool, args):
 
 
 async def memorizer_tools(
-    state: State, runtime: Runtime[Context]
+    state: State, runtime: Runtime[Context], **kwargs
 ) -> Command[Literal["__end__"]]:
     _NODE_NAME = "memorizer_tools"
     try:
@@ -207,12 +274,19 @@ async def memorizer_tools(
         return Command(goto="__end__", update={"code": 1, "err_message": _err_message})
 
 
-# researcher subgraph
-_agent = StateGraph(State, context_schema=Context)
-_agent.add_node("memorizer", memorizer)
-_agent.add_node("memorizer_tools", memorizer_tools)
+def compile_memorizer_agent():
+    # researcher subgraph
+    _agent = StateGraph(State, context_schema=Context)
+    _agent.add_node("memorizer", node_with_hooks(memorizer, "memorizer"))
+    _agent.add_node(
+        "memorizer_tools", node_with_hooks(memorizer_tools, "memorizer_tools")
+    )
 
-_agent.add_edge(START, "memorizer")
+    _agent.add_edge(START, "memorizer")
 
-checkpointer = InMemorySaver()
-memorizer_agent = _agent.compile(checkpointer=checkpointer)
+    checkpointer = InMemorySaver()
+
+    return _agent.compile(checkpointer=checkpointer)
+
+
+memorizer_agent = compile_memorizer_agent()

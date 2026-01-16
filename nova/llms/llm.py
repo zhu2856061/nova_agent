@@ -4,9 +4,11 @@
 # @Moto   : Knowledge comes from decomposition
 from __future__ import annotations
 
-from typing import Type, cast
+import time
+from typing import Any, Awaitable, Callable, Type, cast
 
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.output_parsers.base import OutputParserLike
 from langchain_core.output_parsers.openai_tools import (
     JsonOutputKeyToolsParser,
@@ -18,9 +20,11 @@ from langchain_core.utils.function_calling import (
 from langchain_core.utils.pydantic import TypeBaseModel, is_basemodel_subclass
 from langchain_litellm import ChatLiteLLM, ChatLiteLLMRouter
 from litellm import Router  # type: ignore
+from pydantic import BaseModel
 
 from nova import CONF
 from nova.memory import SQLITECACHE
+from nova.utils.log_utils import log_error_set_color, log_info_set_color
 
 # ######################################################################################
 # 配置
@@ -60,6 +64,87 @@ def get_llm_by_type(llm_type: str):
         raise ValueError(f"初始化 LLM 实例失败（类型：{llm_type}）: {str(e)}") from e
 
     return llm
+
+
+class LLMHooks:
+    @staticmethod
+    async def before_llm(
+        thread_id: str,
+        node_name: str,
+        messages: list[BaseMessage],
+    ):
+        msg_count = len(messages)
+        last_content = f"{messages[-1].content[:80]}..." if messages else ""
+        message = f"[LLM Call] -> messages: {msg_count} | last: {last_content}"
+
+        log_info_set_color(thread_id, node_name, message)
+        # 可扩展：prompt 注入、敏感词过滤、修改 messages、动态调整 temperature 等
+
+    @staticmethod
+    async def after_llm(
+        thread_id: str,
+        node_name: str,
+        response: Any,
+        elapsed: float,
+    ):
+        if isinstance(response, AIMessage):
+            _result = response.content
+            tool_calls = (
+                len(response.tool_calls) if hasattr(response, "tool_calls") else 0
+            )
+        elif isinstance(response, BaseModel):
+            _result = response.model_dump()
+        else:
+            _result = response
+        _result = str(_result)
+
+        content_preview = f"{_result[:80]}..." if _result else ""
+
+        usage = getattr(response, "usage_metadata", None)
+        tokens_str = (
+            f" in:{usage.get('input_tokens', '?')} out:{usage.get('output_tokens', '?')}"
+            if usage
+            else ""
+        )
+        message = f"[LLM Returned: {elapsed:.3f}s] <- tools:{tool_calls} | tokens:{tokens_str} | response:{content_preview}"
+
+        log_info_set_color(thread_id, node_name, message)
+        # 可扩展：输出校验、PII 脱敏、自动总结等
+
+    @staticmethod
+    async def on_error(thread_id: str, node_name: str, exc: Exception):
+        _err_message = log_error_set_color(thread_id, node_name, exc)
+        return _err_message
+        # 可扩展：统一错误上报、转成 AIMessage 错误回复
+
+
+# ─── LLM 调用包装器（实现 LLM 前 + LLM 后） ───
+async def llm_with_hooks(
+    thread_id: str,
+    node_name: str,
+    messages: list[BaseMessage],
+    model_name: str,
+    tools: list | None = None,
+    **invoke_kwargs,
+):
+    await LLMHooks.before_llm(thread_id, node_name, messages)
+
+    start = time.perf_counter()
+    try:
+        if tools:
+            model = get_llm_by_type(model_name).bind_tools(tools)
+        else:
+            model = get_llm_by_type(model_name)
+        response: AIMessage = await model.ainvoke(messages, **invoke_kwargs)
+        elapsed = time.perf_counter() - start
+
+        await LLMHooks.after_llm(thread_id, node_name, response, elapsed)
+        # 可选：在这里记录总耗时、token 等
+        return response
+
+    except Exception as e:
+        await LLMHooks.on_error(thread_id, node_name, e)
+        raise  # 或返回错误 AIMessage
 
 
 def with_structured_output(
