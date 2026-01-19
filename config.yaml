@@ -2,6 +2,10 @@ SYSTEM:
   IP_PORT: "0.0.0.0:2021"
   WORKERS: 2
   TIMEOUT: 1800
+  NAME: "Nova Service"
+  DESC: "一个通用的Agent服务"
+  VERSION: "0.0.1"
+  DEBUG: False
 
   log_dir: "./logs"
   task_dir: $TASK_DIR

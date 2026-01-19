@@ -1079,5 +1079,5 @@ ainovel_chapter_agent.add_edge("next_chapter_draft_agent", "human_in_loop_agree"
 ainovel_chapter_agent = ainovel_chapter_agent.compile(checkpointer=checkpointer)
 
 
-png_bytes = ainovel_chapter_agent.get_graph(xray=True).draw_mermaid()
-logger.info(f"ainovel_chapter_agent: \n\n{png_bytes}")
+# png_bytes = ainovel_chapter_agent.get_graph(xray=True).draw_mermaid()
+# logger.info(f"ainovel_chapter_agent: \n\n{png_bytes}")

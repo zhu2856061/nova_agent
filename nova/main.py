@@ -7,9 +7,12 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
+from nova import CONF
+from nova.controller.exceptions import NOVAException, create_error_response
 from nova.service.agent_service import agent_router
 from nova.service.chat_service import chat_router
 
@@ -28,10 +31,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title="Nova Service",
-    description="一个通用的Agent服务",
-    version="1.0.0",
+    title=CONF["SYSTEM"]["NAME"],
+    description=CONF["SYSTEM"]["DESC"],
+    version=CONF["SYSTEM"]["VERSION"],
     lifespan=lifespan,
+    debug=CONF["SYSTEM"]["DEBUG"],
 )
 
 # Add CORS middleware
@@ -49,10 +53,28 @@ async def health_check():
     return {"status": "healthy"}
 
 
+@app.get("/")
+async def root():
+    return {
+        "message": f"{CONF['SYSTEM']['NAME']} 服务正在运行",
+        "version": f"{CONF['SYSTEM']['VERSION']}",
+    }
+
+
 # init
 # Include the LLM router
 app.include_router(chat_router)
 app.include_router(agent_router)
+
+
+# 添加全局异常处理器
+@app.exception_handler(NOVAException)
+async def nova_exception_handler(request: Request, exc: NOVAException):
+    """
+    处理自定义NOVA异常
+    """
+    logger.error(f"处理NOVA异常: {exc.error_code} - {exc.detail}", exc_info=True)
+    return JSONResponse(status_code=exc.status_code, content=create_error_response(exc))
 
 
 if __name__ == "__main__":
