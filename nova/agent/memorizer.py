@@ -125,19 +125,20 @@ async def memorizer(
 ) -> Command[Literal["memorizer_tools", "__end__"]]:
     _NODE_NAME = "memorizer"
 
-    # 变量
+    # 1 变量
     _thread_id = runtime.context.thread_id
     _model_name = runtime.context.model
     _config = runtime.context.config
     _messages = state.messages.value
 
+    # 2 变量检查
     if _config.get("user_id") is None or len(_messages) <= 0:
         _err_message = log_error_set_color(_thread_id, _NODE_NAME, "user_id is empty")
         return Command(goto="__end__", update={"code": 1, "err_message": _err_message})
 
     _user_id = cast(str, _config.get("user_id"))
 
-    # 提示词
+    # 3 提示词
     async def _assemble_prompt(messages):
         # Retrieve the most recent memories for context
         memories = await cast(BaseStore, SQLITESTORE).asearch(
@@ -159,11 +160,12 @@ async def memorizer(
 
         # LLM
 
+    # 4 大模型
     response = await llm_with_hooks(
         _thread_id, _NODE_NAME, await _assemble_prompt(_messages), _model_name
     )
 
-    # 判断是否有工具调用
+    # 5 判断下一个节点的逻辑
     tool_calls = getattr(response, "tool_calls", [])
     if not tool_calls:  # 如果没有工具调用，则正常返回 - 回复结果
         return Command(

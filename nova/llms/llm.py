@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import time
-from typing import Any, Awaitable, Callable, Type, cast
+from typing import Any, Type, cast
 
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import AIMessage, BaseMessage
@@ -87,6 +87,8 @@ class LLMHooks:
         response: Any,
         elapsed: float,
     ):
+        tool_calls = 0
+
         if isinstance(response, AIMessage):
             _result = response.content
             tool_calls = (
@@ -122,9 +124,11 @@ class LLMHooks:
 async def llm_with_hooks(
     thread_id: str,
     node_name: str,
-    messages: list[BaseMessage],
+    messages: list,
     model_name: str,
+    *,
     tools: list | None = None,
+    structured_output: Any = None,
     **invoke_kwargs,
 ):
     await LLMHooks.before_llm(thread_id, node_name, messages)
@@ -133,12 +137,18 @@ async def llm_with_hooks(
     try:
         if tools:
             model = get_llm_by_type(model_name).bind_tools(tools)
+        elif structured_output:
+            model = get_llm_by_type(model_name).with_structured_output(
+                structured_output
+            )
         else:
             model = get_llm_by_type(model_name)
-        response: AIMessage = await model.ainvoke(messages, **invoke_kwargs)
-        elapsed = time.perf_counter() - start
 
+        response: AIMessage = await model.ainvoke(messages, **invoke_kwargs)  # type: ignore
+
+        elapsed = time.perf_counter() - start
         await LLMHooks.after_llm(thread_id, node_name, response, elapsed)
+
         # 可选：在这里记录总耗时、token 等
         return response
 

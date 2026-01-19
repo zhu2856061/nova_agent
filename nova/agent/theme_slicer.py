@@ -19,11 +19,12 @@ from langgraph.runtime import Runtime
 from langgraph.types import Command, interrupt
 from pydantic import BaseModel, Field
 
-from nova.llms import get_llm_by_type
+from nova.agent.utils import node_with_hooks
+from nova.llms import llm_with_hooks
 from nova.model.agent import Context, Messages, State
 from nova.prompts.template import apply_prompt_template, get_prompt
 from nova.utils.common import convert_base_message, get_today_str
-from nova.utils.log_utils import log_error_set_color, log_info_set_color
+from nova.utils.log_utils import log_info_set_color
 
 logger = logging.getLogger(__name__)
 # ######################################################################################
@@ -48,54 +49,46 @@ class Topics(BaseModel):
 # 函数
 async def theme_slicer(state: State, runtime: Runtime[Context]):
     _NODE_NAME = "theme_slicer"
-    try:
-        # 变量
-        _thread_id = runtime.context.thread_id
-        _model_name = runtime.context.model
-        _messages = state.messages.value
-        _human_in_loop_value = state.user_guidance.get("human_in_loop_value", "")
 
-        # 提示词
-        def _assemble_prompt(messages):
-            tmp = {
-                "date": get_today_str(),
-                "content": get_buffer_string(messages),
-                "user_guidance": _human_in_loop_value,
-            }
+    # 变量
+    _thread_id = runtime.context.thread_id
+    _model_name = runtime.context.model
+    _messages = state.messages.value
+    _human_in_loop_value = state.user_guidance.get("human_in_loop_value", "")
 
-            _prompt_tamplate = get_prompt("theme", _NODE_NAME)
-            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
+    # 提示词
+    def _assemble_prompt(messages):
+        tmp = {
+            "date": get_today_str(),
+            "content": get_buffer_string(messages),
+            "user_guidance": _human_in_loop_value,
+        }
 
-        # LLM
-        def _get_llm():
-            return get_llm_by_type(_model_name).with_structured_output(Topics)
+        _prompt_tamplate = get_prompt("theme", _NODE_NAME)
+        return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
-        response = await _get_llm().ainvoke(_assemble_prompt(_messages))
-        log_info_set_color(_thread_id, _NODE_NAME, response)
+    # 4 大模型
+    response = await llm_with_hooks(
+        _thread_id,
+        _NODE_NAME,
+        _assemble_prompt(_messages),
+        _model_name,
+        structured_output=Topics,
+    )
 
-        _data = []
-        for topic in response.topics:  # type: ignore
-            _data.append(topic.model_dump())
-        return Command(
-            goto="human_in_loop",
-            update={
-                "code": 0,
-                "err_message": "ok",
-                "messages": Messages(type="add", value=[AIMessage(content=_data)]),
-                "data": {_NODE_NAME: _data},
-            },
-        )
+    _data = []
+    for topic in response.topics:  # type: ignore
+        _data.append(topic.model_dump())
 
-    except Exception as e:
-        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
-        return Command(
-            goto="__end__",
-            update={
-                "code": 1,
-                "err_message": _err_message,
-                "messages": Messages(type="end"),
-            },
-        )
+    return Command(
+        goto="human_in_loop",
+        update={
+            "code": 0,
+            "err_message": "ok",
+            "messages": Messages(type="add", value=[AIMessage(content=_data)]),
+            "data": {_NODE_NAME: _data},
+        },
+    )
 
 
 async def human_in_loop(state: State, runtime: Runtime[Context]):
@@ -130,12 +123,16 @@ async def human_in_loop(state: State, runtime: Runtime[Context]):
         )
 
 
-# researcher subgraph
-_agent = StateGraph(State, context_schema=Context)
-_agent.add_node("theme_slicer", theme_slicer)
-_agent.add_node("human_feedback", human_in_loop)
-_agent.add_edge(START, "theme_slicer")
-_agent.add_edge("theme_slicer", "human_feedback")
+def compile_theme_slicer_agent():
+    # researcher subgraph
+    _agent = StateGraph(State, context_schema=Context)
+    _agent.add_node("theme_slicer", node_with_hooks(theme_slicer, "theme_slicer"))
+    _agent.add_node("human_feedback", human_in_loop)
+    _agent.add_edge(START, "theme_slicer")
+    _agent.add_edge("theme_slicer", "human_feedback")
 
-checkpointer = InMemorySaver()
-theme_slicer_agent = _agent.compile(checkpointer=checkpointer)
+    checkpointer = InMemorySaver()
+    return _agent.compile(checkpointer=checkpointer)
+
+
+theme_slicer_agent = compile_theme_slicer_agent()
