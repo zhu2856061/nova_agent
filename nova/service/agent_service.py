@@ -297,5 +297,26 @@ def register_agent_endpoints():
         agent_router.post(f"/{agent_name}", name=f"{agent_name}_service")(endpoint)
 
 
+# 动态新增函数
+def add_register_agent_endpoints(agent_name, agent_instance):
+    """Dynamically register all agent endpoints from the registry"""
+
+    # 增加一层闭包，固定当前的 agent_name
+    def create_endpoint_factory():
+        async def endpoint(
+            request: AgentRequest,
+            agent=Depends(lambda: agent_instance),  # 使用固定的 current_agent_name
+        ):
+            return await agent_service(agent, request)
+
+        return endpoint
+
+    # 为每个 agent 生成独立的 endpoint
+    endpoint = create_endpoint_factory()
+
+    # 注册端点
+    agent_router.post(f"/{agent_name}", name=f"{agent_name}_service")(endpoint)
+
+
 # Register all agent endpoints
 register_agent_endpoints()

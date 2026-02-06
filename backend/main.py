@@ -13,11 +13,16 @@ from fastapi.responses import JSONResponse
 
 from nova import CONF
 from nova.controller.exceptions import NOVAException, create_error_response
+from nova.service.agent_service import add_register_agent_endpoints, agent_router
 from nova.service.chat_service import chat_router
 
-from .agent_service import agent_router
+from .agent.chat import chat_agent
 
 logger = logging.getLogger(__name__)
+
+
+# 用户自定义的agent 在这里注册进服务
+add_register_agent_endpoints("mk", chat_agent)
 
 
 # --- FastAPI App Initialization ---

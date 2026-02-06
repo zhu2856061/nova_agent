@@ -68,6 +68,9 @@ sh run_langgraph_cli.sh
 
 🚀[2025-11-14] 完成小说ainovel 的互动操作模式
 
+🚀[2026-02-06] 将代码拆分成3部分：frontend 前端，backend 后端，nova 核心件
+
+
 [todo]
 - 小说生成，需要新增各种人工编辑器（以章节为单位进行）
 - 新增代码分析/解决/生成 agent
