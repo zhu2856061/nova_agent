@@ -1,4 +1,4 @@
 export PROMPT_PATH="../prompts"
 export TASK_DIR="../merlin"
-cd ../chat-ui
+cd ../frontend
 uv run reflex run

@@ -16,7 +16,7 @@ from langchain_core.tools import BaseTool, InjectedToolArg
 from pydantic import BaseModel, Field
 
 from nova.llms import get_llm_by_type
-from nova.prompts.template import apply_prompt_template, get_prompt
+from nova.llms.template import apply_prompt_template, get_prompt
 from nova.utils.common import get_today_str
 
 from .baidu_serper import serp_baidu_tool

@@ -19,7 +19,7 @@ from nova.agent.utils import node_with_hooks
 from nova.llms import llm_with_hooks
 from nova.memory import SQLITESTORE
 from nova.model.agent import Context, Messages, State
-from nova.prompts.template import apply_prompt_template, get_prompt
+from nova.llms.template import apply_prompt_template, get_prompt
 from nova.tools.memory_manager import upsert_memory_tool
 from nova.utils.common import get_today_str
 from nova.utils.log_utils import log_error_set_color, log_info_set_color

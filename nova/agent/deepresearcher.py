@@ -24,7 +24,7 @@ from nova.agent.researcher import researcher_agent
 from nova.agent.utils import extract_valid_info, node_with_hooks
 from nova.llms import get_llm_by_type, llm_with_hooks
 from nova.model.agent import Context, Messages, State
-from nova.prompts.template import apply_prompt_template, get_prompt
+from nova.llms.template import apply_prompt_template, get_prompt
 from nova.tools.format_result import markdown_to_html_tool
 from nova.utils.common import get_today_str, override_reducer
 from nova.utils.log_utils import log_error_set_color, log_info_set_color

@@ -22,7 +22,7 @@ from pydantic import BaseModel, Field
 from nova.agent.utils import node_with_hooks
 from nova.llms import llm_with_hooks
 from nova.model.agent import Context, Messages, State
-from nova.prompts.template import apply_prompt_template, get_prompt
+from nova.llms.template import apply_prompt_template, get_prompt
 from nova.utils.common import convert_base_message, get_today_str
 from nova.utils.log_utils import log_info_set_color
 

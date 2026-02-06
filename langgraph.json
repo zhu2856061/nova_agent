@@ -3,8 +3,8 @@
     ".."
   ],
   "graphs": {
-    "ainovel_graph": "../nova/task/ainovel.py:ainovel",
-    "deepresearcher_graph": "../nova/task/deepresearcher.py:deepresearcher"
+    "ainovel_graph": "../nova/agent/ainovel.py:ainovel",
+    "deepresearcher_graph": "../nova/agent/deepresearcher.py:deepresearcher"
   },
   "store": {
     "ttl": {

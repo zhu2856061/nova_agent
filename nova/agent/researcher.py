@@ -20,7 +20,7 @@ from pydantic import BaseModel
 from nova.agent.utils import extract_valid_info, node_with_hooks
 from nova.llms import llm_with_hooks
 from nova.model.agent import Context, Messages, State
-from nova.prompts.template import apply_prompt_template, get_prompt
+from nova.llms.template import apply_prompt_template, get_prompt
 from nova.tools.llm_searcher import llm_searcher_tool
 from nova.tools.wechat_searcher import wechat_searcher_tool
 from nova.utils.common import get_today_str, remove_up_to_last_ai_message

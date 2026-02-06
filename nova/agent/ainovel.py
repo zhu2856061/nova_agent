@@ -18,7 +18,7 @@ from nova.agent.ainovel_architect import ainovel_architecture_agent
 from nova.agent.ainovel_chapter import ainovel_chapter_agent
 from nova.llms import get_llm_by_type
 from nova.model.agent import Context, Messages, State
-from nova.prompts.template import apply_prompt_template, get_prompt
+from nova.llms.template import apply_prompt_template, get_prompt
 from nova.utils.log_utils import (
     log_error_set_color,
     log_info_set_color,

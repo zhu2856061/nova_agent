@@ -13,8 +13,9 @@ from fastapi.responses import JSONResponse
 
 from nova import CONF
 from nova.controller.exceptions import NOVAException, create_error_response
-from nova.service.agent_service import agent_router
 from nova.service.chat_service import chat_router
+
+from .agent_service import agent_router
 
 logger = logging.getLogger(__name__)
 
