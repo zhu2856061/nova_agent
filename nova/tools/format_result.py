@@ -163,7 +163,3 @@ class MarkdownToHtmlTool(BaseTool):
     def _run(self, md_content: str, output_file: str, highlight_code: bool = True):
         """Synchronous wrapper for the async crawl function."""
         return asyncio.run(self._arun(md_content, output_file, highlight_code))
-
-
-# Create an instance
-markdown_to_html_tool = MarkdownToHtmlTool()

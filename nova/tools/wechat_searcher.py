@@ -7,13 +7,13 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from typing import Annotated, Type
+from typing import Annotated, Optional, Type
 
 from langchain_core.tools import BaseTool, InjectedToolArg
 from pydantic import BaseModel, Field
 
-from .wechat_crawler import crawl_wechat_tool
-from .wechat_serper import serp_wechat_tool
+from .wechat_crawler import CrawlWechatTool
+from .wechat_serper import SerpWechatTool
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ class SearchToolInput(BaseModel):
     )
 
 
-class SearchTool(BaseTool):
+class WechatSearchTool(BaseTool):
     name: str = "wechat_search_tool"
     description: str = (
         "A search engine optimized for comprehensive, accurate, and trusted results. "
@@ -53,9 +53,16 @@ class SearchTool(BaseTool):
 
         return text.strip()  # type: ignore
 
-    async def _arun(self, query: str, max_results: int = 5):
+    async def _arun(
+        self,
+        query: str,
+        max_results: int = 5,
+        summarize_model: Optional[str] = None,
+    ):
         # 获取搜索结果
         serp_success = False
+        serp_wechat_tool = SerpWechatTool()
+        crawl_wechat_tool = CrawlWechatTool()
 
         all_results = []
         while not serp_success:
@@ -93,11 +100,12 @@ class SearchTool(BaseTool):
 
                 final_results.append(tmp)
 
-        final_str = ""
-        for line in final_results:
-            final_str += f"<knowledge>\n{line}\n</knowledge>\n\n"
+        if summarize_model is None:
+            final_str = ""
+            for line in final_results:
+                final_str += f"<knowledge>\n{line}\n</knowledge>\n\n"
 
-        return final_str
+            return final_str
 
     def _run(self, query: str, max_results: int = 5):
         """Synchronous wrapper for the async crawl function."""
@@ -109,7 +117,3 @@ class SearchTool(BaseTool):
                 return loop.run_until_complete(self._arun(query, max_results))
         except RuntimeError:
             return asyncio.run(self._arun(query, max_results))
-
-
-# Create an instance
-wechat_searcher_tool = SearchTool()

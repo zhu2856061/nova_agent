@@ -10,15 +10,6 @@ import os
 from pathlib import Path
 from typing import Optional, Type, Union
 
-from langchain_community.tools.file_management import (
-    CopyFileTool,
-    DeleteFileTool,
-    FileSearchTool,
-    ListDirectoryTool,
-    MoveFileTool,
-    ReadFileTool,
-    WriteFileTool,
-)
 from langchain_community.tools.file_management.utils import (
     INVALID_PATH_TEMPLATE,
     BaseFileToolMixin,
@@ -360,40 +351,8 @@ class ReadJsonTool(BaseFileToolMixin, BaseTool):
 # ========================== 工具实例化 ==========================
 # 注意：可通过 root_dir 参数限制文件操作范围，增强安全性
 
-read_file_tool = ReadFileTool()
-write_file_tool = WriteFileTool()
-delete_file_tool = DeleteFileTool()
-list_directory_tool = ListDirectoryTool()
-copy_file_tool = CopyFileTool()
-move_file_tool = MoveFileTool()
-search_file_tool = FileSearchTool()
-
 # 示例：root_dir="./data" 表示所有文件操作都限制在 ./data 目录下
 # 自定义工具实例化（可选指定 root_dir 限制操作范围）
 create_directory_tool = CreateDirectoryTool(root_dir=None)
 write_json_tool = WriteJsonTool(root_dir=None)
 read_json_tool = ReadJsonTool(root_dir=None)
-
-
-# ========================== 工具导出（便于外部调用） ==========================
-__all__ = [
-    # 原生工具实例
-    "read_file_tool",
-    "write_file_tool",
-    "delete_file_tool",
-    "list_directory_tool",
-    "copy_file_tool",
-    "move_file_tool",
-    "search_file_tool",
-    # 自定义工具类 & 实例
-    "CreateDirectoryTool",
-    "WriteJsonTool",
-    "ReadJsonTool",
-    "create_directory_tool",
-    "write_json_tool",
-    "read_json_tool",
-    # 输入模型（便于外部校验参数）
-    "CreateDirectoryInput",
-    "WriteJsonInput",
-    "ReadJsonInput",
-]

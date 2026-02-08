@@ -6,20 +6,33 @@ from __future__ import annotations
 
 from langchain_core.prompts import PromptTemplate
 
-from nova import CONF
 
+class PromptsProvider:
+    """
+    提示模板，提供两个方法，一个用于应用模板，一个用于获取文件内容
 
-def apply_prompt_template(template, state={}) -> str:
-    _prompt = PromptTemplate.from_template(template=template).format(**state)
-    return _prompt
+    1. prompt_apply_template(self, template, state={}) -> str: 应用模板
 
+    2. get_template(self, child_dir, current_name, dir=None): 获取文件内容
+    """
 
-def get_prompt(task, current_tab, dir=None):
-    if not dir:
-        _prompt_dir = CONF["SYSTEM"]["prompt_template_dir"]
-        _prompt_dir = f"{_prompt_dir}/{task}"
-    else:
-        _prompt_dir = f"{dir}"
-    with open(f"{_prompt_dir}/{current_tab}.md") as f:
-        prompt_content = f.read()
-    return prompt_content
+    def __init__(self, prompt_template_dir) -> None:
+        self.prompt_template_dir = prompt_template_dir
+
+    def prompt_apply_template(self, template, state={}) -> str:
+        # 应用模板
+        _prompt = PromptTemplate.from_template(template=template).format(**state)
+        return _prompt
+
+    def get_template(self, child_dir, current_name, dir=None) -> str:
+        # 获取文本
+
+        if not dir:
+            _template_dir = f"{self.prompt_template_dir}/{child_dir}"
+        else:
+            _template_dir = f"{dir}/{child_dir}"
+
+        with open(f"{_template_dir}/{current_name}.md") as f:
+            _content = f.read()
+
+        return _content

@@ -8,6 +8,7 @@ import asyncio
 import datetime
 import functools
 import logging
+import os
 import zlib
 from importlib import util
 from pathlib import Path, PosixPath
@@ -83,6 +84,7 @@ class SQLiteStoreFixed(BaseStore):
             db_path: SQLite数据库文件路径（默认：langchain_store.db）
             index: 向量索引配置（同InMemoryStore）
         """
+        os.makedirs(database_path, exist_ok=True)
         self.database_path = Path(database_path)
         self.cache_schema = cache_schema
         self.engine = create_async_engine(

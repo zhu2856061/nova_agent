@@ -456,7 +456,3 @@ class CrawlWechatTool(BaseTool):
                 return loop.run_until_complete(self._arun(url))
         except RuntimeError:
             return asyncio.run(self._arun(url))
-
-
-# Create an instance
-crawl_wechat_tool = CrawlWechatTool()

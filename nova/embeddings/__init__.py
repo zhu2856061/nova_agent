@@ -6,9 +6,10 @@ from __future__ import annotations
 
 from nova import CONF
 
-from .local_dict import InDictStore
-from .local_file import LocalFileStore
+from .qwen3_embeddings import Qwen3Embeddings
 
 # 全局变量
-LOCAL_FILE_STORE = LocalFileStore(CONF.SYSTEM.store_dir)
-LOCAL_DICT_STORE = InDictStore()
+qwen3_embeddings_instances = Qwen3Embeddings(
+    configs=CONF.EMBEDDING.model_list,
+    default_model_name=CONF.EMBEDDING.default_model_name,
+)

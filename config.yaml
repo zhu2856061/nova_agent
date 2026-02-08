@@ -7,74 +7,88 @@ SYSTEM:
   VERSION: "0.0.1"
   DEBUG: False
 
+  store_dir: "./store"
+  cache_dir: "./cache"
+
   log_dir: "./logs"
   task_dir: $TASK_DIR
-  cache_dir: "./cache"
+
   prompt_template_dir: $PROMPT_PATH
 
 LLM:
-  - model_name: "basic"
-    litellm_params:
-      model: "openai/Qwen3-235B-A22B"
-      api_base: $LEXIN_LLM_URL
-      api_key: $LEXIN_LLM_API_KEY
-      cache: true
-      verbose: true
-      request_timeout: 600
-      temperature: 0.2
-      top_p: 0.2
-      max_retries: 2
+  default_model_name: "basic"
+  model_list:
+    - model_name: "basic"
+      litellm_params:
+        model: "openai/Qwen3-235B-A22B"
+        api_base: $LEXIN_LLM_URL
+        api_key: $LEXIN_LLM_API_KEY
+        cache: true
+        verbose: true
+        request_timeout: 600
+        temperature: 0.2
+        top_p: 0.2
+        max_retries: 2
 
-  - model_name: "reasoning"
-    litellm_params:
-      model: "openai/Qwen3-235B-A22B"
-      api_base: $LEXIN_LLM_URL
-      api_key: $LEXIN_LLM_API_KEY
-      cache: true
-      verbose: true
-      request_timeout: 600
-      temperature: 0.2
-      top_p: 0.2
-      top_k: 10
-      max_retries: 2
+    - model_name: "reasoning"
+      litellm_params:
+        model: "openai/Qwen3-235B-A22B"
+        api_base: $LEXIN_LLM_URL
+        api_key: $LEXIN_LLM_API_KEY
+        cache: true
+        verbose: true
+        request_timeout: 600
+        temperature: 0.2
+        top_p: 0.2
+        top_k: 10
+        max_retries: 2
 
-  - model_name: "basic_no_thinking"
-    litellm_params:
-      model: "openai/Qwen3-235B-A22B"
-      api_base: $LEXIN_LLM_URL
-      api_key: $LEXIN_LLM_API_KEY
-      cache: true
-      verbose: true
-      request_timeout: 600
-      temperature: 0.2
-      top_p: 0.2
-      top_k: 10
-      max_retries: 2
-      chat_template_kwargs:
-         enable_thinking: false # 关闭思考模式
+    - model_name: "basic_no_thinking"
+      litellm_params:
+        model: "openai/Qwen3-235B-A22B"
+        api_base: $LEXIN_LLM_URL
+        api_key: $LEXIN_LLM_API_KEY
+        cache: true
+        verbose: true
+        request_timeout: 600
+        temperature: 0.2
+        top_p: 0.2
+        top_k: 10
+        max_retries: 2
+        chat_template_kwargs:
+          enable_thinking: false # 关闭思考模式
 
-  - model_name: "deepseek"
-    litellm_params:
-      model: "deepseek/deepseek-chat"
-      api_base: $DEEPSEEK_URL
-      api_key: $DEEPSEEK_API_KEY
-      cache: true
-      verbose: true
-      request_timeout: 600
-      temperature: 0.2
-      top_p: 0.2
-      top_k: 10
-      max_retries: 2
+    - model_name: "deepseek"
+      litellm_params:
+        model: "deepseek/deepseek-chat"
+        api_base: $DEEPSEEK_URL
+        api_key: $DEEPSEEK_API_KEY
+        cache: true
+        verbose: true
+        request_timeout: 600
+        temperature: 0.2
+        top_p: 0.2
+        top_k: 10
+        max_retries: 2
 
-  - model_name: "gemini"
-    litellm_params:
-      model: "openai/gemini-2.0-flash"
-      api_base: $GEMINI_URL
-      api_key: $GEMINI_API_KEY
-      cache: true
-      verbose: true
-      request_timeout: 600
-      temperature: 0.2
-      top_p: 0.2
-      top_k: 10
-      max_retries: 2
+    - model_name: "gemini"
+      litellm_params:
+        model: "openai/gemini-2.0-flash"
+        api_base: $GEMINI_URL
+        api_key: $GEMINI_API_KEY
+        cache: true
+        verbose: true
+        request_timeout: 600
+        temperature: 0.2
+        top_p: 0.2
+        top_k: 10
+        max_retries: 2
+
+EMBEDDING:
+  default_model_name: "qwen3_embedding_8b"
+  model_list:
+    - model_name: "qwen3_embedding_8b"
+      type: "openai"
+      name: "Qwen3-Embedding-8B-agent" 
+      base_url: "http://10.25.71.72:15001/v1"
+      api_key: ""

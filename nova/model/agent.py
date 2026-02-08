@@ -16,9 +16,6 @@ from langgraph.graph.message import (
 )  # 关键导入！这是 LangGraph 的内置转换器
 from pydantic import BaseModel, Field
 
-# from typing_extensions import TypedDict
-# from nova.utils.common import override_reducer
-
 
 class Messages(BaseModel):
     type: str = Field(default="", description="type")

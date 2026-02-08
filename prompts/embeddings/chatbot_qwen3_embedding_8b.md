@@ -1,0 +1,2 @@
+Instruct: Given a query sentence in the field of financial consumption, your task is to identify the sentence that is most semantically similar to it. The definition of maximum semantic similarity requires that the subject of inquiry (e.g., products, services) and the topic of inquiry (e.g., fees, interest rates) described in both sentences must be strictly consistent.
+Query:

@@ -1,3 +1,14 @@
-from .llm import get_llm_by_type, llm_with_hooks, with_structured_output
+# -*- coding: utf-8 -*-
+# @Time   : 2026/02/07 21:24
+# @Author : zip
+# @Moto   : Knowledge comes from decomposition
+from __future__ import annotations
 
-__all__ = ["get_llm_by_type", "llm_with_hooks", "with_structured_output"]
+from nova import CONF
+
+from .llm import LLMSProvider
+from .template import PromptsProvider
+
+# 全局变量
+LLMS_Provider_Instance = LLMSProvider(CONF.LLM)
+Prompts_Provider_Instance = PromptsProvider(CONF.SYSTEM.prompt_template_dir)

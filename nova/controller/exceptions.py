@@ -7,26 +7,43 @@ from typing import Any, Dict, Optional
 
 
 class NOVAException(Exception):
-    """AI客服机器人应用基础异常类"""
+    """应用基础异常类"""
 
     def __init__(
         self,
         error_code: str,
-        detail: str,
+        message: str,
         status_code: int = 500,
         additional_info: Optional[Dict[str, Any]] = None,
     ):
         self.error_code = error_code
-        self.detail = detail
+        self.message = message
         self.status_code = status_code
         self.additional_info = additional_info or {}
-        super().__init__(self.detail)
+        super().__init__(self.message)
+
+
+class LLMValidationError(NOVAException):
+    """LLM 中不存在该模型 异常"""
+
+    def __init__(self, message: str, **kwargs):
+        error_code = "LLM_VALIDATION_ERROR"
+        status_code = 400
+        additional_info = {}
+        additional_info.update(kwargs)
+
+        super().__init__(
+            error_code=error_code,
+            message=message,
+            status_code=status_code,
+            additional_info=additional_info,
+        )
 
 
 class ValidationError(NOVAException):
     """数据验证异常"""
 
-    def __init__(self, detail: str, field: Optional[str] = None, **kwargs):
+    def __init__(self, message: str, field: Optional[str] = None, **kwargs):
         error_code = "VALIDATION_ERROR"
         status_code = 400
         additional_info = {"field": field} if field else {}
@@ -34,24 +51,7 @@ class ValidationError(NOVAException):
 
         super().__init__(
             error_code=error_code,
-            detail=detail,
-            status_code=status_code,
-            additional_info=additional_info,
-        )
-
-
-class ExternalContextError(NOVAException):
-    """外部上下文格式异常"""
-
-    def __init__(self, detail: str, context_data: Optional[Any] = None, **kwargs):
-        error_code = "EXTERNAL_CONTEXT_ERROR"
-        status_code = 401
-        additional_info = {"context_data": context_data} if context_data else {}
-        additional_info.update(kwargs)
-
-        super().__init__(
-            error_code=error_code,
-            detail=detail,
+            message=message,
             status_code=status_code,
             additional_info=additional_info,
         )
@@ -71,7 +71,7 @@ def create_error_response(exception: NOVAException) -> Dict[str, Any]:
     return {
         "error": {
             "code": exception.error_code,
-            "message": exception.detail,
+            "message": exception.message,
             "status_code": exception.status_code,
             "additional_info": exception.additional_info,
         }

@@ -227,7 +227,3 @@ class SerpWechatTool(BaseTool):
                 return loop.run_until_complete(self._arun(query, max_results))
         except Exception:
             return asyncio.run(self._arun(query, max_results))
-
-
-# Create an instance
-serp_wechat_tool = SerpWechatTool()

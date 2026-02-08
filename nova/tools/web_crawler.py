@@ -222,7 +222,3 @@ class CrawlTool(BaseTool):
         except Exception as e:
             logger.warning(f"Event loop issue: {e}. Falling back to basic async run.")
             return asyncio.run(self._arun(url))
-
-
-# Create an instance
-web_crawler_tool = CrawlTool()

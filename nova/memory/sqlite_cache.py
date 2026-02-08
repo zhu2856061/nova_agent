@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import zlib
 from pathlib import Path, PosixPath
 from typing import Any, Optional, Type, Union
@@ -51,6 +52,7 @@ class SQLiteCacheFixed(BaseCache):
         database_path: Union[str, PosixPath],
         cache_schema: Type[FullLLMCache] = FullLLMCache,
     ) -> None:
+        os.makedirs(database_path, exist_ok=True)
         self.database_path = Path(database_path)
         self.cache_schema = cache_schema
         self.engine = create_async_engine(

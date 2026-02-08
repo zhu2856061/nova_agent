@@ -9,18 +9,15 @@ import logging
 import re
 from typing import Annotated, Dict, List, Optional, Type
 
-from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import HumanMessage
-from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool, InjectedToolArg
 from pydantic import BaseModel, Field
 
-from nova.llms import get_llm_by_type
-from nova.llms.template import apply_prompt_template, get_prompt
+from nova.llms import LLMS_Provider_Instance, Prompts_Provider_Instance
 from nova.utils.common import get_today_str
 
-from .baidu_serper import serp_baidu_tool
-from .web_crawler import web_crawler_tool
+from .baidu_serper import SerpBaiduTool
+from .web_crawler import CrawlTool
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +37,8 @@ class SearchToolInput(BaseModel):
     runtime: Optional[Dict] = None
 
 
-async def summarize_webpage(model: BaseChatModel, content: str):
-    llm = model.with_structured_output(Summary)
+async def summarize_webpage(model: str, content: str):
+    llm = LLMS_Provider_Instance.get_llm_by_type(model).with_structured_output(Summary)
     _webpage_content = content
 
     def _assemble_prompt(webpage_content):
@@ -49,8 +46,16 @@ async def summarize_webpage(model: BaseChatModel, content: str):
             "webpage_content": webpage_content,
             "date": get_today_str(),
         }
-        _prompt_tamplate = get_prompt("researcher", "summarize_webpage")
-        return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
+        _prompt_tamplate = Prompts_Provider_Instance.get_template(
+            "researcher", "summarize_webpage"
+        )
+        return [
+            HumanMessage(
+                content=Prompts_Provider_Instance.prompt_apply_template(
+                    _prompt_tamplate, tmp
+                )
+            )
+        ]
 
     max_retries = 3
     current_retry = 0
@@ -76,7 +81,7 @@ async def summarize_webpage(model: BaseChatModel, content: str):
     return content
 
 
-class SearchTool(BaseTool):
+class LLMSearchTool(BaseTool):
     name: str = "search_tool"
     description: str = (
         "A search engine optimized for comprehensive, accurate, and trusted results. "
@@ -106,8 +111,10 @@ class SearchTool(BaseTool):
         self,
         queries: List[str],
         max_results: Annotated[int, InjectedToolArg] = 5,
-        runtime: Optional[RunnableConfig] = None,
+        summarize_model: Optional[str] = None,
     ):
+        serp_baidu_tool = SerpBaiduTool()
+        web_crawler_tool = CrawlTool()
         # 获取搜索结果
         search_tasks = []
         for query in queries:
@@ -147,11 +154,8 @@ class SearchTool(BaseTool):
 
                 unique_results[url]["raw_content"] = text
 
-        if runtime is None:
+        if summarize_model is None:
             return unique_results
-
-        # 基于LLM进行总结
-        summarization_model = get_llm_by_type(runtime.get("summarize_model", "basic"))
 
         async def noop():
             return None
@@ -160,7 +164,7 @@ class SearchTool(BaseTool):
             noop()
             if not result.get("raw_content")
             else summarize_webpage(
-                summarization_model,
+                summarize_model,
                 "**query**: "
                 + result["query"]
                 + "\n\n"
@@ -203,11 +207,7 @@ class SearchTool(BaseTool):
         self,
         queries: List[str],
         max_results: int = 5,
-        runtime: Optional[RunnableConfig] = None,
+        summarize_model: Optional[str] = None,
     ):
         """Synchronous wrapper for the async crawl function."""
-        return asyncio.run(self._arun(queries, max_results, runtime))
-
-
-# Create an instance
-llm_searcher_tool = SearchTool()
+        return asyncio.run(self._arun(queries, max_results, summarize_model))

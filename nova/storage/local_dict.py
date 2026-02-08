@@ -10,7 +10,15 @@ import os
 logger = logging.getLogger(__name__)
 
 
-class InMemoryFileStore:
+class InDictStore:
+    """独立字典存储
+
+    write(self, key: str, contents: str) 基于key 写入内容
+    read(self, key: str) 基于key 读取内容
+    list(self, key: str) 基于key 列出内容
+    delete(self, key: str) 基于key 删除内容
+    """
+
     def __init__(self) -> None:
         self.storage = {}
 
