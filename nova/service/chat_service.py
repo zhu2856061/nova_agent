@@ -10,7 +10,7 @@ from typing import AsyncGenerator, Dict, List
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from nova.llms import get_llm_by_type
+from nova.llms import LLMS_Provider_Instance
 from nova.model.agent import AgentRequest, AgentResponse
 
 logger = logging.getLogger(__name__)
@@ -82,7 +82,7 @@ async def llm_server(request: AgentRequest):
         config = {"configurable": {"thread_id": context.thread_id}}
 
         # 获取LLM实例
-        model = get_llm_by_type(context.model)
+        model = LLMS_Provider_Instance.get_llm_by_type(context.model)
         if not model:
             raise HTTPException(
                 status_code=400, detail=f"Unsupported model: {context.model}"

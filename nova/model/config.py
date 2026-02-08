@@ -155,6 +155,24 @@ class EmbeddingConfig(BaseModel):
         return self
 
 
+class AgentNodeHooksConfig(BaseModel):
+    """AgentHooks配置模型"""
+
+    truncate_max_length: int = Field(
+        default=1024, description="截断最大长度（超过此长度的文本将被截断）"
+    )
+
+    enable_timing: bool = Field(default=True, description="是否启用计时功能")
+
+
+class HookConfig(BaseModel):
+    """Hook配置模型"""
+
+    Agent_Node_Hooks: AgentNodeHooksConfig = Field(
+        default_factory=AgentNodeHooksConfig, description="AgentHooks配置"
+    )
+
+
 # ------------------------------ 总配置模型 ------------------------------
 class AppConfig(BaseModel):
     """应用总配置模型（对应整个YAML文件）"""
@@ -162,6 +180,7 @@ class AppConfig(BaseModel):
     SYSTEM: SystemConfig = Field(..., description="系统配置")
     LLM: LLMConfig = Field(..., description="LLM模型配置")
     EMBEDDING: EmbeddingConfig = Field(..., description="嵌入模型配置")
+    HOOK: HookConfig = Field(..., description="Hook配置")
 
     @classmethod
     def replace_env_vars(cls, value: str) -> str:

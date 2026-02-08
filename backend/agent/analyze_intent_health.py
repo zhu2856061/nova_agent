@@ -15,7 +15,7 @@ from langgraph.runtime import Runtime
 from langgraph.types import Command
 from sklearn.metrics.pairwise import cosine_similarity
 
-from nova.agent.utils import node_with_hooks
+from nova.hooks.utils import node_with_hooks
 from nova.embeddings.qwen3_embeddings import qwen3_embeddings_instances
 from nova.model.agent import Context, State
 

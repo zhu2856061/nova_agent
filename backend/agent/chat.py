@@ -11,7 +11,7 @@ from langgraph.graph import START, StateGraph
 from langgraph.runtime import Runtime
 from langgraph.types import Command
 
-from nova.agent.utils import node_with_hooks
+from nova.hooks.utils import node_with_hooks
 from nova.llms import llm_with_hooks
 from nova.model.agent import Context, State
 

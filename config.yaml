@@ -92,3 +92,8 @@ EMBEDDING:
       name: "Qwen3-Embedding-8B-agent" 
       base_url: "http://10.25.71.72:15001/v1"
       api_key: ""
+
+HOOK:
+  Agent_Node_Hooks:
+    truncate_max_length: 2048
+    enable_timing: true

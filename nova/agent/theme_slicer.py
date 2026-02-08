@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import logging
-from typing import List
+from typing import List, Literal
 
 from langchain_core.messages import (
     AIMessage,
@@ -19,10 +19,9 @@ from langgraph.runtime import Runtime
 from langgraph.types import Command, interrupt
 from pydantic import BaseModel, Field
 
-from nova.agent.utils import node_with_hooks
-from nova.llms import llm_with_hooks
+from nova.hooks import Agent_Hooks_Instance
+from nova.llms import LLMS_Provider_Instance, Prompts_Provider_Instance
 from nova.model.agent import Context, Messages, State
-from nova.llms.template import apply_prompt_template, get_prompt
 from nova.utils.common import convert_base_message, get_today_str
 from nova.utils.log_utils import log_info_set_color
 
@@ -47,7 +46,10 @@ class Topics(BaseModel):
 
 # ######################################################################################
 # 函数
-async def theme_slicer(state: State, runtime: Runtime[Context]):
+@Agent_Hooks_Instance.node_with_hooks(node_name="theme_slicer")
+async def theme_slicer(
+    state: State, runtime: Runtime[Context]
+) -> Command[Literal["human_feedback", "__end__"]]:
     _NODE_NAME = "theme_slicer"
 
     # 变量
@@ -64,11 +66,17 @@ async def theme_slicer(state: State, runtime: Runtime[Context]):
             "user_guidance": _human_in_loop_value,
         }
 
-        _prompt_tamplate = get_prompt("theme", _NODE_NAME)
-        return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
+        _prompt_tamplate = Prompts_Provider_Instance.get_template("theme", _NODE_NAME)
+        return [
+            HumanMessage(
+                content=Prompts_Provider_Instance.prompt_apply_template(
+                    _prompt_tamplate, tmp
+                )
+            )
+        ]
 
     # 4 大模型
-    response = await llm_with_hooks(
+    response = await LLMS_Provider_Instance.llm_wrap_hooks(
         _thread_id,
         _NODE_NAME,
         _assemble_prompt(_messages),
@@ -81,7 +89,7 @@ async def theme_slicer(state: State, runtime: Runtime[Context]):
         _data.append(topic.model_dump())
 
     return Command(
-        goto="human_in_loop",
+        goto="human_feedback",
         update={
             "code": 0,
             "err_message": "ok",
@@ -91,8 +99,11 @@ async def theme_slicer(state: State, runtime: Runtime[Context]):
     )
 
 
-async def human_in_loop(state: State, runtime: Runtime[Context]):
-    _NODE_NAME = "human_in_loop"
+@Agent_Hooks_Instance.node_with_hooks(node_name="human_feedback")
+async def human_feedback(
+    state: State, runtime: Runtime[Context]
+) -> Command[Literal["theme_slicer", "__end__"]]:
+    _NODE_NAME = "human_feedback"
 
     # 变量
     _thread_id = runtime.context.thread_id
@@ -126,10 +137,9 @@ async def human_in_loop(state: State, runtime: Runtime[Context]):
 def compile_theme_slicer_agent():
     # researcher subgraph
     _agent = StateGraph(State, context_schema=Context)
-    _agent.add_node("theme_slicer", node_with_hooks(theme_slicer, "theme_slicer"))
-    _agent.add_node("human_feedback", human_in_loop)
+    _agent.add_node("theme_slicer", theme_slicer)
+    _agent.add_node("human_feedback", human_feedback)
     _agent.add_edge(START, "theme_slicer")
-    _agent.add_edge("theme_slicer", "human_feedback")
 
     checkpointer = InMemorySaver()
     return _agent.compile(checkpointer=checkpointer)

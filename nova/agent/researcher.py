@@ -17,12 +17,10 @@ from langgraph.runtime import Runtime
 from langgraph.types import Command
 from pydantic import BaseModel
 
-from nova.agent.utils import extract_valid_info, node_with_hooks
-from nova.llms import llm_with_hooks
+from nova.hooks import Agent_Hooks_Instance
+from nova.llms import LLMS_Provider_Instance, Prompts_Provider_Instance
 from nova.model.agent import Context, Messages, State
-from nova.llms.template import apply_prompt_template, get_prompt
-from nova.tools.llm_searcher import llm_searcher_tool
-from nova.tools.wechat_searcher import wechat_searcher_tool
+from nova.tools import llm_searcher_tool, wechat_searcher_tool
 from nova.utils.common import get_today_str, remove_up_to_last_ai_message
 from nova.utils.log_utils import log_info_set_color
 
@@ -42,6 +40,7 @@ class ResearchComplete(BaseModel):
 
 
 # 研究员
+@Agent_Hooks_Instance.node_with_hooks(node_name="researcher")
 async def researcher(
     state: State, runtime: Runtime[Context]
 ) -> Command[Literal["researcher_tools", "__end__"]]:
@@ -58,20 +57,26 @@ async def researcher(
         tmp = {
             "date": get_today_str(),
         }
-        _prompt_tamplate = get_prompt("researcher", "researcher_system")
+        _prompt_tamplate = Prompts_Provider_Instance.get_template(
+            "researcher", _NODE_NAME
+        )
         return [
-            SystemMessage(content=apply_prompt_template(_prompt_tamplate, tmp))
+            SystemMessage(
+                content=Prompts_Provider_Instance.prompt_apply_template(
+                    _prompt_tamplate, tmp
+                )
+            )
         ] + messages
 
     # 4 大模型
-    response = await llm_with_hooks(
+    response = await LLMS_Provider_Instance.llm_wrap_hooks(
         _thread_id,
         _NODE_NAME,
         _assemble_prompt(_messages),
         _model_name,
         tools=[llm_searcher_tool, ResearchComplete],
     )
-    extract_valid_info(response)
+    Agent_Hooks_Instance.extract_valid_info(response)
 
     state.user_guidance["tool_call_iterations"] = _tool_call_iterations + 1
 
@@ -88,6 +93,7 @@ async def researcher(
 
 
 # 研究员工具
+@Agent_Hooks_Instance.node_with_hooks(node_name="researcher_tools")
 async def researcher_tools(
     state: State, runtime: Runtime[Context]
 ) -> Command[Literal["compress_research", "researcher", "__end__"]]:
@@ -155,6 +161,7 @@ async def researcher_tools(
 
 
 # 研究员工具
+@Agent_Hooks_Instance.node_with_hooks(node_name="wechat_researcher_tools")
 async def wechat_researcher_tools(
     state: State, runtime: Runtime[Context]
 ) -> Command[Literal["compress_research", "researcher", "__end__"]]:
@@ -222,6 +229,7 @@ async def wechat_researcher_tools(
 
 
 # 精炼结果
+@Agent_Hooks_Instance.node_with_hooks(node_name="compress_research")
 async def compress_research(
     state: State, runtime: Runtime[Context]
 ) -> Command[Literal["__end__"]]:
@@ -233,18 +241,26 @@ async def compress_research(
 
     # 提示词
     def _assemble_prompt(messages):
-        _compress_research_system = get_prompt("researcher", "compress_research_system")
+        _compress_research_system = Prompts_Provider_Instance.get_template(
+            "researcher", "compress_research_system"
+        )
         messages = [
             SystemMessage(
-                content=apply_prompt_template(
+                content=Prompts_Provider_Instance.prompt_apply_template(
                     _compress_research_system, {"date": get_today_str()}
                 )
             )
         ] + messages
 
-        _compress_research_human = get_prompt("researcher", "compress_research_human")
+        _compress_research_human = Prompts_Provider_Instance.get_template(
+            "researcher", "compress_research_human"
+        )
         messages.append(
-            HumanMessage(content=apply_prompt_template(_compress_research_human))
+            HumanMessage(
+                content=Prompts_Provider_Instance.prompt_apply_template(
+                    _compress_research_human
+                )
+            )
         )
         return messages
 
@@ -253,14 +269,14 @@ async def compress_research(
     while current_retry <= max_retries:  # 尝试3次, 防止因为上下文过长，导致失败
         try:
             # 4 大模型
-            response = await llm_with_hooks(
+            response = await LLMS_Provider_Instance.llm_wrap_hooks(
                 _thread_id,
                 _NODE_NAME,
                 _assemble_prompt(_messages),
                 _model_name,
             )
 
-            extract_valid_info(response)
+            Agent_Hooks_Instance.extract_valid_info(response)
             log_info_set_color(_thread_id, _NODE_NAME, response.content)
 
             return Command(
@@ -290,26 +306,18 @@ async def compress_research(
 
 def compile_researcher_agent():
     _agent = StateGraph(State, context_schema=Context)
-    _agent.add_node("researcher", node_with_hooks(researcher, "researcher"))
-    _agent.add_node(
-        "researcher_tools", node_with_hooks(researcher_tools, "researcher_tools")
-    )
-    _agent.add_node(
-        "compress_research", node_with_hooks(compress_research, "compress_research")
-    )
+    _agent.add_node("researcher", researcher)
+    _agent.add_node("researcher_tools", researcher_tools)
+    _agent.add_node("compress_research", compress_research)
     _agent.add_edge(START, "researcher")
     return _agent.compile()
 
 
 def compile_wechat_researcher_agent():
     _agent = StateGraph(State, context_schema=Context)
-    _agent.add_node("researcher", node_with_hooks(researcher, "researcher"))
-    _agent.add_node(
-        "researcher_tools", node_with_hooks(wechat_researcher_tools, "researcher_tools")
-    )
-    _agent.add_node(
-        "compress_research", node_with_hooks(compress_research, "compress_research")
-    )
+    _agent.add_node("researcher", researcher)
+    _agent.add_node("researcher_tools", wechat_researcher_tools)
+    _agent.add_node("compress_research", compress_research)
     _agent.add_edge(START, "researcher")
     return _agent.compile()
 

@@ -21,13 +21,12 @@ from pydantic import BaseModel, Field
 
 from nova import CONF
 from nova.agent.researcher import researcher_agent
-from nova.agent.utils import extract_valid_info, node_with_hooks
-from nova.llms import get_llm_by_type, llm_with_hooks
+from nova.hooks import Agent_Hooks_Instance
+from nova.llms import LLMS_Provider_Instance, Prompts_Provider_Instance
 from nova.model.agent import Context, Messages, State
-from nova.llms.template import apply_prompt_template, get_prompt
-from nova.tools.format_result import markdown_to_html_tool
+from nova.tools import markdown_to_html_tool
 from nova.utils.common import get_today_str, override_reducer
-from nova.utils.log_utils import log_error_set_color, log_info_set_color
+from nova.utils.log_utils import log_info_set_color
 
 # ######################################################################################
 # 配置
@@ -35,7 +34,7 @@ logger = logging.getLogger(__name__)
 
 
 # ######################################################################################
-# 全局变量
+# 结构化输出
 
 
 # clarify_with_user uses this
@@ -82,6 +81,7 @@ class ResearcherOutputState(BaseModel):
 
 
 # 用户澄清
+@Agent_Hooks_Instance.node_with_hooks(node_name="clarify_with_user")
 async def clarify_with_user(
     state: State, runtime: Runtime[Context]
 ) -> Command[Literal["write_research_brief", "__end__"]]:
@@ -94,11 +94,19 @@ async def clarify_with_user(
     # 提示词
     def _assemble_prompt(messages):
         tmp = {"messages": get_buffer_string(messages), "date": get_today_str()}
-        _prompt_tamplate = get_prompt("researcher", "clarify_with_user")
-        return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
+        _prompt_tamplate = Prompts_Provider_Instance.get_template(
+            "researcher", _NODE_NAME
+        )
+        return [
+            HumanMessage(
+                content=Prompts_Provider_Instance.prompt_apply_template(
+                    _prompt_tamplate, tmp
+                )
+            )
+        ]
 
     # 4 大模型
-    response = await llm_with_hooks(
+    response = await LLMS_Provider_Instance.llm_wrap_hooks(
         _thread_id, _NODE_NAME, _assemble_prompt(_messages), _model_name
     )
 
@@ -135,6 +143,7 @@ async def clarify_with_user(
 
 
 # 转换问题
+@Agent_Hooks_Instance.node_with_hooks(node_name="write_research_brief")
 async def write_research_brief(
     state: State, runtime: Runtime[Context]
 ) -> Command[Literal["supervisor", "__end__"]]:
@@ -149,11 +158,19 @@ async def write_research_brief(
     def _assemble_prompt(messages):
         tmp = {"messages": get_buffer_string(messages), "date": get_today_str()}
 
-        _prompt_tamplate = get_prompt("researcher", "write_research_brief")
-        return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
+        _prompt_tamplate = Prompts_Provider_Instance.get_template(
+            "researcher", _NODE_NAME
+        )
+        return [
+            HumanMessage(
+                content=Prompts_Provider_Instance.prompt_apply_template(
+                    _prompt_tamplate, tmp
+                )
+            )
+        ]
 
     # 4 大模型
-    response = await llm_with_hooks(
+    response = await LLMS_Provider_Instance.llm_wrap_hooks(
         _thread_id,
         _NODE_NAME,
         _assemble_prompt(_messages),
@@ -186,6 +203,7 @@ async def write_research_brief(
 
 
 # 监督员
+@Agent_Hooks_Instance.node_with_hooks(node_name="supervisor")
 async def supervisor(
     state: State, runtime: Runtime[Context]
 ) -> Command[Literal["supervisor_tools", "__end__"]]:
@@ -215,13 +233,19 @@ async def supervisor(
             "max_concurrent_research_units": _max_concurrent,
             "date": get_today_str(),
         }
-        _prompt_tamplate = get_prompt("researcher", "supervisor_system")
+        _prompt_tamplate = Prompts_Provider_Instance.get_template(
+            "researcher", _NODE_NAME
+        )
         return [
-            SystemMessage(content=apply_prompt_template(_prompt_tamplate, tmp)),
+            SystemMessage(
+                content=Prompts_Provider_Instance.prompt_apply_template(
+                    _prompt_tamplate, tmp
+                )
+            ),
         ] + _messages
 
     # 4 大模型
-    response = await llm_with_hooks(
+    response = await LLMS_Provider_Instance.llm_wrap_hooks(
         _thread_id,
         _NODE_NAME,
         _assemble_prompt(),
@@ -229,7 +253,7 @@ async def supervisor(
         tools=[ConductResearch, ResearchComplete],
     )
 
-    extract_valid_info(response)
+    Agent_Hooks_Instance.extract_valid_info(response)
 
     state.user_guidance["research_iterations"] = _research_iterations + 1
     return Command(
@@ -243,6 +267,7 @@ async def supervisor(
 
 
 # 监督员工具
+@Agent_Hooks_Instance.node_with_hooks(node_name="supervisor_tools")
 async def supervisor_tools(
     state: State, runtime: Runtime[Context]
 ) -> Command[Literal["final_report_generation", "supervisor", "__end__"]]:
@@ -344,7 +369,7 @@ async def final_report_generation(
 
     # 变量
     _thread_id = runtime.context.thread_id
-    _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
+    _task_dir = runtime.context.task_dir or CONF.SYSTEM.task_dir
     _model_name = runtime.context.model
     _work_dir = os.path.join(_task_dir, _thread_id)
     os.makedirs(_work_dir, exist_ok=True)
@@ -371,8 +396,16 @@ async def final_report_generation(
             "findings": findings,
         }
 
-        _prompt_tamplate = get_prompt("researcher", "final_report_generation")
-        return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
+        _prompt_tamplate = Prompts_Provider_Instance.get_template(
+            "researcher", _NODE_NAME
+        )
+        return [
+            HumanMessage(
+                content=Prompts_Provider_Instance.prompt_apply_template(
+                    _prompt_tamplate, tmp
+                )
+            )
+        ]
 
     # LLM
     findings = get_buffer_string(_messages)  # type: ignore
@@ -380,7 +413,7 @@ async def final_report_generation(
     current_retry = 0
     while current_retry <= max_retries:
         try:
-            final_report = await llm_with_hooks(
+            final_report = await LLMS_Provider_Instance.llm_wrap_hooks(
                 _thread_id, _NODE_NAME, _assemble_prompt(findings), _model_name
             )
 

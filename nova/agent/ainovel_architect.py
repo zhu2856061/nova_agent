@@ -19,12 +19,12 @@ from langgraph.types import Command, interrupt
 from pydantic import BaseModel, Field
 
 from nova import CONF
-from nova.llms import get_llm_by_type
+from nova.hooks import Agent_Hooks_Instance
+from nova.llms import LLMS_Provider_Instance, Prompts_Provider_Instance
 from nova.model.agent import Context, Messages, State
-from nova.llms.template import apply_prompt_template, get_prompt
-from nova.tools.file_manager import read_file_tool, write_file_tool
+from nova.tools import read_file_tool, write_file_tool
 from nova.utils.common import convert_base_message
-from nova.utils.log_utils import log_error_set_color, log_info_set_color
+from nova.utils.log_utils import log_info_set_color
 
 # ######################################################################################
 # 配置
@@ -55,579 +55,456 @@ class ExtractSetting(BaseModel):
 
 
 # 抽取设定
+@Agent_Hooks_Instance.node_with_hooks(node_name="extract_setting")
 async def extract_setting(state: State, runtime: Runtime[Context]):
     _NODE_NAME = "extract_setting"
-    try:
-        # 变量
-        _thread_id = runtime.context.thread_id
-        _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
-        _model_name = runtime.context.model
-        _config = runtime.context.config
-        _user_guidance = state.user_guidance
-        _messages = state.messages.value
 
-        prompt_dir = _config.get("prompt_dir")
-        result_dir = _config.get("result_dir")
-        _human_in_loop_value = _user_guidance.get("human_in_loop_value", "")
+    # 变量
+    _thread_id = runtime.context.thread_id
+    _task_dir = runtime.context.task_dir or CONF.SYSTEM.task_dir
+    _model_name = runtime.context.model
+    _config = runtime.context.config
+    _user_guidance = state.user_guidance
+    _messages = state.messages.value
 
-        if result_dir:
-            _work_dir = result_dir
-        else:
-            _work_dir = os.path.join(_task_dir, _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
+    prompt_dir = _config.get("prompt_dir")
+    result_dir = _config.get("result_dir")
+    _human_in_loop_value = _user_guidance.get("human_in_loop_value", "")
 
-        # 提示词
-        def _assemble_prompt():
-            tmp = {
-                "messages": get_buffer_string(_messages) if _messages else "",  # type: ignore
-                "user_guidance": _human_in_loop_value,
-            }
-            _prompt_tamplate = get_prompt("ainovel", _NODE_NAME, prompt_dir)
-            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
+    if result_dir:
+        _work_dir = result_dir
+    else:
+        _work_dir = os.path.join(_task_dir, _thread_id)
+    os.makedirs(_work_dir, exist_ok=True)
 
-        # LLM
-        def _get_llm():
-            return get_llm_by_type(_model_name).with_structured_output(ExtractSetting)
-
-        response = await _get_llm().ainvoke(_assemble_prompt())
-        log_info_set_color(_thread_id, _NODE_NAME, response)
-
-        _result = {
-            _NODE_NAME: {
-                "topic": response.topic,  # type: ignore
-                "genre": response.genre,  # type: ignore
-                "number_of_chapters": response.number_of_chapters,  # type: ignore
-                "word_number": response.word_number,  # type: ignore
-            }
+    # 提示词
+    def _assemble_prompt():
+        tmp = {
+            "messages": get_buffer_string(_messages) if _messages else "",  # type: ignore
+            "user_guidance": _human_in_loop_value,
         }
-
-        os.makedirs(f"{_work_dir}/middle", exist_ok=True)
-        await write_file_tool.arun(
-            {
-                "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
-                "text": json.dumps(_result, ensure_ascii=False),
-            }
+        _prompt_tamplate = Prompts_Provider_Instance.get_template(
+            "ainovel", _NODE_NAME, prompt_dir
         )
-        return {
-            "code": 0,
-            "err_message": "ok",
-            "data": _result,
-            "human_in_loop_node": _NODE_NAME,
-        }
+        return [
+            HumanMessage(
+                content=Prompts_Provider_Instance.prompt_apply_template(
+                    _prompt_tamplate, tmp
+                )
+            )
+        ]
 
-    except Exception as e:
-        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
-        return {
-            "code": 1,
-            "err_message": _err_message,
-            "messages": Messages(type="end"),
+    # 4 大模型
+    response = await LLMS_Provider_Instance.llm_wrap_hooks(
+        _thread_id,
+        _NODE_NAME,
+        _assemble_prompt(),
+        _model_name,
+    )
+
+    _result = {
+        _NODE_NAME: {
+            "topic": response.topic,  # type: ignore
+            "genre": response.genre,  # type: ignore
+            "number_of_chapters": response.number_of_chapters,  # type: ignore
+            "word_number": response.word_number,  # type: ignore
         }
+    }
+
+    os.makedirs(f"{_work_dir}/middle", exist_ok=True)
+    await write_file_tool.arun(
+        {
+            "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
+            "text": json.dumps(_result, ensure_ascii=False),
+        }
+    )
+    return {
+        "code": 0,
+        "err_message": "ok",
+        "data": _result,
+        "human_in_loop_node": _NODE_NAME,
+    }
 
 
 # 核心种子
+@Agent_Hooks_Instance.node_with_hooks(node_name="core_seed")
 async def core_seed(state: State, runtime: Runtime[Context]):
     _NODE_NAME = "core_seed"
-    try:
-        # 变量
-        _thread_id = runtime.context.thread_id
-        _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
-        _model_name = runtime.context.model
-        _user_guidance = state.user_guidance
-        _config = runtime.context.config
 
-        prompt_dir = _config.get("prompt_dir")
-        result_dir = _config.get("result_dir")
-        _human_in_loop_value = _user_guidance.get("human_in_loop_value", "")
+    # 变量
+    _thread_id = runtime.context.thread_id
+    _task_dir = runtime.context.task_dir or CONF.SYSTEM.task_dir
+    _model_name = runtime.context.model
+    _user_guidance = state.user_guidance
+    _config = runtime.context.config
 
-        if result_dir:
-            _work_dir = result_dir
-        else:
-            _work_dir = os.path.join(_task_dir, _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
+    prompt_dir = _config.get("prompt_dir")
+    result_dir = _config.get("result_dir")
+    _human_in_loop_value = _user_guidance.get("human_in_loop_value", "")
 
-        # 提示词
-        async def _assemble_prompt():
-            _extract_setting_result = await read_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/middle/extract_setting.md",
-                }
-            )
-            _extract_setting_result = json.loads(_extract_setting_result)[
-                "extract_setting"
-            ]
-            tmp = {
-                **_extract_setting_result,
-                "user_guidance": _human_in_loop_value,
-            }
-            _prompt_tamplate = get_prompt("ainovel", _NODE_NAME, prompt_dir)
-            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
+    if result_dir:
+        _work_dir = result_dir
+    else:
+        _work_dir = os.path.join(_task_dir, _thread_id)
+    os.makedirs(_work_dir, exist_ok=True)
 
-        # LLM
-        def _get_llm():
-            return get_llm_by_type(_model_name)
-
-        response = await _get_llm().ainvoke(await _assemble_prompt())
-        log_info_set_color(_thread_id, _NODE_NAME, response)
-
-        _result = {_NODE_NAME: response.content}
-
-        os.makedirs(f"{_work_dir}/middle", exist_ok=True)
-        await write_file_tool.arun(
-            {
-                "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
-                "text": json.dumps(_result, ensure_ascii=False),
-            }
-        )
-        return {
-            "code": 0,
-            "err_message": "ok",
-            "data": _result,
-            "human_in_loop_node": _NODE_NAME,
-        }
-
-    except Exception as e:
-        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
-        return {
-            "code": 1,
-            "err_message": _err_message,
-            "messages": Messages(type="end"),
-        }
-
-
-# 世界观
-async def world_building(state: State, runtime: Runtime[Context]):
-    _NODE_NAME = "world_building"
-    try:
-        # 变量
-        _thread_id = runtime.context.thread_id
-        _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
-        _model_name = runtime.context.model
-        _user_guidance = state.user_guidance
-        _config = runtime.context.config
-
-        prompt_dir = _config.get("prompt_dir")
-        result_dir = _config.get("result_dir")
-        _human_in_loop_value = _user_guidance.get("human_in_loop_value", "")
-
-        if result_dir:
-            _work_dir = result_dir
-        else:
-            _work_dir = os.path.join(_task_dir, _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
-
-        # 提示词
-        async def _assemble_prompt():
-            # 抽取设置结果
-            _extract_setting_result = await read_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/middle/extract_setting.md",
-                }
-            )
-            _extract_setting_result = json.loads(_extract_setting_result)[
-                "extract_setting"
-            ]
-
-            # 种子结果
-            _core_seed_result = await read_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/middle/core_seed.md",
-                }
-            )
-            _core_seed_result = json.loads(_core_seed_result)
-
-            # 聚合所有信息
-            _extract_setting_result.update(_core_seed_result)
-
-            # 入参
-            tmp = {**_extract_setting_result, "user_guidance": _human_in_loop_value}
-            _prompt_tamplate = get_prompt("ainovel", _NODE_NAME, prompt_dir)
-            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
-
-        # LLM
-        def _get_llm():
-            return get_llm_by_type(_model_name)
-
-        response = await _get_llm().ainvoke(await _assemble_prompt())
-        log_info_set_color(_thread_id, _NODE_NAME, response)
-
-        _result = {_NODE_NAME: response.content}
-
-        os.makedirs(f"{_work_dir}/middle", exist_ok=True)
-        await write_file_tool.arun(
-            {
-                "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
-                "text": json.dumps(_result, ensure_ascii=False),
-            }
-        )
-        return {
-            "code": 0,
-            "err_message": "ok",
-            "data": _result,
-            "human_in_loop_node": _NODE_NAME,
-        }
-
-    except Exception as e:
-        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
-        return {
-            "code": 1,
-            "err_message": _err_message,
-            "messages": Messages(type="end"),
-        }
-
-
-# 角色动力学
-async def character_dynamics(state: State, runtime: Runtime[Context]):
-    _NODE_NAME = "character_dynamics"
-    try:
-        # 变量
-        _thread_id = runtime.context.thread_id
-        _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
-        _model_name = runtime.context.model
-        _user_guidance = state.user_guidance
-        _config = runtime.context.config
-
-        prompt_dir = _config.get("prompt_dir")
-        result_dir = _config.get("result_dir")
-        _human_in_loop_value = _user_guidance.get("human_in_loop_value", "")
-
-        if result_dir:
-            _work_dir = result_dir
-        else:
-            _work_dir = os.path.join(_task_dir, _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
-
-        # 提示词
-        async def _assemble_prompt():
-            # 抽取设置结果
-            _extract_setting_result = await read_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/middle/extract_setting.md",
-                }
-            )
-            _extract_setting_result = json.loads(_extract_setting_result)[
-                "extract_setting"
-            ]
-
-            # 种子结果
-            _core_seed_result = await read_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/middle/core_seed.md",
-                }
-            )
-            _core_seed_result = json.loads(_core_seed_result)
-
-            # 世界观结果
-            _world_building_result = await read_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/middle/world_building.md",
-                }
-            )
-            _world_building_result = json.loads(_world_building_result)
-
-            # 聚合所有信息
-            _extract_setting_result.update(_core_seed_result)
-            _extract_setting_result.update(_world_building_result)
-
-            tmp = {**_extract_setting_result, "user_guidance": _human_in_loop_value}
-            _prompt_tamplate = get_prompt("ainovel", _NODE_NAME, prompt_dir)
-            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
-
-        # LLM
-        def _get_llm():
-            return get_llm_by_type(_model_name)
-
-        response = await _get_llm().ainvoke(await _assemble_prompt())
-        log_info_set_color(_thread_id, _NODE_NAME, response)
-
-        _result = {_NODE_NAME: response.content}
-
-        os.makedirs(f"{_work_dir}/middle", exist_ok=True)
-        await write_file_tool.arun(
-            {
-                "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
-                "text": json.dumps(_result, ensure_ascii=False),
-            }
-        )
-        return {
-            "code": 0,
-            "err_message": "ok",
-            "data": _result,
-            "human_in_loop_node": _NODE_NAME,
-        }
-
-    except Exception as e:
-        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
-        return {
-            "code": 1,
-            "err_message": _err_message,
-            "messages": Messages(type="end"),
-        }
-
-
-# 三幕式情节架构
-async def plot_arch(state: State, runtime: Runtime[Context]):
-    _NODE_NAME = "plot_arch"
-    try:
-        # 变量
-        _thread_id = runtime.context.thread_id
-        _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
-        _model_name = runtime.context.model
-        _user_guidance = state.user_guidance
-        _config = runtime.context.config
-
-        prompt_dir = _config.get("prompt_dir")
-        result_dir = _config.get("result_dir")
-        _human_in_loop_value = _user_guidance.get("human_in_loop_value", "")
-
-        if result_dir:
-            _work_dir = result_dir
-        else:
-            _work_dir = os.path.join(_task_dir, _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
-
-        # 提示词
-        async def _assemble_prompt():
-            # 抽取设置结果
-            _extract_setting_result = await read_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/middle/extract_setting.md",
-                }
-            )
-            _extract_setting_result = json.loads(_extract_setting_result)[
-                "extract_setting"
-            ]
-
-            # 种子结果
-            _core_seed_result = await read_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/middle/core_seed.md",
-                }
-            )
-            _core_seed_result = json.loads(_core_seed_result)
-
-            # 世界观结果
-            _world_building_result = await read_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/middle/world_building.md",
-                }
-            )
-            _world_building_result = json.loads(_world_building_result)
-
-            # 角色信息
-            _character_dynamics_result = await read_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/middle/character_dynamics.md",
-                }
-            )
-            _character_dynamics_result = json.loads(_character_dynamics_result)
-
-            # 聚合所有信息
-            _extract_setting_result.update(_core_seed_result)
-            _extract_setting_result.update(_world_building_result)
-            _extract_setting_result.update(_character_dynamics_result)
-
-            tmp = {**_extract_setting_result, "user_guidance": _human_in_loop_value}
-            _prompt_tamplate = get_prompt("ainovel", _NODE_NAME, prompt_dir)
-            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
-
-        # LLM
-        def _get_llm():
-            return get_llm_by_type(_model_name)
-
-        response = await _get_llm().ainvoke(await _assemble_prompt())
-        log_info_set_color(_thread_id, _NODE_NAME, response)
-
-        _result = {_NODE_NAME: response.content}
-
-        os.makedirs(f"{_work_dir}/middle", exist_ok=True)
-        await write_file_tool.arun(
-            {
-                "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
-                "text": json.dumps(_result, ensure_ascii=False),
-            }
-        )
-        _result = {_NODE_NAME: response.content}
-        return {
-            "code": 0,
-            "err_message": "ok",
-            "data": _result,
-            "human_in_loop_node": _NODE_NAME,
-        }
-
-    except Exception as e:
-        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
-        return {
-            "code": 1,
-            "err_message": _err_message,
-            "messages": Messages(type="end"),
-        }
-
-
-# 章节目录
-async def chapter_blueprint(state: State, runtime: Runtime[Context]):
-    _NODE_NAME = "chapter_blueprint"
-    try:
-        # 变量
-        _thread_id = runtime.context.thread_id
-        _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
-        _model_name = runtime.context.model
-        _user_guidance = state.user_guidance
-        _config = runtime.context.config
-
-        prompt_dir = _config.get("prompt_dir")
-        result_dir = _config.get("result_dir")
-        _human_in_loop_value = _user_guidance.get("human_in_loop_value", "")
-
-        if result_dir:
-            _work_dir = result_dir
-        else:
-            _work_dir = os.path.join(_task_dir, _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
-
-        _number_of_chapters = await read_file_tool.arun(
+    # 提示词
+    async def _assemble_prompt():
+        _extract_setting_result = await read_file_tool.arun(
             {
                 "file_path": f"{_work_dir}/middle/extract_setting.md",
             }
         )
-        _number_of_chapters = json.loads(_number_of_chapters)["extract_setting"][
-            "number_of_chapters"
+        _extract_setting_result = json.loads(_extract_setting_result)["extract_setting"]
+        tmp = {
+            **_extract_setting_result,
+            "user_guidance": _human_in_loop_value,
+        }
+        _prompt_tamplate = Prompts_Provider_Instance.get_template(
+            "ainovel", _NODE_NAME, prompt_dir
+        )
+        return [
+            HumanMessage(
+                content=Prompts_Provider_Instance.prompt_apply_template(
+                    _prompt_tamplate, tmp
+                )
+            )
         ]
 
-        # 提示词
-        async def _assemble_prompt(chapter_list, start, end):
-            # 抽取设置结果
-            _extract_setting_result = await read_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/middle/extract_setting.md",
-                }
-            )
-            _extract_setting_result = json.loads(_extract_setting_result)[
-                "extract_setting"
-            ]
+    # 4 大模型
+    response = await LLMS_Provider_Instance.llm_wrap_hooks(
+        _thread_id,
+        _NODE_NAME,
+        await _assemble_prompt(),
+        _model_name,
+    )
 
-            # 种子结果
-            _core_seed_result = await read_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/middle/core_seed.md",
-                }
-            )
-            _core_seed_result = json.loads(_core_seed_result)
+    _result = {_NODE_NAME: response.content}
 
-            # 世界观结果
-            _world_building_result = await read_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/middle/world_building.md",
-                }
-            )
-            _world_building_result = json.loads(_world_building_result)
-
-            # 角色信息
-            _character_dynamics_result = await read_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/middle/character_dynamics.md",
-                }
-            )
-            _character_dynamics_result = json.loads(_character_dynamics_result)
-
-            # 三幕式情节架构
-            _plot_arch_result = await read_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/middle/plot_arch.md",
-                }
-            )
-            _plot_arch_result = json.loads(_plot_arch_result)
-
-            # 聚合所有信息
-            _extract_setting_result.update(_core_seed_result)
-            _extract_setting_result.update(_world_building_result)
-            _extract_setting_result.update(_character_dynamics_result)
-            _extract_setting_result.update(_plot_arch_result)
-
-            tmp = {
-                **_extract_setting_result,
-                "user_guidance": _human_in_loop_value,
-                "chapter_list": chapter_list,
-                "start": start,
-                "end": end,
-            }
-            _prompt_tamplate = get_prompt("ainovel", _NODE_NAME, prompt_dir)
-            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
-
-        # LLM
-        def _get_llm():
-            return get_llm_by_type(_model_name)
-
-        current_start = 1
-        final_chapter_blueprint = []
-        while current_start <= _number_of_chapters:
-            current_end = min(current_start + 10, _number_of_chapters)
-            chapter_list = "\n\n".join(final_chapter_blueprint[-200:])
-            response = await _get_llm().ainvoke(
-                await _assemble_prompt(chapter_list, current_start, current_end)
-            )
-            log_info_set_color(_thread_id, _NODE_NAME, response)
-            final_chapter_blueprint.append(response.content)
-
-            current_start = current_end + 1
-
-        _result = {_NODE_NAME: "\n\n".join(final_chapter_blueprint)}
-
-        os.makedirs(f"{_work_dir}/middle", exist_ok=True)
-        await write_file_tool.arun(
-            {
-                "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
-                "text": json.dumps(_result, ensure_ascii=False),
-            }
-        )
-        return {
-            "code": 0,
-            "err_message": "ok",
-            "data": _result,
-            "human_in_loop_node": _NODE_NAME,
+    os.makedirs(f"{_work_dir}/middle", exist_ok=True)
+    await write_file_tool.arun(
+        {
+            "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
+            "text": json.dumps(_result, ensure_ascii=False),
         }
+    )
+    return {
+        "code": 0,
+        "err_message": "ok",
+        "data": _result,
+        "human_in_loop_node": _NODE_NAME,
+    }
 
-    except Exception as e:
-        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
-        return {
-            "code": 1,
-            "err_message": _err_message,
-            "messages": Messages(type="end"),
-        }
 
+# 世界观
+@Agent_Hooks_Instance.node_with_hooks(node_name="world_building")
+async def world_building(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "world_building"
 
-# 结果保存
-async def build_architecture(state: State, runtime: Runtime[Context]):
-    _NODE_NAME = "build_architecture"
-    try:
-        # 变量
-        _thread_id = runtime.context.thread_id
-        _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
-        _config = runtime.context.config
+    # 变量
+    _thread_id = runtime.context.thread_id
+    _task_dir = runtime.context.task_dir or CONF.SYSTEM.task_dir
+    _model_name = runtime.context.model
+    _user_guidance = state.user_guidance
+    _config = runtime.context.config
 
-        result_dir = _config.get("result_dir")
+    prompt_dir = _config.get("prompt_dir")
+    result_dir = _config.get("result_dir")
+    _human_in_loop_value = _user_guidance.get("human_in_loop_value", "")
 
-        if result_dir:
-            _work_dir = result_dir
-        else:
-            _work_dir = os.path.join(_task_dir, _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
+    if result_dir:
+        _work_dir = result_dir
+    else:
+        _work_dir = os.path.join(_task_dir, _thread_id)
+    os.makedirs(_work_dir, exist_ok=True)
 
+    # 提示词
+    async def _assemble_prompt():
         # 抽取设置结果
         _extract_setting_result = await read_file_tool.arun(
             {
                 "file_path": f"{_work_dir}/middle/extract_setting.md",
             }
         )
-
         _extract_setting_result = json.loads(_extract_setting_result)["extract_setting"]
 
-        # 小说设定
-        await write_file_tool.arun(
+        # 种子结果
+        _core_seed_result = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/novel_extract_setting.md",
-                "text": json.dumps(_extract_setting_result, ensure_ascii=False),
+                "file_path": f"{_work_dir}/middle/core_seed.md",
             }
         )
+        _core_seed_result = json.loads(_core_seed_result)
+
+        # 聚合所有信息
+        _extract_setting_result.update(_core_seed_result)
+
+        # 入参
+        tmp = {**_extract_setting_result, "user_guidance": _human_in_loop_value}
+        _prompt_tamplate = Prompts_Provider_Instance.get_template(
+            "ainovel", _NODE_NAME, prompt_dir
+        )
+        return [
+            HumanMessage(
+                content=Prompts_Provider_Instance.prompt_apply_template(
+                    _prompt_tamplate, tmp
+                )
+            )
+        ]
+
+    # 4 大模型
+    response = await LLMS_Provider_Instance.llm_wrap_hooks(
+        _thread_id,
+        _NODE_NAME,
+        await _assemble_prompt(),
+        _model_name,
+    )
+
+    _result = {_NODE_NAME: response.content}
+
+    os.makedirs(f"{_work_dir}/middle", exist_ok=True)
+    await write_file_tool.arun(
+        {
+            "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
+            "text": json.dumps(_result, ensure_ascii=False),
+        }
+    )
+    return {
+        "code": 0,
+        "err_message": "ok",
+        "data": _result,
+        "human_in_loop_node": _NODE_NAME,
+    }
+
+
+# 角色动力学
+@Agent_Hooks_Instance.node_with_hooks(node_name="character_dynamics")
+async def character_dynamics(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "character_dynamics"
+
+    # 变量
+    _thread_id = runtime.context.thread_id
+    _task_dir = runtime.context.task_dir or CONF.SYSTEM.task_dir
+    _model_name = runtime.context.model
+    _user_guidance = state.user_guidance
+    _config = runtime.context.config
+
+    prompt_dir = _config.get("prompt_dir")
+    result_dir = _config.get("result_dir")
+    _human_in_loop_value = _user_guidance.get("human_in_loop_value", "")
+
+    if result_dir:
+        _work_dir = result_dir
+    else:
+        _work_dir = os.path.join(_task_dir, _thread_id)
+    os.makedirs(_work_dir, exist_ok=True)
+
+    # 提示词
+    async def _assemble_prompt():
+        # 抽取设置结果
+        _extract_setting_result = await read_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/middle/extract_setting.md",
+            }
+        )
+        _extract_setting_result = json.loads(_extract_setting_result)["extract_setting"]
+
+        # 种子结果
+        _core_seed_result = await read_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/middle/core_seed.md",
+            }
+        )
+        _core_seed_result = json.loads(_core_seed_result)
+
+        # 世界观结果
+        _world_building_result = await read_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/middle/world_building.md",
+            }
+        )
+        _world_building_result = json.loads(_world_building_result)
+
+        # 聚合所有信息
+        _extract_setting_result.update(_core_seed_result)
+        _extract_setting_result.update(_world_building_result)
+
+        tmp = {**_extract_setting_result, "user_guidance": _human_in_loop_value}
+        _prompt_tamplate = Prompts_Provider_Instance.get_template(
+            "ainovel", _NODE_NAME, prompt_dir
+        )
+        return [
+            HumanMessage(
+                content=Prompts_Provider_Instance.prompt_apply_template(
+                    _prompt_tamplate, tmp
+                )
+            )
+        ]
+
+    # 4 大模型
+    response = await LLMS_Provider_Instance.llm_wrap_hooks(
+        _thread_id,
+        _NODE_NAME,
+        await _assemble_prompt(),
+        _model_name,
+    )
+
+    _result = {_NODE_NAME: response.content}
+
+    os.makedirs(f"{_work_dir}/middle", exist_ok=True)
+    await write_file_tool.arun(
+        {
+            "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
+            "text": json.dumps(_result, ensure_ascii=False),
+        }
+    )
+    return {
+        "code": 0,
+        "err_message": "ok",
+        "data": _result,
+        "human_in_loop_node": _NODE_NAME,
+    }
+
+
+# 三幕式情节架构
+@Agent_Hooks_Instance.node_with_hooks(node_name="plot_arch")
+async def plot_arch(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "plot_arch"
+
+    # 变量
+    _thread_id = runtime.context.thread_id
+    _task_dir = runtime.context.task_dir or CONF.SYSTEM.task_dir
+    _model_name = runtime.context.model
+    _user_guidance = state.user_guidance
+    _config = runtime.context.config
+
+    prompt_dir = _config.get("prompt_dir")
+    result_dir = _config.get("result_dir")
+    _human_in_loop_value = _user_guidance.get("human_in_loop_value", "")
+
+    if result_dir:
+        _work_dir = result_dir
+    else:
+        _work_dir = os.path.join(_task_dir, _thread_id)
+    os.makedirs(_work_dir, exist_ok=True)
+
+    # 提示词
+    async def _assemble_prompt():
+        # 抽取设置结果
+        _extract_setting_result = await read_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/middle/extract_setting.md",
+            }
+        )
+        _extract_setting_result = json.loads(_extract_setting_result)["extract_setting"]
+
+        # 种子结果
+        _core_seed_result = await read_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/middle/core_seed.md",
+            }
+        )
+        _core_seed_result = json.loads(_core_seed_result)
+
+        # 世界观结果
+        _world_building_result = await read_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/middle/world_building.md",
+            }
+        )
+        _world_building_result = json.loads(_world_building_result)
+
+        # 角色信息
+        _character_dynamics_result = await read_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/middle/character_dynamics.md",
+            }
+        )
+        _character_dynamics_result = json.loads(_character_dynamics_result)
+
+        # 聚合所有信息
+        _extract_setting_result.update(_core_seed_result)
+        _extract_setting_result.update(_world_building_result)
+        _extract_setting_result.update(_character_dynamics_result)
+
+        tmp = {**_extract_setting_result, "user_guidance": _human_in_loop_value}
+        _prompt_tamplate = Prompts_Provider_Instance.get_template(
+            "ainovel", _NODE_NAME, prompt_dir
+        )
+        return [
+            HumanMessage(
+                content=Prompts_Provider_Instance.prompt_apply_template(
+                    _prompt_tamplate, tmp
+                )
+            )
+        ]
+
+    # 4 大模型
+    response = await LLMS_Provider_Instance.llm_wrap_hooks(
+        _thread_id,
+        _NODE_NAME,
+        await _assemble_prompt(),
+        _model_name,
+    )
+
+    _result = {_NODE_NAME: response.content}
+
+    os.makedirs(f"{_work_dir}/middle", exist_ok=True)
+    await write_file_tool.arun(
+        {
+            "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
+            "text": json.dumps(_result, ensure_ascii=False),
+        }
+    )
+    _result = {_NODE_NAME: response.content}
+    return {
+        "code": 0,
+        "err_message": "ok",
+        "data": _result,
+        "human_in_loop_node": _NODE_NAME,
+    }
+
+
+# 章节目录
+@Agent_Hooks_Instance.node_with_hooks(node_name="chapter_blueprint")
+async def chapter_blueprint(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "chapter_blueprint"
+
+    # 变量
+    _thread_id = runtime.context.thread_id
+    _task_dir = runtime.context.task_dir or CONF.SYSTEM.task_dir
+    _model_name = runtime.context.model
+    _user_guidance = state.user_guidance
+    _config = runtime.context.config
+
+    prompt_dir = _config.get("prompt_dir")
+    result_dir = _config.get("result_dir")
+    _human_in_loop_value = _user_guidance.get("human_in_loop_value", "")
+
+    if result_dir:
+        _work_dir = result_dir
+    else:
+        _work_dir = os.path.join(_task_dir, _thread_id)
+    os.makedirs(_work_dir, exist_ok=True)
+
+    _number_of_chapters = await read_file_tool.arun(
+        {
+            "file_path": f"{_work_dir}/middle/extract_setting.md",
+        }
+    )
+    _number_of_chapters = json.loads(_number_of_chapters)["extract_setting"][
+        "number_of_chapters"
+    ]
+
+    # 提示词
+    async def _assemble_prompt(chapter_list, start, end):
+        # 抽取设置结果
+        _extract_setting_result = await read_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/middle/extract_setting.md",
+            }
+        )
+        _extract_setting_result = json.loads(_extract_setting_result)["extract_setting"]
 
         # 种子结果
         _core_seed_result = await read_file_tool.arun(
@@ -667,66 +544,184 @@ async def build_architecture(state: State, runtime: Runtime[Context]):
         _extract_setting_result.update(_character_dynamics_result)
         _extract_setting_result.update(_plot_arch_result)
 
-        final_content = (
-            "#=== 0) 小说设定 ===\n"
-            f"主题：{_extract_setting_result['topic']},类型：{_extract_setting_result['genre']},篇幅：约{_extract_setting_result['number_of_chapters']}章（每章{_extract_setting_result['word_number']}字）\n\n"
-            "#=== 1) 核心种子 ===\n"
-            f"{_extract_setting_result['core_seed']}\n\n"
-            "#=== 2) 角色动力学 ===\n"
-            f"{_extract_setting_result['character_dynamics']}\n\n"
-            "#=== 3) 世界观 ===\n"
-            f"{_extract_setting_result['world_building']}\n\n"
-            "#=== 4) 三幕式情节架构 ===\n"
-            f"{_extract_setting_result['plot_arch']}\n"
+        tmp = {
+            **_extract_setting_result,
+            "user_guidance": _human_in_loop_value,
+            "chapter_list": chapter_list,
+            "start": start,
+            "end": end,
+        }
+        _prompt_tamplate = Prompts_Provider_Instance.get_template(
+            "ainovel", _NODE_NAME, prompt_dir
         )
-        await write_file_tool.arun(
-            {
-                "file_path": f"{_work_dir}/novel_architecture.md",
-                "text": final_content,
-            }
-        )
-        log_info_set_color(
-            _thread_id, _NODE_NAME, f"save to {_work_dir}/novel_architecture.md"
+        return [
+            HumanMessage(
+                content=Prompts_Provider_Instance.prompt_apply_template(
+                    _prompt_tamplate, tmp
+                )
+            )
+        ]
+
+    current_start = 1
+    final_chapter_blueprint = []
+    while current_start <= _number_of_chapters:
+        current_end = min(current_start + 10, _number_of_chapters)
+        chapter_list = "\n\n".join(final_chapter_blueprint[-200:])
+        # 4 大模型
+        response = await LLMS_Provider_Instance.llm_wrap_hooks(
+            _thread_id,
+            _NODE_NAME,
+            await _assemble_prompt(chapter_list, current_start, current_end),
+            _model_name,
         )
 
-        # 小说章节目录简述
-        _chapter_blueprint_result = await read_file_tool.arun(
-            {
-                "file_path": f"{_work_dir}/middle/chapter_blueprint.md",
-            }
-        )
-        _chapter_blueprint_result = json.loads(_chapter_blueprint_result)
-        await write_file_tool.arun(
-            {
-                "file_path": f"{_work_dir}/novel_chapter_blueprint.md",
-                "text": _chapter_blueprint_result["chapter_blueprint"],
-            }
-        )
-        log_info_set_color(
-            _thread_id, _NODE_NAME, f"save to {_work_dir}/novel_chapter_blueprint.md"
-        )
-        final_content = (
-            final_content
-            + "\n#=== 3) 世界观 ===\n\n"
-            + _chapter_blueprint_result["chapter_blueprint"]
-        )
-        return {
-            "code": 0,
-            "err_message": "ok",
-            "data": final_content,
-            "human_in_loop_node": _NODE_NAME,
-        }
+        final_chapter_blueprint.append(response.content)
 
-    except Exception as e:
-        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
-        return {
-            "code": 1,
-            "err_message": _err_message,
-            "messages": Messages(type="end"),
+        current_start = current_end + 1
+
+    _result = {_NODE_NAME: "\n\n".join(final_chapter_blueprint)}
+
+    os.makedirs(f"{_work_dir}/middle", exist_ok=True)
+    await write_file_tool.arun(
+        {
+            "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
+            "text": json.dumps(_result, ensure_ascii=False),
         }
+    )
+    return {
+        "code": 0,
+        "err_message": "ok",
+        "data": _result,
+        "human_in_loop_node": _NODE_NAME,
+    }
+
+
+# 结果保存
+@Agent_Hooks_Instance.node_with_hooks(node_name="build_architecture")
+async def build_architecture(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "build_architecture"
+
+    # 变量
+    _thread_id = runtime.context.thread_id
+    _task_dir = runtime.context.task_dir or CONF.SYSTEM.task_dir
+    _config = runtime.context.config
+
+    result_dir = _config.get("result_dir")
+
+    if result_dir:
+        _work_dir = result_dir
+    else:
+        _work_dir = os.path.join(_task_dir, _thread_id)
+    os.makedirs(_work_dir, exist_ok=True)
+
+    # 抽取设置结果
+    _extract_setting_result = await read_file_tool.arun(
+        {
+            "file_path": f"{_work_dir}/middle/extract_setting.md",
+        }
+    )
+
+    _extract_setting_result = json.loads(_extract_setting_result)["extract_setting"]
+
+    # 小说设定
+    await write_file_tool.arun(
+        {
+            "file_path": f"{_work_dir}/novel_extract_setting.md",
+            "text": json.dumps(_extract_setting_result, ensure_ascii=False),
+        }
+    )
+
+    # 种子结果
+    _core_seed_result = await read_file_tool.arun(
+        {
+            "file_path": f"{_work_dir}/middle/core_seed.md",
+        }
+    )
+    _core_seed_result = json.loads(_core_seed_result)
+
+    # 世界观结果
+    _world_building_result = await read_file_tool.arun(
+        {
+            "file_path": f"{_work_dir}/middle/world_building.md",
+        }
+    )
+    _world_building_result = json.loads(_world_building_result)
+
+    # 角色信息
+    _character_dynamics_result = await read_file_tool.arun(
+        {
+            "file_path": f"{_work_dir}/middle/character_dynamics.md",
+        }
+    )
+    _character_dynamics_result = json.loads(_character_dynamics_result)
+
+    # 三幕式情节架构
+    _plot_arch_result = await read_file_tool.arun(
+        {
+            "file_path": f"{_work_dir}/middle/plot_arch.md",
+        }
+    )
+    _plot_arch_result = json.loads(_plot_arch_result)
+
+    # 聚合所有信息
+    _extract_setting_result.update(_core_seed_result)
+    _extract_setting_result.update(_world_building_result)
+    _extract_setting_result.update(_character_dynamics_result)
+    _extract_setting_result.update(_plot_arch_result)
+
+    final_content = (
+        "#=== 0) 小说设定 ===\n"
+        f"主题：{_extract_setting_result['topic']},类型：{_extract_setting_result['genre']},篇幅：约{_extract_setting_result['number_of_chapters']}章（每章{_extract_setting_result['word_number']}字）\n\n"
+        "#=== 1) 核心种子 ===\n"
+        f"{_extract_setting_result['core_seed']}\n\n"
+        "#=== 2) 角色动力学 ===\n"
+        f"{_extract_setting_result['character_dynamics']}\n\n"
+        "#=== 3) 世界观 ===\n"
+        f"{_extract_setting_result['world_building']}\n\n"
+        "#=== 4) 三幕式情节架构 ===\n"
+        f"{_extract_setting_result['plot_arch']}\n"
+    )
+    await write_file_tool.arun(
+        {
+            "file_path": f"{_work_dir}/novel_architecture.md",
+            "text": final_content,
+        }
+    )
+    log_info_set_color(
+        _thread_id, _NODE_NAME, f"save to {_work_dir}/novel_architecture.md"
+    )
+
+    # 小说章节目录简述
+    _chapter_blueprint_result = await read_file_tool.arun(
+        {
+            "file_path": f"{_work_dir}/middle/chapter_blueprint.md",
+        }
+    )
+    _chapter_blueprint_result = json.loads(_chapter_blueprint_result)
+    await write_file_tool.arun(
+        {
+            "file_path": f"{_work_dir}/novel_chapter_blueprint.md",
+            "text": _chapter_blueprint_result["chapter_blueprint"],
+        }
+    )
+    log_info_set_color(
+        _thread_id, _NODE_NAME, f"save to {_work_dir}/novel_chapter_blueprint.md"
+    )
+    final_content = (
+        final_content
+        + "\n#=== 3) 世界观 ===\n\n"
+        + _chapter_blueprint_result["chapter_blueprint"]
+    )
+    return {
+        "code": 0,
+        "err_message": "ok",
+        "data": final_content,
+        "human_in_loop_node": _NODE_NAME,
+    }
 
 
 # 人工指导
+@Agent_Hooks_Instance.node_with_hooks(node_name="human_in_loop_guidance")
 async def human_in_loop_guidance(
     state: State, runtime: Runtime[Context]
 ) -> Command[
@@ -740,7 +735,7 @@ async def human_in_loop_guidance(
 ]:
     # 变量
     _thread_id = runtime.context.thread_id
-    _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
+    _task_dir = runtime.context.task_dir or CONF.SYSTEM.task_dir
     _human_in_loop_node = state.human_in_loop_node
 
     _work_dir = os.path.join(_task_dir, _thread_id)
@@ -765,6 +760,7 @@ async def human_in_loop_guidance(
 
 
 # 人工确认
+@Agent_Hooks_Instance.node_with_hooks(node_name="human_in_loop_agree")
 async def human_in_loop_agree(
     state: State, runtime: Runtime[Context]
 ) -> Command[
@@ -782,7 +778,7 @@ async def human_in_loop_agree(
 ]:
     # 变量
     _thread_id = runtime.context.thread_id
-    _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
+    _task_dir = runtime.context.task_dir or CONF.SYSTEM.task_dir
     _code = state.code
     _human_in_loop_node = state.human_in_loop_node
     _data = state.data

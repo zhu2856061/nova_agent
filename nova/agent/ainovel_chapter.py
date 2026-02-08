@@ -16,10 +16,10 @@ from langgraph.runtime import Runtime
 from langgraph.types import Command, interrupt
 
 from nova import CONF
-from nova.llms import get_llm_by_type
+from nova.hooks import Agent_Hooks_Instance
+from nova.llms import LLMS_Provider_Instance, Prompts_Provider_Instance
 from nova.model.agent import Context, Messages, State
-from nova.llms.template import apply_prompt_template, get_prompt
-from nova.tools.file_manager import read_file_tool, write_file_tool
+from nova.tools import read_file_tool, write_file_tool
 from nova.utils.common import convert_base_message
 from nova.utils.log_utils import log_error_set_color, log_info_set_color
 
@@ -186,724 +186,733 @@ def get_last_n_chapters_text(work_dir: str, current_chapter_num: int, n: int = 3
 
 
 # 全局摘要
+@Agent_Hooks_Instance.node_with_hooks(node_name="global_summary")
 async def global_summary(state: State, runtime: Runtime[Context]):
     _NODE_NAME = "global_summary"
-    try:
-        # 变量
-        _thread_id = runtime.context.thread_id
-        _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
-        _model_name = runtime.context.model
-        _user_guidance = state.user_guidance
-        _config = runtime.context.config
 
-        prompt_dir = _config.get("prompt_dir")
-        result_dir = _config.get("result_dir")
+    # 变量
+    _thread_id = runtime.context.thread_id
+    _task_dir = runtime.context.task_dir or CONF.SYSTEM.task_dir
+    _model_name = runtime.context.model
+    _user_guidance = state.user_guidance
+    _config = runtime.context.config
 
-        if result_dir:
-            _work_dir = result_dir
-        else:
-            _work_dir = os.path.join(_task_dir, _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
+    prompt_dir = _config.get("prompt_dir")
+    result_dir = _config.get("result_dir")
 
-        # 获得当前章节
-        _current_chapter_id = _user_guidance.get("current_chapter_id")
-        if not _current_chapter_id:
-            _err_message = log_error_set_color(
-                _thread_id, _NODE_NAME, "current_chapter_id not found"
-            )
-            return {"code": 1, "err_message": _err_message}
-        os.makedirs(f"{_work_dir}/chapter/chapter_{_current_chapter_id}", exist_ok=True)
+    if result_dir:
+        _work_dir = result_dir
+    else:
+        _work_dir = os.path.join(_task_dir, _thread_id)
+    os.makedirs(_work_dir, exist_ok=True)
 
-        _previous_chapter_text = ""
-        _previous_global_summary = ""
-        if os.path.exists(f"{_work_dir}/chapter/chapter_{_current_chapter_id - 1}"):
-            if os.path.exists(
-                f"{_work_dir}/chapter/chapter_{_current_chapter_id - 1}/chapter_draft.md"
-            ):
-                _previous_chapter_text = await read_file_tool.arun(
-                    {
-                        "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id - 1}/chapter_draft.md"
-                    }
-                )
-            if os.path.exists(
-                f"{_work_dir}/chapter/chapter_{_current_chapter_id - 1}/{_NODE_NAME}.md"
-            ):
-                _previous_global_summary = await read_file_tool.arun(
-                    {
-                        "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id - 1}/{_NODE_NAME}.md"
-                    }
-                )
-
-        if _current_chapter_id > 1 and _previous_chapter_text == "":
-            return {
-                "code": 1,
-                "err_message": f"current_chapter_id={_current_chapter_id}, previous chapter text  not found",
-                "messages": Messages(type="end"),
-            }
-        if _current_chapter_id > 2 and _previous_global_summary == "":
-            return {
-                "code": 1,
-                "err_message": f"current_chapter_id={_current_chapter_id}, previous global summary not found",
-                "messages": Messages(type="end"),
-            }
-
-        # 提示词
-        def _assemble_prompt():
-            tmp = {
-                "previous_chapter_text": _previous_chapter_text,
-                "previous_global_summary": _previous_global_summary,
-            }
-            _prompt_tamplate = get_prompt("ainovel", _NODE_NAME, prompt_dir)
-            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
-
-        # LLM
-        def _get_llm():
-            return get_llm_by_type(_model_name)
-
-        response = await _get_llm().ainvoke(_assemble_prompt())
-        log_info_set_color(_thread_id, _NODE_NAME, response)
-
-        _result = {_NODE_NAME: response.content}
-
-        await write_file_tool.arun(
-            {
-                "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/{_NODE_NAME}.md",
-                "text": json.dumps(_result, ensure_ascii=False),
-            }
+    # 获得当前章节
+    _current_chapter_id = _user_guidance.get("current_chapter_id")
+    if not _current_chapter_id:
+        _err_message = log_error_set_color(
+            _thread_id, _NODE_NAME, "current_chapter_id not found"
         )
-        return {"code": 0, "err_message": "ok", "data": _result}
+        return {"code": 1, "err_message": _err_message}
+    os.makedirs(f"{_work_dir}/chapter/chapter_{_current_chapter_id}", exist_ok=True)
 
-    except Exception as e:
-        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
+    _previous_chapter_text = ""
+    _previous_global_summary = ""
+    if os.path.exists(f"{_work_dir}/chapter/chapter_{_current_chapter_id - 1}"):
+        if os.path.exists(
+            f"{_work_dir}/chapter/chapter_{_current_chapter_id - 1}/chapter_draft.md"
+        ):
+            _previous_chapter_text = await read_file_tool.arun(
+                {
+                    "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id - 1}/chapter_draft.md"
+                }
+            )
+        if os.path.exists(
+            f"{_work_dir}/chapter/chapter_{_current_chapter_id - 1}/{_NODE_NAME}.md"
+        ):
+            _previous_global_summary = await read_file_tool.arun(
+                {
+                    "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id - 1}/{_NODE_NAME}.md"
+                }
+            )
+
+    if _current_chapter_id > 1 and _previous_chapter_text == "":
         return {
             "code": 1,
-            "err_message": _err_message,
+            "err_message": f"current_chapter_id={_current_chapter_id}, previous chapter text  not found",
             "messages": Messages(type="end"),
         }
+    if _current_chapter_id > 2 and _previous_global_summary == "":
+        return {
+            "code": 1,
+            "err_message": f"current_chapter_id={_current_chapter_id}, previous global summary not found",
+            "messages": Messages(type="end"),
+        }
+
+    # 提示词
+    def _assemble_prompt():
+        tmp = {
+            "previous_chapter_text": _previous_chapter_text,
+            "previous_global_summary": _previous_global_summary,
+        }
+        _prompt_tamplate = Prompts_Provider_Instance.get_template(
+            "ainovel", _NODE_NAME, prompt_dir
+        )
+        return [
+            HumanMessage(
+                content=Prompts_Provider_Instance.prompt_apply_template(
+                    _prompt_tamplate, tmp
+                )
+            )
+        ]
+
+    # 4 大模型
+    response = await LLMS_Provider_Instance.llm_wrap_hooks(
+        _thread_id,
+        _NODE_NAME,
+        _assemble_prompt(),
+        _model_name,
+    )
+
+    _result = {_NODE_NAME: response.content}
+
+    await write_file_tool.arun(
+        {
+            "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/{_NODE_NAME}.md",
+            "text": json.dumps(_result, ensure_ascii=False),
+        }
+    )
+    return {"code": 0, "err_message": "ok", "data": _result}
 
 
 # 创建角色状态
+@Agent_Hooks_Instance.node_with_hooks(node_name="create_character_state")
 async def create_character_state(state: State, runtime: Runtime[Context]):
     _NODE_NAME = "create_character_state"
-    try:
-        # 变量
-        _thread_id = runtime.context.thread_id
-        _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
-        _model_name = runtime.context.model
-        _user_guidance = state.user_guidance
-        _config = runtime.context.config
 
-        prompt_dir = _config.get("prompt_dir")
-        result_dir = _config.get("result_dir")
+    # 变量
+    _thread_id = runtime.context.thread_id
+    _task_dir = runtime.context.task_dir or CONF.SYSTEM.task_dir
+    _model_name = runtime.context.model
+    _user_guidance = state.user_guidance
+    _config = runtime.context.config
 
-        if result_dir:
-            _work_dir = result_dir
-        else:
-            _work_dir = os.path.join(_task_dir, _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
+    prompt_dir = _config.get("prompt_dir")
+    result_dir = _config.get("result_dir")
 
-        # 获得当前章节
-        _current_chapter_id = _user_guidance.get("current_chapter_id")
-        if not _current_chapter_id:
-            _err_message = log_error_set_color(
-                _thread_id, _NODE_NAME, "current_chapter_id not found"
-            )
-            return {
-                "code": 1,
-                "err_message": _err_message,
-                "messages": Messages(type="end"),
-            }
-        os.makedirs(f"{_work_dir}/chapter/chapter_{_current_chapter_id}", exist_ok=True)
+    if result_dir:
+        _work_dir = result_dir
+    else:
+        _work_dir = os.path.join(_task_dir, _thread_id)
+    os.makedirs(_work_dir, exist_ok=True)
 
-        # 获得大纲
-        if os.path.exists(f"{_work_dir}/novel_architecture.md"):
-            _novel_architecture = await read_file_tool.arun(
-                {"file_path": f"{_work_dir}/novel_architecture.md"}
-            )
-        else:
-            _err_message = log_error_set_color(
-                _thread_id, _NODE_NAME, "novel_architecture not found"
-            )
-            return {
-                "code": 1,
-                "err_message": _err_message,
-                "messages": Messages(type="end"),
-            }
-
-        # 提示词
-        def _assemble_prompt():
-            tmp = {"novel_architecture": _novel_architecture}
-            _prompt_tamplate = get_prompt("ainovel", _NODE_NAME, prompt_dir)
-            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
-
-        # LLM
-        def _get_llm():
-            return get_llm_by_type(_model_name)
-
-        response = await _get_llm().ainvoke(_assemble_prompt())
-        log_info_set_color(_thread_id, _NODE_NAME, response)
-        _result = {"character_state": response.content}
-        await write_file_tool.arun(
-            {
-                "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/character_state.md",
-                "text": json.dumps(_result, ensure_ascii=False),
-            }
+    # 获得当前章节
+    _current_chapter_id = _user_guidance.get("current_chapter_id")
+    if not _current_chapter_id:
+        _err_message = log_error_set_color(
+            _thread_id, _NODE_NAME, "current_chapter_id not found"
         )
-        return {"code": 0, "err_message": "ok", "data": _result}
-
-    except Exception as e:
-        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
         return {
             "code": 1,
             "err_message": _err_message,
             "messages": Messages(type="end"),
         }
+    os.makedirs(f"{_work_dir}/chapter/chapter_{_current_chapter_id}", exist_ok=True)
+
+    # 获得大纲
+    if os.path.exists(f"{_work_dir}/novel_architecture.md"):
+        _novel_architecture = await read_file_tool.arun(
+            {"file_path": f"{_work_dir}/novel_architecture.md"}
+        )
+    else:
+        _err_message = log_error_set_color(
+            _thread_id, _NODE_NAME, "novel_architecture not found"
+        )
+        return {
+            "code": 1,
+            "err_message": _err_message,
+            "messages": Messages(type="end"),
+        }
+
+    # 提示词
+    def _assemble_prompt():
+        tmp = {"novel_architecture": _novel_architecture}
+        _prompt_tamplate = Prompts_Provider_Instance.get_template(
+            "ainovel", _NODE_NAME, prompt_dir
+        )
+        return [
+            HumanMessage(
+                content=Prompts_Provider_Instance.prompt_apply_template(
+                    _prompt_tamplate, tmp
+                )
+            )
+        ]
+
+    response = await LLMS_Provider_Instance.llm_wrap_hooks(
+        _thread_id,
+        _NODE_NAME,
+        _assemble_prompt(),
+        _model_name,
+    )
+    _result = {"character_state": response.content}
+    await write_file_tool.arun(
+        {
+            "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/character_state.md",
+            "text": json.dumps(_result, ensure_ascii=False),
+        }
+    )
+    return {"code": 0, "err_message": "ok", "data": _result}
 
 
 # 更新角色状态
+@Agent_Hooks_Instance.node_with_hooks(node_name="update_character_state")
 async def update_character_state(state: State, runtime: Runtime[Context]):
     _NODE_NAME = "update_character_state"
-    try:
-        # 变量
-        _thread_id = runtime.context.thread_id
-        _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
-        _model_name = runtime.context.model
-        _user_guidance = state.user_guidance
-        _config = runtime.context.config
 
-        prompt_dir = _config.get("prompt_dir")
-        result_dir = _config.get("result_dir")
+    # 变量
+    _thread_id = runtime.context.thread_id
+    _task_dir = runtime.context.task_dir or CONF.SYSTEM.task_dir
+    _model_name = runtime.context.model
+    _user_guidance = state.user_guidance
+    _config = runtime.context.config
 
-        if result_dir:
-            _work_dir = result_dir
-        else:
-            _work_dir = os.path.join(_task_dir, _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
+    prompt_dir = _config.get("prompt_dir")
+    result_dir = _config.get("result_dir")
 
-        # 获得当前章节
-        _current_chapter_id = _user_guidance.get("current_chapter_id")
-        if not _current_chapter_id:
-            _err_message = log_error_set_color(
-                _thread_id, _NODE_NAME, "current_chapter_id not found"
-            )
-            return {"code": 1, "err_message": _err_message}
-        os.makedirs(f"{_work_dir}/chapter/chapter_{_current_chapter_id}", exist_ok=True)
+    if result_dir:
+        _work_dir = result_dir
+    else:
+        _work_dir = os.path.join(_task_dir, _thread_id)
+    os.makedirs(_work_dir, exist_ok=True)
 
-        _previous_chapter_text = read_file_tool.run(
-            {
-                "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id - 1}/chapter_draft.md"
-            }
+    # 获得当前章节
+    _current_chapter_id = _user_guidance.get("current_chapter_id")
+    if not _current_chapter_id:
+        _err_message = log_error_set_color(
+            _thread_id, _NODE_NAME, "current_chapter_id not found"
         )
+        return {"code": 1, "err_message": _err_message}
+    os.makedirs(f"{_work_dir}/chapter/chapter_{_current_chapter_id}", exist_ok=True)
 
-        _previous_character_state = read_file_tool.run(
-            {
-                "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id - 1}/character_state.md"
-            }
-        )
-        if _previous_chapter_text == "" or _previous_character_state == "":
-            return {
-                "code": 1,
-                "err_message": f"current_chapter_id={_current_chapter_id}, previous chapter text or previous_character_state not found",
-                "messages": Messages(type="end"),
-            }
+    _previous_chapter_text = read_file_tool.run(
+        {
+            "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id - 1}/chapter_draft.md"
+        }
+    )
 
-        # 提示词
-        def _assemble_prompt():
-            tmp = {
-                "previous_chapter_text": _previous_chapter_text,
-                "previous_character_state": _previous_character_state,
-            }
-            _prompt_tamplate = get_prompt("ainovel", _NODE_NAME, prompt_dir)
-            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
-
-        # LLM
-        def _get_llm():
-            return get_llm_by_type(_model_name)
-
-        response = await _get_llm().ainvoke(_assemble_prompt())
-        log_info_set_color(_thread_id, _NODE_NAME, response)
-
-        _result = {"character_state": response.content}
-
-        await write_file_tool.arun(
-            {
-                "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/character_state.md",
-                "text": json.dumps(_result, ensure_ascii=False),
-            }
-        )
-        return {"code": 0, "err_message": "ok", "data": _result}
-
-    except Exception as e:
-        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
+    _previous_character_state = read_file_tool.run(
+        {
+            "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id - 1}/character_state.md"
+        }
+    )
+    if _previous_chapter_text == "" or _previous_character_state == "":
         return {
             "code": 1,
-            "err_message": _err_message,
+            "err_message": f"current_chapter_id={_current_chapter_id}, previous chapter text or previous_character_state not found",
             "messages": Messages(type="end"),
         }
+
+    # 提示词
+    def _assemble_prompt():
+        tmp = {
+            "previous_chapter_text": _previous_chapter_text,
+            "previous_character_state": _previous_character_state,
+        }
+        _prompt_tamplate = Prompts_Provider_Instance.get_template(
+            "ainovel", _NODE_NAME, prompt_dir
+        )
+        return [
+            HumanMessage(
+                content=Prompts_Provider_Instance.prompt_apply_template(
+                    _prompt_tamplate, tmp
+                )
+            )
+        ]
+
+    # 4 大模型
+    response = await LLMS_Provider_Instance.llm_wrap_hooks(
+        _thread_id,
+        _NODE_NAME,
+        _assemble_prompt(),
+        _model_name,
+    )
+
+    _result = {"character_state": response.content}
+
+    await write_file_tool.arun(
+        {
+            "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/character_state.md",
+            "text": json.dumps(_result, ensure_ascii=False),
+        }
+    )
+    return {"code": 0, "err_message": "ok", "data": _result}
 
 
 # 最近3章节，当前章节，下一章节，构建当前章节的摘要
+@Agent_Hooks_Instance.node_with_hooks(node_name="summarize_recent_chapters")
 async def summarize_recent_chapters(state: State, runtime: Runtime[Context]):
     _NODE_NAME = "summarize_recent_chapters"
-    try:
-        # 变量
-        _thread_id = runtime.context.thread_id
-        _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
-        _model_name = runtime.context.model
-        _user_guidance = state.user_guidance
-        _config = runtime.context.config
 
-        prompt_dir = _config.get("prompt_dir")
-        result_dir = _config.get("result_dir")
+    # 变量
+    _thread_id = runtime.context.thread_id
+    _task_dir = runtime.context.task_dir or CONF.SYSTEM.task_dir
+    _model_name = runtime.context.model
+    _user_guidance = state.user_guidance
+    _config = runtime.context.config
 
-        if result_dir:
-            _work_dir = result_dir
-        else:
-            _work_dir = os.path.join(_task_dir, _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
+    prompt_dir = _config.get("prompt_dir")
+    result_dir = _config.get("result_dir")
 
-        # 获得当前章节id
-        _current_chapter_id = _user_guidance.get("current_chapter_id")
-        if not _current_chapter_id:
-            _err_message = log_error_set_color(
-                _thread_id, _NODE_NAME, "current_chapter_id not found"
-            )
-            return {
-                "code": 1,
-                "err_message": _err_message,
-                "messages": Messages(type="end"),
-            }
+    if result_dir:
+        _work_dir = result_dir
+    else:
+        _work_dir = os.path.join(_task_dir, _thread_id)
+    os.makedirs(_work_dir, exist_ok=True)
 
-        os.makedirs(f"{_work_dir}/chapter/chapter_{_current_chapter_id}", exist_ok=True)
-
-        # 获得章节蓝图
-        if os.path.exists(f"{_work_dir}/novel_chapter_blueprint.md"):
-            _novel_chapter_blueprint = await read_file_tool.arun(
-                {"file_path": f"{_work_dir}/novel_chapter_blueprint.md"}
-            )
-        else:
-            _err_message = log_error_set_color(
-                _thread_id, _NODE_NAME, "novel_chapter_blueprint not found"
-            )
-            return {
-                "code": 1,
-                "err_message": _err_message,
-                "messages": Messages(type="end"),
-            }
-
-        # 提示词
-        def _assemble_prompt():
-            # 获取章节概要信息
-            _chapter_info = get_chapter_info_from_blueprint(
-                _novel_chapter_blueprint, _current_chapter_id
-            )
-            # 获取下一章节概要信息
-            _next_chapter_info = get_chapter_info_from_blueprint(
-                _novel_chapter_blueprint, _current_chapter_id + 1
-            )
-            # 获取前文内容
-            _recent_texts = get_last_n_chapters_text(
-                _work_dir, _current_chapter_id, n=3
-            )
-            _combined_text = "\n\n".join(_recent_texts).strip()
-            max_combined_length = 4000
-            if len(_combined_text) > max_combined_length:
-                _combined_text = _combined_text[-max_combined_length:]
-
-            tmp = {
-                "combined_text": _combined_text,
-                "novel_number": _current_chapter_id,
-                "chapter_title": _chapter_info.get("chapter_title", "未命名"),
-                "chapter_role": _chapter_info.get("chapter_role", "常规章节"),
-                "chapter_purpose": _chapter_info.get("chapter_purpose", "内容推进"),
-                "suspense_level": _chapter_info.get("suspense_level", "中等"),
-                "foreshadowing": _chapter_info.get("foreshadowing", "无"),
-                "plot_twist_level": _chapter_info.get("plot_twist_level", "★☆☆☆☆"),
-                "chapter_summary": _chapter_info.get("chapter_summary", ""),
-                "next_chapter_number": _current_chapter_id + 1,
-                "next_chapter_title": _next_chapter_info.get(
-                    "chapter_title", "（未命名）"
-                ),
-                "next_chapter_role": _next_chapter_info.get("chapter_role", "过渡章节"),
-                "next_chapter_purpose": _next_chapter_info.get(
-                    "chapter_purpose", "承上启下"
-                ),
-                "next_chapter_summary": _next_chapter_info.get(
-                    "chapter_summary", "衔接过渡内容"
-                ),
-                "next_chapter_suspense_level": _next_chapter_info.get(
-                    "suspense_level", "中等"
-                ),
-                "next_chapter_foreshadowing": _next_chapter_info.get(
-                    "foreshadowing", "无特殊伏笔"
-                ),
-                "next_chapter_plot_twist_level": _next_chapter_info.get(
-                    "plot_twist_level", "★☆☆☆☆"
-                ),
-            }
-            _prompt_tamplate = get_prompt("ainovel", _NODE_NAME, prompt_dir)
-            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
-
-        # LLM
-        def _get_llm():
-            return get_llm_by_type(_model_name)
-
-        response = await _get_llm().ainvoke(_assemble_prompt())
-        log_info_set_color(_thread_id, _NODE_NAME, response)
-        _result = {_NODE_NAME: response.content}
-        await write_file_tool.arun(
-            {
-                "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/{_NODE_NAME}.md",
-                "text": json.dumps(_result, ensure_ascii=False),
-            }
+    # 获得当前章节id
+    _current_chapter_id = _user_guidance.get("current_chapter_id")
+    if not _current_chapter_id:
+        _err_message = log_error_set_color(
+            _thread_id, _NODE_NAME, "current_chapter_id not found"
         )
-
-        return {"code": 0, "err_message": "ok", "data": _result}
-
-    except Exception as e:
-        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
-        return {"code": 1, "err_message": _err_message}
-
-
-# 首章节内容
-async def first_chapter_draft(state: State, runtime: Runtime[Context]):
-    _NODE_NAME = "first_chapter_draft"
-    try:
-        # 变量
-        _thread_id = runtime.context.thread_id
-        _task_dir = runtime.context.task_dir
-        _model_name = runtime.context.model
-        _user_guidance = state.user_guidance
-        _config = runtime.context.config
-
-        prompt_dir = _config.get("prompt_dir")
-        result_dir = _config.get("result_dir")
-
-        if result_dir:
-            _work_dir = result_dir
-        else:
-            _work_dir = os.path.join(_task_dir, _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
-
-        # 获得当前章节id
-        _current_chapter_id = 1
-        os.makedirs(f"{_work_dir}/chapter/chapter_{_current_chapter_id}", exist_ok=True)
-
-        # 获得小说设定
-        if os.path.exists(f"{_work_dir}/novel_extract_setting.md"):
-            _novel_setting = await read_file_tool.arun(
-                {"file_path": f"{_work_dir}/novel_extract_setting.md"}
-            )
-            _novel_setting = json.loads(_novel_setting)
-        else:
-            _err_message = log_error_set_color(
-                _thread_id, _NODE_NAME, "novel_extract_setting not found"
-            )
-            return {"code": 1, "err_message": _err_message}
-
-        # 获得小说架构
-        if os.path.exists(f"{_work_dir}/novel_architecture.md"):
-            _novel_architecture = await read_file_tool.arun(
-                {"file_path": f"{_work_dir}/novel_architecture.md"}
-            )
-        else:
-            _err_message = log_error_set_color(
-                _thread_id, _NODE_NAME, "novel_architecture not found"
-            )
-            return {"code": 1, "err_message": _err_message}
-
-        # 获得章节蓝图
-        if os.path.exists(f"{_work_dir}/novel_chapter_blueprint.md"):
-            _novel_chapter_blueprint = await read_file_tool.arun(
-                {"file_path": f"{_work_dir}/novel_chapter_blueprint.md"}
-            )
-        else:
-            _err_message = log_error_set_color(
-                _thread_id, _NODE_NAME, "novel_chapter_blueprint not found"
-            )
-            return {"code": 1, "err_message": _err_message}
-
-        # 获得角色状态
-        if os.path.exists(
-            f"{_work_dir}/chapter/chapter_{_current_chapter_id}/character_state.md"
-        ):
-            _character_state = await read_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/character_state.md"
-                }
-            )
-        else:
-            _err_message = log_error_set_color(
-                _thread_id, _NODE_NAME, "character_state not found"
-            )
-            return {"code": 1, "err_message": _err_message}
-
-        _word_number = _novel_setting["word_number"]
-        _chapter_info = get_chapter_info_from_blueprint(
-            _novel_chapter_blueprint, _current_chapter_id
-        )
-
-        # 提示词
-        def _assemble_prompt():
-            _characters_involved = ""  # 核心人物
-            _key_items = ""  # 关键道具
-            _scene_location = ""  # 空间坐标
-            _time_constraint = ""  # 时间压力
-            tmp = {
-                "novel_number": _current_chapter_id,
-                "chapter_title": _chapter_info["chapter_title"],
-                "chapter_role": _chapter_info["chapter_role"],
-                "chapter_purpose": _chapter_info["chapter_purpose"],
-                "suspense_level": _chapter_info["suspense_level"],
-                "foreshadowing": _chapter_info["foreshadowing"],
-                "plot_twist_level": _chapter_info["plot_twist_level"],
-                "chapter_summary": _chapter_info["chapter_summary"],
-                "word_number": _word_number,
-                "novel_architecture": _novel_architecture,
-                "character_state": _character_state,
-                "characters_involved": _characters_involved,
-                "key_items": _key_items,
-                "scene_location": _scene_location,
-                "time_constraint": _time_constraint,
-                "user_guidance": _user_guidance.get("human_in_loop_value", ""),
-            }
-            _prompt_tamplate = get_prompt("ainovel", _NODE_NAME, prompt_dir)
-            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
-
-        # LLM
-        def _get_llm():
-            return get_llm_by_type(_model_name)
-
-        response = await _get_llm().ainvoke(_assemble_prompt())
-        log_info_set_color(_thread_id, _NODE_NAME, response)
-        _result = {"chapter_draft": response.content}
-        await write_file_tool.arun(
-            {
-                "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/chapter_draft.md",
-                "text": f"## 第{_current_chapter_id}章 {_chapter_info['chapter_title']}\n\n{response.content}",
-            }
-        )
-        return {"code": 0, "err_message": "ok", "data": _result}
-
-    except Exception as e:
-        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
         return {
             "code": 1,
             "err_message": _err_message,
             "messages": Messages(type="end"),
         }
 
+    os.makedirs(f"{_work_dir}/chapter/chapter_{_current_chapter_id}", exist_ok=True)
 
-# 下一章节内容
-async def next_chapter_draft(state: State, runtime: Runtime[Context]):
-    _NODE_NAME = "next_chapter_draft"
-    try:
-        # 变量
-        _thread_id = runtime.context.thread_id
-        _task_dir = runtime.context.task_dir
-        _model_name = runtime.context.model
-        _user_guidance = state.user_guidance
-        _config = runtime.context.config
+    # 获得章节蓝图
+    if os.path.exists(f"{_work_dir}/novel_chapter_blueprint.md"):
+        _novel_chapter_blueprint = await read_file_tool.arun(
+            {"file_path": f"{_work_dir}/novel_chapter_blueprint.md"}
+        )
+    else:
+        _err_message = log_error_set_color(
+            _thread_id, _NODE_NAME, "novel_chapter_blueprint not found"
+        )
+        return {
+            "code": 1,
+            "err_message": _err_message,
+            "messages": Messages(type="end"),
+        }
 
-        prompt_dir = _config.get("prompt_dir")
-        result_dir = _config.get("result_dir")
-
-        if result_dir:
-            _work_dir = result_dir
-        else:
-            _work_dir = os.path.join(_task_dir, _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
-
-        # 获得当前章节id
-        _current_chapter_id = _user_guidance.get("current_chapter_id")
-        if not _current_chapter_id:
-            _err_message = log_error_set_color(
-                _thread_id, _NODE_NAME, "current_chapter_id not found"
-            )
-            return {"code": 1, "err_message": _err_message}
-        os.makedirs(f"{_work_dir}/chapter/chapter_{_current_chapter_id}", exist_ok=True)
-
-        # 获得小说设定
-        if os.path.exists(f"{_work_dir}/novel_extract_setting.md"):
-            _novel_setting = await read_file_tool.arun(
-                {"file_path": f"{_work_dir}/novel_extract_setting.md"}
-            )
-            _novel_setting = json.loads(_novel_setting)
-        else:
-            _err_message = log_error_set_color(
-                _thread_id, _NODE_NAME, "novel_extract_setting not found"
-            )
-            return {"code": 1, "err_message": _err_message}
-
-        # 获得小说架构
-        if os.path.exists(f"{_work_dir}/novel_architecture.md"):
-            _novel_architecture = await read_file_tool.arun(
-                {"file_path": f"{_work_dir}/novel_architecture.md"}
-            )
-        else:
-            _err_message = log_error_set_color(
-                _thread_id, _NODE_NAME, "novel_architecture not found"
-            )
-            return {"code": 1, "err_message": _err_message}
-
-        # 获得章节蓝图
-        if os.path.exists(f"{_work_dir}/novel_chapter_blueprint.md"):
-            _novel_chapter_blueprint = await read_file_tool.arun(
-                {"file_path": f"{_work_dir}/novel_chapter_blueprint.md"}
-            )
-        else:
-            _err_message = log_error_set_color(
-                _thread_id, _NODE_NAME, "novel_chapter_blueprint not found"
-            )
-            return {"code": 1, "err_message": _err_message}
-
-        # 获得角色状态
-        if os.path.exists(
-            f"{_work_dir}/chapter/chapter_{_current_chapter_id}/character_state.md"
-        ):
-            _character_state = await read_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/character_state.md"
-                }
-            )
-        else:
-            _err_message = log_error_set_color(
-                _thread_id, _NODE_NAME, "character_state not found"
-            )
-            return {"code": 1, "err_message": _err_message}
-
-        # 获得全局摘要
-        if os.path.exists(
-            f"{_work_dir}/chapter/chapter_{_current_chapter_id}/global_summary.md"
-        ):
-            _global_summary = await read_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/global_summary.md"
-                }
-            )
-        else:
-            _err_message = log_error_set_color(
-                _thread_id, _NODE_NAME, "global_summary not found"
-            )
-            return {"code": 1, "err_message": _err_message}
-
-        # 当前章节摘要
-        if os.path.exists(
-            f"{_work_dir}/chapter/chapter_{_current_chapter_id}/summarize_recent_chapters.md"
-        ):
-            _short_summary = await read_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/summarize_recent_chapters.md"
-                }
-            )
-        else:
-            _err_message = log_error_set_color(
-                _thread_id, _NODE_NAME, "summarize_recent_chapters not found"
-            )
-            return {"code": 1, "err_message": _err_message}
-
+    # 提示词
+    def _assemble_prompt():
         # 获取章节概要信息
         _chapter_info = get_chapter_info_from_blueprint(
             _novel_chapter_blueprint, _current_chapter_id
         )
+        # 获取下一章节概要信息
+        _next_chapter_info = get_chapter_info_from_blueprint(
+            _novel_chapter_blueprint, _current_chapter_id + 1
+        )
+        # 获取前文内容
+        _recent_texts = get_last_n_chapters_text(_work_dir, _current_chapter_id, n=3)
+        _combined_text = "\n\n".join(_recent_texts).strip()
+        max_combined_length = 4000
+        if len(_combined_text) > max_combined_length:
+            _combined_text = _combined_text[-max_combined_length:]
 
-        _word_number = _novel_setting["word_number"]
-
-        # 提示词
-        def _assemble_prompt():
-            # 获取下一章节概要信息
-            _next_chapter_info = get_chapter_info_from_blueprint(
-                _novel_chapter_blueprint, _current_chapter_id + 1
+        tmp = {
+            "combined_text": _combined_text,
+            "novel_number": _current_chapter_id,
+            "chapter_title": _chapter_info.get("chapter_title", "未命名"),
+            "chapter_role": _chapter_info.get("chapter_role", "常规章节"),
+            "chapter_purpose": _chapter_info.get("chapter_purpose", "内容推进"),
+            "suspense_level": _chapter_info.get("suspense_level", "中等"),
+            "foreshadowing": _chapter_info.get("foreshadowing", "无"),
+            "plot_twist_level": _chapter_info.get("plot_twist_level", "★☆☆☆☆"),
+            "chapter_summary": _chapter_info.get("chapter_summary", ""),
+            "next_chapter_number": _current_chapter_id + 1,
+            "next_chapter_title": _next_chapter_info.get("chapter_title", "（未命名）"),
+            "next_chapter_role": _next_chapter_info.get("chapter_role", "过渡章节"),
+            "next_chapter_purpose": _next_chapter_info.get(
+                "chapter_purpose", "承上启下"
+            ),
+            "next_chapter_summary": _next_chapter_info.get(
+                "chapter_summary", "衔接过渡内容"
+            ),
+            "next_chapter_suspense_level": _next_chapter_info.get(
+                "suspense_level", "中等"
+            ),
+            "next_chapter_foreshadowing": _next_chapter_info.get(
+                "foreshadowing", "无特殊伏笔"
+            ),
+            "next_chapter_plot_twist_level": _next_chapter_info.get(
+                "plot_twist_level", "★☆☆☆☆"
+            ),
+        }
+        _prompt_tamplate = Prompts_Provider_Instance.get_template(
+            "ainovel", _NODE_NAME, prompt_dir
+        )
+        return [
+            HumanMessage(
+                content=Prompts_Provider_Instance.prompt_apply_template(
+                    _prompt_tamplate, tmp
+                )
             )
-            # 获取前一章的结尾片段
-            _recent_texts = get_last_n_chapters_text(
-                _work_dir, _current_chapter_id, n=3
-            )
-            _previous_chapter_excerpt = "\n".join(_recent_texts).strip()
-            max_combined_length = 500
-            if len(_previous_chapter_excerpt) > max_combined_length:
-                _previous_chapter_excerpt = _previous_chapter_excerpt[
-                    -max_combined_length:
-                ]
+        ]
 
-            _characters_involved = ""  # 核心人物
-            _key_items = ""  # 关键道具
-            _scene_location = ""  # 空间坐标
-            _time_constraint = ""  # 时间压力
+    # 4 大模型
+    response = await LLMS_Provider_Instance.llm_wrap_hooks(
+        _thread_id,
+        _NODE_NAME,
+        _assemble_prompt(),
+        _model_name,
+    )
+    _result = {_NODE_NAME: response.content}
+    await write_file_tool.arun(
+        {
+            "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/{_NODE_NAME}.md",
+            "text": json.dumps(_result, ensure_ascii=False),
+        }
+    )
 
-            # (TODO：未来加入知识库，对章节进行筛选)
-            filtered_context = ""
+    return {"code": 0, "err_message": "ok", "data": _result}
 
-            tmp = {
-                "novel_number": _current_chapter_id,
-                "chapter_title": _chapter_info["chapter_title"],
-                "chapter_role": _chapter_info["chapter_role"],
-                "chapter_purpose": _chapter_info["chapter_purpose"],
-                "suspense_level": _chapter_info["suspense_level"],
-                "foreshadowing": _chapter_info["foreshadowing"],
-                "plot_twist_level": _chapter_info["plot_twist_level"],
-                "chapter_summary": _chapter_info["chapter_summary"],
-                "next_chapter_number": _current_chapter_id + 1,
-                "next_chapter_title": _next_chapter_info.get(
-                    "chapter_title", "（未命名）"
-                ),
-                "next_chapter_role": _next_chapter_info.get("chapter_role", "过渡章节"),
-                "next_chapter_purpose": _next_chapter_info.get(
-                    "chapter_purpose", "承上启下"
-                ),
-                "next_chapter_suspense_level": _next_chapter_info.get(
-                    "suspense_level", "中等"
-                ),
-                "next_chapter_foreshadowing": _next_chapter_info.get(
-                    "foreshadowing", "无特殊伏笔"
-                ),
-                "next_chapter_plot_twist_level": _next_chapter_info.get(
-                    "plot_twist_level", "★☆☆☆☆"
-                ),
-                "next_chapter_summary": _next_chapter_info.get(
-                    "chapter_summary", "衔接过渡内容"
-                ),
-                "novel_architecture": _novel_architecture,
-                "global_summary": _global_summary,
-                "previous_chapter_excerpt": _previous_chapter_excerpt,
-                "character_state": _character_state,
-                "short_summary": _short_summary,
-                "filtered_context": filtered_context,
-                "word_number": _word_number,
-                "characters_involved": _characters_involved,
-                "key_items": _key_items,
-                "scene_location": _scene_location,
-                "time_constraint": _time_constraint,
-                "user_guidance": _user_guidance.get("human_in_loop_value", ""),
-            }
-            _prompt_tamplate = get_prompt("ainovel", _NODE_NAME, prompt_dir)
-            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
 
-        # LLM
-        def _get_llm():
-            return get_llm_by_type(_model_name)
+# 首章节内容
+@Agent_Hooks_Instance.node_with_hooks(node_name="first_chapter_draft")
+async def first_chapter_draft(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "first_chapter_draft"
 
-        response = await _get_llm().ainvoke(_assemble_prompt())
-        log_info_set_color(_thread_id, _NODE_NAME, response)
-        _result = {"chapter_draft": response.content}
-        await write_file_tool.arun(
+    # 变量
+    _thread_id = runtime.context.thread_id
+    _task_dir = runtime.context.task_dir or CONF.SYSTEM.task_dir
+    _model_name = runtime.context.model
+    _user_guidance = state.user_guidance
+    _config = runtime.context.config
+
+    prompt_dir = _config.get("prompt_dir")
+    result_dir = _config.get("result_dir")
+
+    if result_dir:
+        _work_dir = result_dir
+    else:
+        _work_dir = os.path.join(_task_dir, _thread_id)
+    os.makedirs(_work_dir, exist_ok=True)
+
+    # 获得当前章节id
+    _current_chapter_id = 1
+    os.makedirs(f"{_work_dir}/chapter/chapter_{_current_chapter_id}", exist_ok=True)
+
+    # 获得小说设定
+    if os.path.exists(f"{_work_dir}/novel_extract_setting.md"):
+        _novel_setting = await read_file_tool.arun(
+            {"file_path": f"{_work_dir}/novel_extract_setting.md"}
+        )
+        _novel_setting = json.loads(_novel_setting)
+    else:
+        _err_message = log_error_set_color(
+            _thread_id, _NODE_NAME, "novel_extract_setting not found"
+        )
+        return {"code": 1, "err_message": _err_message}
+
+    # 获得小说架构
+    if os.path.exists(f"{_work_dir}/novel_architecture.md"):
+        _novel_architecture = await read_file_tool.arun(
+            {"file_path": f"{_work_dir}/novel_architecture.md"}
+        )
+    else:
+        _err_message = log_error_set_color(
+            _thread_id, _NODE_NAME, "novel_architecture not found"
+        )
+        return {"code": 1, "err_message": _err_message}
+
+    # 获得章节蓝图
+    if os.path.exists(f"{_work_dir}/novel_chapter_blueprint.md"):
+        _novel_chapter_blueprint = await read_file_tool.arun(
+            {"file_path": f"{_work_dir}/novel_chapter_blueprint.md"}
+        )
+    else:
+        _err_message = log_error_set_color(
+            _thread_id, _NODE_NAME, "novel_chapter_blueprint not found"
+        )
+        return {"code": 1, "err_message": _err_message}
+
+    # 获得角色状态
+    if os.path.exists(
+        f"{_work_dir}/chapter/chapter_{_current_chapter_id}/character_state.md"
+    ):
+        _character_state = await read_file_tool.arun(
             {
-                "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/chapter_draft.md",
-                "text": f"## 第{_current_chapter_id}章 {_chapter_info['chapter_title']}\n\n{response.content}",
+                "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/character_state.md"
             }
         )
-        return {"code": 0, "err_message": "ok", "data": _result}
+    else:
+        _err_message = log_error_set_color(
+            _thread_id, _NODE_NAME, "character_state not found"
+        )
+        return {"code": 1, "err_message": _err_message}
 
-    except Exception as e:
-        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
-        return {
-            "code": 1,
-            "err_message": _err_message,
-            "messages": Messages(type="end"),
+    _word_number = _novel_setting["word_number"]
+    _chapter_info = get_chapter_info_from_blueprint(
+        _novel_chapter_blueprint, _current_chapter_id
+    )
+
+    # 提示词
+    def _assemble_prompt():
+        _characters_involved = ""  # 核心人物
+        _key_items = ""  # 关键道具
+        _scene_location = ""  # 空间坐标
+        _time_constraint = ""  # 时间压力
+        tmp = {
+            "novel_number": _current_chapter_id,
+            "chapter_title": _chapter_info["chapter_title"],
+            "chapter_role": _chapter_info["chapter_role"],
+            "chapter_purpose": _chapter_info["chapter_purpose"],
+            "suspense_level": _chapter_info["suspense_level"],
+            "foreshadowing": _chapter_info["foreshadowing"],
+            "plot_twist_level": _chapter_info["plot_twist_level"],
+            "chapter_summary": _chapter_info["chapter_summary"],
+            "word_number": _word_number,
+            "novel_architecture": _novel_architecture,
+            "character_state": _character_state,
+            "characters_involved": _characters_involved,
+            "key_items": _key_items,
+            "scene_location": _scene_location,
+            "time_constraint": _time_constraint,
+            "user_guidance": _user_guidance.get("human_in_loop_value", ""),
         }
+        _prompt_tamplate = Prompts_Provider_Instance.get_template(
+            "ainovel", _NODE_NAME, prompt_dir
+        )
+        return [
+            HumanMessage(
+                content=Prompts_Provider_Instance.prompt_apply_template(
+                    _prompt_tamplate, tmp
+                )
+            )
+        ]
+
+    # 4 大模型
+    response = await LLMS_Provider_Instance.llm_wrap_hooks(
+        _thread_id,
+        _NODE_NAME,
+        _assemble_prompt(),
+        _model_name,
+    )
+
+    log_info_set_color(_thread_id, _NODE_NAME, response)
+    _result = {"chapter_draft": response.content}
+    await write_file_tool.arun(
+        {
+            "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/chapter_draft.md",
+            "text": f"## 第{_current_chapter_id}章 {_chapter_info['chapter_title']}\n\n{response.content}",
+        }
+    )
+    return {"code": 0, "err_message": "ok", "data": _result}
+
+
+# 下一章节内容
+@Agent_Hooks_Instance.node_with_hooks(node_name="next_chapter_draft")
+async def next_chapter_draft(state: State, runtime: Runtime[Context]):
+    _NODE_NAME = "next_chapter_draft"
+
+    # 变量
+    _thread_id = runtime.context.thread_id
+    _task_dir = runtime.context.task_dir or CONF.SYSTEM.task_dir
+    _model_name = runtime.context.model
+    _user_guidance = state.user_guidance
+    _config = runtime.context.config
+
+    prompt_dir = _config.get("prompt_dir")
+    result_dir = _config.get("result_dir")
+
+    if result_dir:
+        _work_dir = result_dir
+    else:
+        _work_dir = os.path.join(_task_dir, _thread_id)
+    os.makedirs(_work_dir, exist_ok=True)
+
+    # 获得当前章节id
+    _current_chapter_id = _user_guidance.get("current_chapter_id")
+    if not _current_chapter_id:
+        _err_message = log_error_set_color(
+            _thread_id, _NODE_NAME, "current_chapter_id not found"
+        )
+        return {"code": 1, "err_message": _err_message}
+    os.makedirs(f"{_work_dir}/chapter/chapter_{_current_chapter_id}", exist_ok=True)
+
+    # 获得小说设定
+    if os.path.exists(f"{_work_dir}/novel_extract_setting.md"):
+        _novel_setting = await read_file_tool.arun(
+            {"file_path": f"{_work_dir}/novel_extract_setting.md"}
+        )
+        _novel_setting = json.loads(_novel_setting)
+    else:
+        _err_message = log_error_set_color(
+            _thread_id, _NODE_NAME, "novel_extract_setting not found"
+        )
+        return {"code": 1, "err_message": _err_message}
+
+    # 获得小说架构
+    if os.path.exists(f"{_work_dir}/novel_architecture.md"):
+        _novel_architecture = await read_file_tool.arun(
+            {"file_path": f"{_work_dir}/novel_architecture.md"}
+        )
+    else:
+        _err_message = log_error_set_color(
+            _thread_id, _NODE_NAME, "novel_architecture not found"
+        )
+        return {"code": 1, "err_message": _err_message}
+
+    # 获得章节蓝图
+    if os.path.exists(f"{_work_dir}/novel_chapter_blueprint.md"):
+        _novel_chapter_blueprint = await read_file_tool.arun(
+            {"file_path": f"{_work_dir}/novel_chapter_blueprint.md"}
+        )
+    else:
+        _err_message = log_error_set_color(
+            _thread_id, _NODE_NAME, "novel_chapter_blueprint not found"
+        )
+        return {"code": 1, "err_message": _err_message}
+
+    # 获得角色状态
+    if os.path.exists(
+        f"{_work_dir}/chapter/chapter_{_current_chapter_id}/character_state.md"
+    ):
+        _character_state = await read_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/character_state.md"
+            }
+        )
+    else:
+        _err_message = log_error_set_color(
+            _thread_id, _NODE_NAME, "character_state not found"
+        )
+        return {"code": 1, "err_message": _err_message}
+
+    # 获得全局摘要
+    if os.path.exists(
+        f"{_work_dir}/chapter/chapter_{_current_chapter_id}/global_summary.md"
+    ):
+        _global_summary = await read_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/global_summary.md"
+            }
+        )
+    else:
+        _err_message = log_error_set_color(
+            _thread_id, _NODE_NAME, "global_summary not found"
+        )
+        return {"code": 1, "err_message": _err_message}
+
+    # 当前章节摘要
+    if os.path.exists(
+        f"{_work_dir}/chapter/chapter_{_current_chapter_id}/summarize_recent_chapters.md"
+    ):
+        _short_summary = await read_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/summarize_recent_chapters.md"
+            }
+        )
+    else:
+        _err_message = log_error_set_color(
+            _thread_id, _NODE_NAME, "summarize_recent_chapters not found"
+        )
+        return {"code": 1, "err_message": _err_message}
+
+    # 获取章节概要信息
+    _chapter_info = get_chapter_info_from_blueprint(
+        _novel_chapter_blueprint, _current_chapter_id
+    )
+
+    _word_number = _novel_setting["word_number"]
+
+    # 提示词
+    def _assemble_prompt():
+        # 获取下一章节概要信息
+        _next_chapter_info = get_chapter_info_from_blueprint(
+            _novel_chapter_blueprint, _current_chapter_id + 1
+        )
+        # 获取前一章的结尾片段
+        _recent_texts = get_last_n_chapters_text(_work_dir, _current_chapter_id, n=3)
+        _previous_chapter_excerpt = "\n".join(_recent_texts).strip()
+        max_combined_length = 500
+        if len(_previous_chapter_excerpt) > max_combined_length:
+            _previous_chapter_excerpt = _previous_chapter_excerpt[-max_combined_length:]
+
+        _characters_involved = ""  # 核心人物
+        _key_items = ""  # 关键道具
+        _scene_location = ""  # 空间坐标
+        _time_constraint = ""  # 时间压力
+
+        # (TODO：未来加入知识库，对章节进行筛选)
+        filtered_context = ""
+
+        tmp = {
+            "novel_number": _current_chapter_id,
+            "chapter_title": _chapter_info["chapter_title"],
+            "chapter_role": _chapter_info["chapter_role"],
+            "chapter_purpose": _chapter_info["chapter_purpose"],
+            "suspense_level": _chapter_info["suspense_level"],
+            "foreshadowing": _chapter_info["foreshadowing"],
+            "plot_twist_level": _chapter_info["plot_twist_level"],
+            "chapter_summary": _chapter_info["chapter_summary"],
+            "next_chapter_number": _current_chapter_id + 1,
+            "next_chapter_title": _next_chapter_info.get("chapter_title", "（未命名）"),
+            "next_chapter_role": _next_chapter_info.get("chapter_role", "过渡章节"),
+            "next_chapter_purpose": _next_chapter_info.get(
+                "chapter_purpose", "承上启下"
+            ),
+            "next_chapter_suspense_level": _next_chapter_info.get(
+                "suspense_level", "中等"
+            ),
+            "next_chapter_foreshadowing": _next_chapter_info.get(
+                "foreshadowing", "无特殊伏笔"
+            ),
+            "next_chapter_plot_twist_level": _next_chapter_info.get(
+                "plot_twist_level", "★☆☆☆☆"
+            ),
+            "next_chapter_summary": _next_chapter_info.get(
+                "chapter_summary", "衔接过渡内容"
+            ),
+            "novel_architecture": _novel_architecture,
+            "global_summary": _global_summary,
+            "previous_chapter_excerpt": _previous_chapter_excerpt,
+            "character_state": _character_state,
+            "short_summary": _short_summary,
+            "filtered_context": filtered_context,
+            "word_number": _word_number,
+            "characters_involved": _characters_involved,
+            "key_items": _key_items,
+            "scene_location": _scene_location,
+            "time_constraint": _time_constraint,
+            "user_guidance": _user_guidance.get("human_in_loop_value", ""),
+        }
+        _prompt_tamplate = Prompts_Provider_Instance.get_template(
+            "ainovel", _NODE_NAME, prompt_dir
+        )
+        return [
+            HumanMessage(
+                content=Prompts_Provider_Instance.prompt_apply_template(
+                    _prompt_tamplate, tmp
+                )
+            )
+        ]
+
+    # 4 大模型
+    response = await LLMS_Provider_Instance.llm_wrap_hooks(
+        _thread_id,
+        _NODE_NAME,
+        _assemble_prompt(),
+        _model_name,
+    )
+
+    _result = {"chapter_draft": response.content}
+    await write_file_tool.arun(
+        {
+            "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/chapter_draft.md",
+            "text": f"## 第{_current_chapter_id}章 {_chapter_info['chapter_title']}\n\n{response.content}",
+        }
+    )
+    return {"code": 0, "err_message": "ok", "data": _result}
 
 
 # 人工指导
+@Agent_Hooks_Instance.node_with_hooks(node_name="human_in_loop_guidance")
 async def human_in_loop_guidance(
     state: State, runtime: Runtime[Context]
 ) -> Command[
@@ -914,7 +923,7 @@ async def human_in_loop_guidance(
 ]:
     # 变量
     _thread_id = runtime.context.thread_id
-    _task_dir = runtime.context.task_dir or CONF["SYSTEM"]["task_dir"]
+    _task_dir = runtime.context.task_dir or CONF.SYSTEM.task_dir
 
     _work_dir = os.path.join(_task_dir, _thread_id)
     os.makedirs(_work_dir, exist_ok=True)

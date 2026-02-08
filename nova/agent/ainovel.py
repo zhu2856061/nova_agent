@@ -16,13 +16,9 @@ from pydantic import BaseModel, Field
 
 from nova.agent.ainovel_architect import ainovel_architecture_agent
 from nova.agent.ainovel_chapter import ainovel_chapter_agent
-from nova.llms import get_llm_by_type
+from nova.hooks import Agent_Hooks_Instance
+from nova.llms import LLMS_Provider_Instance, Prompts_Provider_Instance
 from nova.model.agent import Context, Messages, State
-from nova.llms.template import apply_prompt_template, get_prompt
-from nova.utils.log_utils import (
-    log_error_set_color,
-    log_info_set_color,
-)
 
 # ######################################################################################
 # 配置
@@ -49,59 +45,56 @@ class ClarifyWithUser(BaseModel):
 
 
 # 用户澄清
+@Agent_Hooks_Instance.node_with_hooks(node_name="clarify_with_user")
 async def clarify_with_user(state: State, runtime: Runtime[Context]):
     _NODE_NAME = "clarify_with_user"
-    try:
-        # 变量
-        _thread_id = runtime.context.thread_id
-        _model_name = runtime.context.model
-        _messages = state.messages.value
 
-        # 提示词
-        def _assemble_prompt(messages):
-            tmp = {"messages": get_buffer_string(messages)}
-            _prompt_tamplate = get_prompt("ainovel", "clarify_with_user")
-            return [HumanMessage(content=apply_prompt_template(_prompt_tamplate, tmp))]
+    # 变量
+    _thread_id = runtime.context.thread_id
+    _model_name = runtime.context.model
+    _messages = state.messages.value
 
-        # LLM
-        def _get_llm():
-            return get_llm_by_type(_model_name).with_structured_output(ClarifyWithUser)
-
-        # 执行
-        response = await _get_llm().ainvoke(_assemble_prompt(_messages))
-        log_info_set_color(_thread_id, _NODE_NAME, response)
-
-        if not isinstance(response, ClarifyWithUser):
-            return Command(
-                goto="__end__",
-                update={
-                    "code": 1,
-                    "err_message": "ClarifyWithUser is not a valid response",
-                    "messages": Messages(type="end"),
-                },
+    # 提示词
+    def _assemble_prompt(messages):
+        tmp = {"messages": get_buffer_string(messages)}
+        _prompt_tamplate = Prompts_Provider_Instance.get_template("ainovel", _NODE_NAME)
+        return [
+            HumanMessage(
+                content=Prompts_Provider_Instance.prompt_apply_template(
+                    _prompt_tamplate, tmp
+                )
             )
+        ]
 
-        # 路由
-        if response.need_clarification:
-            return {
-                "code": 0,
-                "err_message": "ok",
-                "messages": Messages(type="end"),
-                "data": {_NODE_NAME: response.model_dump()},
-            }
-        else:
-            return {"messages": [HumanMessage(content=response.verification)]}
+    # 4 大模型
+    response = await LLMS_Provider_Instance.llm_wrap_hooks(
+        _thread_id,
+        _NODE_NAME,
+        _assemble_prompt(_messages),
+        _model_name,
+        structured_output=ClarifyWithUser,
+    )
 
-    except Exception as e:
-        _err_message = log_error_set_color(_thread_id, _NODE_NAME, e)
+    if not isinstance(response, ClarifyWithUser):
         return Command(
             goto="__end__",
             update={
                 "code": 1,
+                "err_message": "ClarifyWithUser is not a valid response",
                 "messages": Messages(type="end"),
-                "err_message": _err_message,
             },
         )
+
+    # 路由
+    if response.need_clarification:
+        return {
+            "code": 0,
+            "err_message": "ok",
+            "messages": Messages(type="end"),
+            "data": {_NODE_NAME: response.model_dump()},
+        }
+    else:
+        return {"messages": [HumanMessage(content=response.verification)]}
 
 
 # 全流程写小说 graph
