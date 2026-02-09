@@ -9,6 +9,7 @@ from typing import Annotated, Any, Dict, List, cast
 
 from langchain_core.messages import MessageLikeRepresentation
 from langgraph.graph.message import (
+    BaseMessage,
     BaseMessageChunk,
     # add_messages,
     convert_to_messages,
@@ -16,9 +17,11 @@ from langgraph.graph.message import (
 )  # 关键导入！这是 LangGraph 的内置转换器
 from pydantic import BaseModel, Field
 
+from nova.utils.common import convert_base_message
+
 
 class Messages(BaseModel):
-    type: str = Field(default="", description="type")
+    type: str = Field(default="add", description="type")
     value: List[MessageLikeRepresentation] = Field(default=[], description="messages")
 
 
@@ -43,7 +46,11 @@ def override_reducer(current_value: Messages, new_value: Any):
         if new_value.type == "override":
             return Messages(type="override", value=value)  # type: ignore
         else:
-            value = operator.add(current_value.value, value)
+            tmp = [
+                convert_base_message(cast(BaseMessage, m)) for m in current_value.value
+            ]
+
+            value = operator.add(tmp, value)
             return Messages(type="add", value=value)  # type: ignore
 
     else:

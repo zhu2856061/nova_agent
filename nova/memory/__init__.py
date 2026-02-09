@@ -4,8 +4,6 @@
 # @Moto   : Knowledge comes from decomposition
 from __future__ import annotations
 
-import os
-
 from nova import CONF
 
 from .sqlite_cache import SQLiteCacheFixed

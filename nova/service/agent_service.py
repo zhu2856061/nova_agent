@@ -105,13 +105,13 @@ async def stream_agent_events(
             async for event in instance.astream_events(
                 state, config=config, context=context, version="v2"
             ):
-                response = handle_event(trace_id, event)
+                response = handle_event(trace_id, event)  # type: ignore
                 if response:
+                    # response = convert_langchain_objects_to_dict(response)
                     if response.get("event") == "error":
                         try:
                             res = AgentResponse(
                                 code=0,
-                                err_message=response.get("data").get("output"),
                                 data=response,
                             ).model_dump_json()
                         except Exception:
@@ -187,22 +187,18 @@ async def human_in_loop(request: AgentRequest):
                         context=context,
                         version="v2",
                     ):
-                        response = handle_event(trace_id, event)
+                        response = handle_event(trace_id, event)  # type: ignore
                         if response:
+                            # response = convert_langchain_objects_to_dict(response)
                             if response.get("event") == "error":
                                 try:
                                     res = AgentResponse(
-                                        code=0,
-                                        err_message=response.get("data").get("output"),
-                                        data=response,
+                                        code=0, data=response
                                     ).model_dump_json()
                                 except Exception:
                                     res = AgentResponse(
                                         code=1,
                                         err_message="data is not json serializable",
-                                        data=convert_langchain_objects_to_dict(
-                                            response
-                                        ),
                                     ).model_dump_json()
 
                                 yield res
