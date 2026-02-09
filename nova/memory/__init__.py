@@ -12,5 +12,5 @@ from .sqlite_cache import SQLiteCacheFixed
 from .sqlite_memory import SQLiteStoreFixed
 
 # 全局变量
-SQLITECACHE = SQLiteCacheFixed(os.path.join(CONF.SYSTEM.cache_dir, "llm_cache.db"))
-SQLITESTORE = SQLiteStoreFixed(os.path.join(CONF.SYSTEM.cache_dir, "memory_store.db"))
+SQLITECACHE = SQLiteCacheFixed(CONF.SYSTEM.cache_dir)
+SQLITESTORE = SQLiteStoreFixed(CONF.SYSTEM.cache_dir)

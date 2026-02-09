@@ -53,7 +53,7 @@ class SQLiteCacheFixed(BaseCache):
         cache_schema: Type[FullLLMCache] = FullLLMCache,
     ) -> None:
         os.makedirs(database_path, exist_ok=True)
-        self.database_path = Path(database_path)
+        self.database_path = Path(os.path.join(database_path, "llm_cache.db"))
         self.cache_schema = cache_schema
         self.engine = create_async_engine(
             f"sqlite+aiosqlite:///{self.database_path}", echo=True
