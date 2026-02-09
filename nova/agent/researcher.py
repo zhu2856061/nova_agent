@@ -320,7 +320,3 @@ def compile_wechat_researcher_agent():
     _agent.add_node("compress_research", compress_research)
     _agent.add_edge(START, "researcher")
     return _agent.compile()
-
-
-researcher_agent = compile_researcher_agent()
-wechat_researcher_agent = compile_wechat_researcher_agent()

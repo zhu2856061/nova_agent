@@ -283,6 +283,5 @@ class AppConfig(BaseModel):
             logger.error(f"加载 .env 文件失败：{str(e)}", exc_info=True)
             return False
 
-    @classmethod
-    def set_log(cls):
-        set_log(cls.SYSTEM.log_dir)
+    def set_log(self):
+        set_log(self.SYSTEM.log_dir)

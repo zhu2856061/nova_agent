@@ -16,7 +16,7 @@ from nova.controller.exceptions import NOVAException, create_error_response
 from nova.service.agent_service import add_register_agent_endpoints, agent_router
 from nova.service.chat_service import chat_router
 
-from .agent.chat import chat_agent
+from .agent.chat_sample import chat_agent
 
 logger = logging.getLogger(__name__)
 
@@ -37,11 +37,11 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(
-    title=CONF["SYSTEM"]["NAME"],
-    description=CONF["SYSTEM"]["DESC"],
-    version=CONF["SYSTEM"]["VERSION"],
+    title=CONF.SYSTEM.NAME,
+    description=CONF.SYSTEM.DESC,
+    version=CONF.SYSTEM.VERSION,
     lifespan=lifespan,
-    debug=CONF["SYSTEM"]["DEBUG"],
+    debug=CONF.SYSTEM.DEBUG,
 )
 
 # Add CORS middleware
@@ -62,8 +62,8 @@ async def health_check():
 @app.get("/")
 async def root():
     return {
-        "message": f"{CONF['SYSTEM']['NAME']} 服务正在运行",
-        "version": f"{CONF['SYSTEM']['VERSION']}",
+        "message": f"{CONF.SYSTEM.NAME} 服务正在运行",
+        "version": f"{CONF.SYSTEM.VERSION}",
     }
 
 
@@ -79,7 +79,7 @@ async def nova_exception_handler(request: Request, exc: NOVAException):
     """
     处理自定义NOVA异常
     """
-    logger.error(f"处理NOVA异常: {exc.error_code} - {exc.detail}", exc_info=True)
+    logger.error(f"处理NOVA异常: {exc.error_code} - {exc.message}", exc_info=True)
     return JSONResponse(status_code=exc.status_code, content=create_error_response(exc))
 
 

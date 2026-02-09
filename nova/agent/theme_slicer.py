@@ -143,6 +143,3 @@ def compile_theme_slicer_agent():
 
     checkpointer = InMemorySaver()
     return _agent.compile(checkpointer=checkpointer)
-
-
-theme_slicer_agent = compile_theme_slicer_agent()

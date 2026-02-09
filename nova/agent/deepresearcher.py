@@ -20,7 +20,7 @@ from langgraph.types import Command
 from pydantic import BaseModel, Field
 
 from nova import CONF
-from nova.agent.researcher import researcher_agent
+from nova.agent.researcher import compile_researcher_agent
 from nova.hooks import Agent_Hooks_Instance
 from nova.llms import LLMS_Provider_Instance, Prompts_Provider_Instance
 from nova.model.agent import Context, Messages, State
@@ -35,6 +35,8 @@ logger = logging.getLogger(__name__)
 
 # ######################################################################################
 # 结构化输出
+
+_researcher_agent = compile_researcher_agent()
 
 
 # clarify_with_user uses this
@@ -306,7 +308,7 @@ async def supervisor_tools(
     coros = []
     for tool_call in conduct_research_calls:
         coros.append(
-            researcher_agent.ainvoke(
+            _researcher_agent.ainvoke(
                 {
                     "messages": [
                         HumanMessage(content=tool_call["args"]["research_topic"]),
@@ -451,19 +453,21 @@ async def final_report_generation(
     )
 
 
-#
-# Agent - Workflow
-graph_builder = StateGraph(State, context_schema=Context)
-graph_builder.add_node("clarify_with_user", clarify_with_user)
-graph_builder.add_node("write_research_brief", write_research_brief)
-graph_builder.add_node("supervisor", supervisor)
-graph_builder.add_node("supervisor_tools", supervisor_tools)
-graph_builder.add_node("final_report_generation", final_report_generation)
-graph_builder.add_edge(START, "clarify_with_user")
+def compile_deepresearcher_agent():
 
+    #
+    # Agent - Workflow
+    graph_builder = StateGraph(State, context_schema=Context)
+    graph_builder.add_node("clarify_with_user", clarify_with_user)
+    graph_builder.add_node("write_research_brief", write_research_brief)
+    graph_builder.add_node("supervisor", supervisor)
+    graph_builder.add_node("supervisor_tools", supervisor_tools)
+    graph_builder.add_node("final_report_generation", final_report_generation)
+    graph_builder.add_edge(START, "clarify_with_user")
 
-checkpointer = InMemorySaver()
-deepresearcher = graph_builder.compile(checkpointer=checkpointer)
-# deepresearcher = graph_builder.compile()
-png_bytes = deepresearcher.get_graph(xray=True).draw_mermaid()
-logger.info(f"ainovel_architecture_agent: \n\n{png_bytes}")
+    checkpointer = InMemorySaver()
+    deepresearcher = graph_builder.compile(checkpointer=checkpointer)
+    # deepresearcher = graph_builder.compile()
+    # png_bytes = deepresearcher.get_graph(xray=True).draw_mermaid()
+    # logger.info(f"ainovel_architecture_agent: \n\n{png_bytes}")
+    return deepresearcher

@@ -11,8 +11,8 @@ from langgraph.graph import START, StateGraph
 from langgraph.runtime import Runtime
 from langgraph.types import Command
 
-from nova.hooks.utils import node_with_hooks
-from nova.llms import llm_with_hooks
+from nova.hooks import Agent_Hooks_Instance
+from nova.llms import LLMS_Provider_Instance
 from nova.model.agent import Context, State
 
 logger = logging.getLogger(__name__)
@@ -28,6 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 # 函数
+@Agent_Hooks_Instance.node_with_hooks(node_name="chat")
 async def chat(state: State, runtime: Runtime[Context]):
     _NODE_NAME = "chat"
 
@@ -37,7 +38,7 @@ async def chat(state: State, runtime: Runtime[Context]):
     _messages = state.messages.value
 
     # 4 大模型
-    response = await llm_with_hooks(
+    response = await LLMS_Provider_Instance.llm_wrap_hooks(
         _thread_id,
         _NODE_NAME,
         _messages,
@@ -55,13 +56,10 @@ async def chat(state: State, runtime: Runtime[Context]):
 
 
 def compile_chat_agent():
+    checkpointer = InMemorySaver()
     # chat graph
     _agent = StateGraph(State, context_schema=Context)
-    _agent.add_node("chat", node_with_hooks(chat, "chat"))
+    _agent.add_node("chat", chat)
     _agent.add_edge(START, "chat")
 
-    checkpointer = InMemorySaver()
     return _agent.compile(checkpointer=checkpointer)
-
-
-chat_agent = compile_chat_agent()

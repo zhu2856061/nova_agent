@@ -229,6 +229,3 @@ def compile_memorizer_agent():
     checkpointer = InMemorySaver()
 
     return _agent.compile(checkpointer=checkpointer)
-
-
-memorizer_agent = compile_memorizer_agent()

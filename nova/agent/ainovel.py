@@ -14,8 +14,12 @@ from langgraph.runtime import Runtime
 from langgraph.types import Command
 from pydantic import BaseModel, Field
 
-from nova.agent.ainovel_architect import ainovel_architecture_agent
-from nova.agent.ainovel_chapter import ainovel_chapter_agent
+from nova.agent.ainovel_architect import compile_ainovel_architecture_agent
+from nova.agent.ainovel_chapter import (
+    compile_ainovel_chapter_agent,
+    compile_first_chapter_draft_agent,
+    compile_next_chapter_draft_agent,
+)
 from nova.hooks import Agent_Hooks_Instance
 from nova.llms import LLMS_Provider_Instance, Prompts_Provider_Instance
 from nova.model.agent import Context, Messages, State
@@ -97,19 +101,27 @@ async def clarify_with_user(state: State, runtime: Runtime[Context]):
         return {"messages": [HumanMessage(content=response.verification)]}
 
 
-# 全流程写小说 graph
-graph_builder = StateGraph(State, context_schema=Context)
-graph_builder.add_node("clarify_with_user", clarify_with_user)
-graph_builder.add_node("architecture", ainovel_architecture_agent)
-graph_builder.add_node("chapter", ainovel_chapter_agent)
-graph_builder.add_edge(START, "clarify_with_user")
-graph_builder.add_edge("architecture", "chapter")
-graph_builder.add_edge("chapter", END)
-checkpointer = InMemorySaver()
-ainovel = graph_builder.compile(checkpointer=checkpointer)
+def compile_ainovel_graph():
+    # 全流程写小说 graph
+    ainovel_architecture_agent = compile_ainovel_architecture_agent()
+    first_chapter_draft_agent = compile_first_chapter_draft_agent()
+    next_chapter_draft_agent = compile_next_chapter_draft_agent()
+    ainovel_chapter_agent = compile_ainovel_chapter_agent(
+        first_chapter_draft_agent, next_chapter_draft_agent
+    )
 
-# png_bytes = ainovel.get_graph(xray=True).draw_mermaid()
-# logger.info(png_bytes)
-# 将二进制数据写入文件（指定保存路径和文件名）
-# with open("./logs/ainovel_graph.png", "wb") as f:
-#     f.write(png_bytes)
+    graph_builder = StateGraph(State, context_schema=Context)
+    graph_builder.add_node("clarify_with_user", clarify_with_user)
+    graph_builder.add_node("architecture", ainovel_architecture_agent)
+    graph_builder.add_node("chapter", ainovel_chapter_agent)
+    graph_builder.add_edge(START, "clarify_with_user")
+    graph_builder.add_edge("architecture", "chapter")
+    graph_builder.add_edge("chapter", END)
+    checkpointer = InMemorySaver()
+    ainovel = graph_builder.compile(checkpointer=checkpointer)
+    # png_bytes = ainovel.get_graph(xray=True).draw_mermaid()
+    # logger.info(png_bytes)
+    # 将二进制数据写入文件（指定保存路径和文件名）
+    # with open("./logs/ainovel_graph.png", "wb") as f:
+    #     f.write(png_bytes)
+    return ainovel

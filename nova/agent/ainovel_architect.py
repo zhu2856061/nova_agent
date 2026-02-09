@@ -844,77 +844,97 @@ async def human_in_loop_agree(
         )
 
 
-# 抽取设定 subgraph
-_extract_setting = StateGraph(State, context_schema=Context)
-_extract_setting.add_node("extract_setting", extract_setting)
-_extract_setting.add_edge(START, "extract_setting")
-extract_setting_agent = _extract_setting.compile()
+def compile_extract_setting_agent():
+    # 抽取设定 subgraph
+    _extract_setting = StateGraph(State, context_schema=Context)
+    _extract_setting.add_node("extract_setting", extract_setting)
+    _extract_setting.add_edge(START, "extract_setting")
+    extract_setting_agent = _extract_setting.compile()
+    return extract_setting_agent
 
 
-# 核心种子 subgraph
-_core_seed = StateGraph(State, context_schema=Context)
-_core_seed.add_node("core_seed", core_seed)
-_core_seed.add_edge(START, "core_seed")
-core_seed_agent = _core_seed.compile()
+def compile_core_seed_agent():
+    # 核心种子 subgraph
+    _core_seed = StateGraph(State, context_schema=Context)
+    _core_seed.add_node("core_seed", core_seed)
+    _core_seed.add_edge(START, "core_seed")
+    core_seed_agent = _core_seed.compile()
+    return core_seed_agent
 
 
-# 角色动力学 subgraph
-_character_dynamics = StateGraph(State, context_schema=Context)
-_character_dynamics.add_node("character_dynamics", character_dynamics)
-_character_dynamics.add_edge(START, "character_dynamics")
-character_dynamics_agent = _character_dynamics.compile()
+def compile_character_dynamics_agent():
+    # 角色动力学 subgraph
+    _character_dynamics = StateGraph(State, context_schema=Context)
+    _character_dynamics.add_node("character_dynamics", character_dynamics)
+    _character_dynamics.add_edge(START, "character_dynamics")
+    character_dynamics_agent = _character_dynamics.compile()
+    return character_dynamics_agent
 
 
-# 世界观 subgraph
-_world_building = StateGraph(State, context_schema=Context)
-_world_building.add_node("world_building", world_building)
-_world_building.add_edge(START, "world_building")
-world_building_agent = _world_building.compile()
+def compile_world_building_agent():
+    # 世界观 subgraph
+    _world_building = StateGraph(State, context_schema=Context)
+    _world_building.add_node("world_building", world_building)
+    _world_building.add_edge(START, "world_building")
+    world_building_agent = _world_building.compile()
+    return world_building_agent
 
 
-# 三幕式情节架构 subgraph
-_plot_arch = StateGraph(State, context_schema=Context)
-_plot_arch.add_node("plot_arch", plot_arch)
-_plot_arch.add_edge(START, "plot_arch")
-plot_arch_agent = _plot_arch.compile()
+def compile_plot_arch_agent():
+    # 三幕式情节架构 subgraph
+    _plot_arch = StateGraph(State, context_schema=Context)
+    _plot_arch.add_node("plot_arch", plot_arch)
+    _plot_arch.add_edge(START, "plot_arch")
+    plot_arch_agent = _plot_arch.compile()
+    return plot_arch_agent
 
 
-# 章节目录 subgraph
-_chapter_blueprint = StateGraph(State, context_schema=Context)
-_chapter_blueprint.add_node("chapter_blueprint", chapter_blueprint)
-_chapter_blueprint.add_edge(START, "chapter_blueprint")
-chapter_blueprint_agent = _chapter_blueprint.compile()
+def compile_chapter_blueprint_agent():
+    # 章节目录 subgraph
+    _chapter_blueprint = StateGraph(State, context_schema=Context)
+    _chapter_blueprint.add_node("chapter_blueprint", chapter_blueprint)
+    _chapter_blueprint.add_edge(START, "chapter_blueprint")
+    chapter_blueprint_agent = _chapter_blueprint.compile()
+    return chapter_blueprint_agent
 
-# 组织结果 subgraph
-_build_architecture = StateGraph(State, context_schema=Context)
-_build_architecture.add_node("build_architecture", build_architecture)
-_build_architecture.add_edge(START, "build_architecture")
-build_architecture_agent = _build_architecture.compile()
 
-# 全流程 graph
-_agent = StateGraph(State, context_schema=Context)
-_agent.add_node("extract_setting", extract_setting)
-_agent.add_node("core_seed", core_seed)
-_agent.add_node("character_dynamics", character_dynamics)
-_agent.add_node("world_building", world_building)
-_agent.add_node("plot_arch", plot_arch)
-_agent.add_node("chapter_blueprint", chapter_blueprint)
-_agent.add_node("build_architecture", build_architecture)
+def compile_build_architecture_agent():
+    # 组织结果 subgraph
+    _build_architecture = StateGraph(State, context_schema=Context)
+    _build_architecture.add_node("build_architecture", build_architecture)
+    _build_architecture.add_edge(START, "build_architecture")
+    build_architecture_agent = _build_architecture.compile()
+    return build_architecture_agent
 
-_agent.add_node("human_in_loop_guidance", human_in_loop_guidance)
-_agent.add_node("human_in_loop_agree", human_in_loop_agree)
 
-_agent.add_edge(START, "extract_setting")
-_agent.add_edge("extract_setting", "human_in_loop_agree")
-_agent.add_edge("core_seed", "human_in_loop_agree")
-_agent.add_edge("character_dynamics", "human_in_loop_agree")
-_agent.add_edge("world_building", "human_in_loop_agree")
-_agent.add_edge("plot_arch", "human_in_loop_agree")
-_agent.add_edge("chapter_blueprint", "human_in_loop_agree")
-_agent.add_edge("build_architecture", END)
+def compile_ainovel_architecture_agent():
 
-checkpointer = InMemorySaver()
-ainovel_architecture_agent = _agent.compile(checkpointer=checkpointer)
+    # 全流程 graph
+    _agent = StateGraph(State, context_schema=Context)
+    _agent.add_node("extract_setting", extract_setting)
+    _agent.add_node("core_seed", core_seed)
+    _agent.add_node("character_dynamics", character_dynamics)
+    _agent.add_node("world_building", world_building)
+    _agent.add_node("plot_arch", plot_arch)
+    _agent.add_node("chapter_blueprint", chapter_blueprint)
+    _agent.add_node("build_architecture", build_architecture)
 
-# png_bytes = ainovel_architecture_agent.get_graph(xray=True).draw_mermaid()
-# logger.info(f"ainovel_architecture_agent: \n\n{png_bytes}")
+    _agent.add_node("human_in_loop_guidance", human_in_loop_guidance)
+    _agent.add_node("human_in_loop_agree", human_in_loop_agree)
+
+    _agent.add_edge(START, "extract_setting")
+    _agent.add_edge("extract_setting", "human_in_loop_agree")
+    _agent.add_edge("core_seed", "human_in_loop_agree")
+    _agent.add_edge("character_dynamics", "human_in_loop_agree")
+    _agent.add_edge("world_building", "human_in_loop_agree")
+    _agent.add_edge("plot_arch", "human_in_loop_agree")
+    _agent.add_edge("chapter_blueprint", "human_in_loop_agree")
+    _agent.add_edge("build_architecture", END)
+
+    checkpointer = InMemorySaver()
+    ainovel_architecture_agent = _agent.compile(checkpointer=checkpointer)
+
+    # png_bytes = ainovel_architecture_agent.get_graph(xray=True).draw_mermaid()
+    # logger.info(f"ainovel_architecture_agent: \n\n{png_bytes}")
+
+    return ainovel_architecture_agent

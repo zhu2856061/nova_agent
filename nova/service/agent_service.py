@@ -15,27 +15,26 @@ from langchain_core.runnables.config import RunnableConfig
 from langgraph.types import Command
 from pydantic import BaseModel
 
-from nova.agent.ainovel import ainovel
-from nova.agent.ainovel_architect import (
+from nova.agent import (
+    ainovel_agent,
     ainovel_architecture_agent,
+    ainovel_chapter_agent,
     build_architecture_agent,
     chapter_blueprint_agent,
     character_dynamics_agent,
+    chat_agent,
     core_seed_agent,
+    deepresearcher_agent,
     extract_setting_agent,
+    first_chapter_draft_agent,
+    memorizer_agent,
+    next_chapter_draft_agent,
     plot_arch_agent,
+    researcher_agent,
+    theme_slicer_agent,
+    wechat_researcher_agent,
     world_building_agent,
 )
-from nova.agent.ainovel_chapter import (
-    _first_chapter_draft_agent,
-    _next_chapter_draft_agent,
-    ainovel_chapter_agent,
-)
-from nova.agent.chat import chat_agent
-from nova.agent.deepresearcher import deepresearcher
-from nova.agent.memorizer import memorizer_agent
-from nova.agent.researcher import researcher_agent, wechat_researcher_agent
-from nova.agent.theme_slicer import theme_slicer_agent
 from nova.model.agent import AgentRequest, AgentResponse
 from nova.service.handle_event import handle_event
 
@@ -55,7 +54,7 @@ AGENT_REGISTRY = {
     "memorizer": memorizer_agent,
     "themeslicer": theme_slicer_agent,
     "researcher": researcher_agent,
-    "deepresearcher": deepresearcher,
+    "deepresearcher": deepresearcher_agent,
     "wechat_researcher": wechat_researcher_agent,
     "ainovel_extract_setting": extract_setting_agent,
     "ainovel_core_seed": core_seed_agent,
@@ -65,10 +64,10 @@ AGENT_REGISTRY = {
     "ainovel_chapter_blueprint": chapter_blueprint_agent,
     "ainovel_build_architecture": build_architecture_agent,
     "ainovel_architect": ainovel_architecture_agent,
-    "ainovel_first_chapter": _first_chapter_draft_agent,
-    "ainovel_next_chapter": _next_chapter_draft_agent,
+    "ainovel_first_chapter": first_chapter_draft_agent,
+    "ainovel_next_chapter": next_chapter_draft_agent,
     "ainovel_chapter": ainovel_chapter_agent,
-    "ainovel": ainovel,
+    "ainovel": ainovel_agent,
 }
 
 

@@ -1053,40 +1053,52 @@ async def human_in_loop_agree(
         )
 
 
-checkpointer = InMemorySaver()
-# first chapter draft subgraph
-_first_chapter_draft = StateGraph(State, context_schema=Context)
-_first_chapter_draft.add_node("create_character_state", create_character_state)
-_first_chapter_draft.add_node("first_chapter_draft", first_chapter_draft)
-_first_chapter_draft.add_edge(START, "create_character_state")
-_first_chapter_draft.add_edge("create_character_state", "first_chapter_draft")
-_first_chapter_draft.add_edge("first_chapter_draft", END)
-_first_chapter_draft_agent = _first_chapter_draft.compile(checkpointer=checkpointer)
-
-# next chapter draft subgraph
-_next_chapter_draft = StateGraph(State, context_schema=Context)
-_next_chapter_draft.add_node("global_summary", global_summary)
-_next_chapter_draft.add_node("update_character_state", update_character_state)
-_next_chapter_draft.add_node("summarize_recent_chapters", summarize_recent_chapters)
-_next_chapter_draft.add_node("next_chapter_draft", next_chapter_draft)
-_next_chapter_draft.add_edge(START, "global_summary")
-_next_chapter_draft.add_edge("global_summary", "update_character_state")
-_next_chapter_draft.add_edge("update_character_state", "summarize_recent_chapters")
-_next_chapter_draft.add_edge("summarize_recent_chapters", "next_chapter_draft")
-_next_chapter_draft.add_edge("next_chapter_draft", END)
-_next_chapter_draft_agent = _next_chapter_draft.compile(checkpointer=checkpointer)
-
-# chapter graph
-ainovel_chapter_agent = StateGraph(State, context_schema=Context)
-ainovel_chapter_agent.add_node("first_chapter_draft_agent", _first_chapter_draft_agent)
-ainovel_chapter_agent.add_node("next_chapter_draft_agent", _next_chapter_draft_agent)
-ainovel_chapter_agent.add_node("human_in_loop_guidance", human_in_loop_guidance)
-ainovel_chapter_agent.add_node("human_in_loop_agree", human_in_loop_agree)
-ainovel_chapter_agent.add_edge(START, "human_in_loop_guidance")
-ainovel_chapter_agent.add_edge("first_chapter_draft_agent", "human_in_loop_agree")
-ainovel_chapter_agent.add_edge("next_chapter_draft_agent", "human_in_loop_agree")
-ainovel_chapter_agent = ainovel_chapter_agent.compile(checkpointer=checkpointer)
+def compile_first_chapter_draft_agent():
+    checkpointer = InMemorySaver()
+    # first chapter draft subgraph
+    _first_chapter_draft = StateGraph(State, context_schema=Context)
+    _first_chapter_draft.add_node("create_character_state", create_character_state)
+    _first_chapter_draft.add_node("first_chapter_draft", first_chapter_draft)
+    _first_chapter_draft.add_edge(START, "create_character_state")
+    _first_chapter_draft.add_edge("create_character_state", "first_chapter_draft")
+    _first_chapter_draft.add_edge("first_chapter_draft", END)
+    _first_chapter_draft_agent = _first_chapter_draft.compile(checkpointer=checkpointer)
+    return _first_chapter_draft_agent
 
 
-# png_bytes = ainovel_chapter_agent.get_graph(xray=True).draw_mermaid()
-# logger.info(f"ainovel_chapter_agent: \n\n{png_bytes}")
+def compile_next_chapter_draft_agent():
+    checkpointer = InMemorySaver()
+    # next chapter draft subgraph
+    _next_chapter_draft = StateGraph(State, context_schema=Context)
+    _next_chapter_draft.add_node("global_summary", global_summary)
+    _next_chapter_draft.add_node("update_character_state", update_character_state)
+    _next_chapter_draft.add_node("summarize_recent_chapters", summarize_recent_chapters)
+    _next_chapter_draft.add_node("next_chapter_draft", next_chapter_draft)
+    _next_chapter_draft.add_edge(START, "global_summary")
+    _next_chapter_draft.add_edge("global_summary", "update_character_state")
+    _next_chapter_draft.add_edge("update_character_state", "summarize_recent_chapters")
+    _next_chapter_draft.add_edge("summarize_recent_chapters", "next_chapter_draft")
+    _next_chapter_draft.add_edge("next_chapter_draft", END)
+    _next_chapter_draft_agent = _next_chapter_draft.compile(checkpointer=checkpointer)
+    return _next_chapter_draft_agent
+
+
+def compile_ainovel_chapter_agent(first_chapter_draft_agent, next_chapter_draft_agent):
+    checkpointer = InMemorySaver()
+    # chapter graph
+    ainovel_chapter_agent = StateGraph(State, context_schema=Context)
+    ainovel_chapter_agent.add_node(
+        "first_chapter_draft_agent", first_chapter_draft_agent
+    )
+    ainovel_chapter_agent.add_node("next_chapter_draft_agent", next_chapter_draft_agent)
+    ainovel_chapter_agent.add_node("human_in_loop_guidance", human_in_loop_guidance)
+    ainovel_chapter_agent.add_node("human_in_loop_agree", human_in_loop_agree)
+    ainovel_chapter_agent.add_edge(START, "human_in_loop_guidance")
+    ainovel_chapter_agent.add_edge("first_chapter_draft_agent", "human_in_loop_agree")
+    ainovel_chapter_agent.add_edge("next_chapter_draft_agent", "human_in_loop_agree")
+    ainovel_chapter_agent = ainovel_chapter_agent.compile(checkpointer=checkpointer)
+
+    # png_bytes = ainovel_chapter_agent.get_graph(xray=True).draw_mermaid()
+    # logger.info(f"ainovel_chapter_agent: \n\n{png_bytes}")
+
+    return ainovel_chapter_agent
