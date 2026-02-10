@@ -13,8 +13,7 @@ async def agent_client():
         "trace_id": "123",
         "context": {
             "thread_id": "Nova",
-            "task_dir": "merlin",
-            "model": "deepseek",
+            "model": "basic",
             "config": {
                 "max_concurrent_research_units": 2,
                 "max_researcher_iterations": 4,
@@ -52,7 +51,7 @@ async def agent_client():
                 if chunk:
                     # try:
                     tmp = json.loads(chunk)
-                    if tmp["data"]["event"] == "on_chat_model_stream":
+                    if tmp["data"]["event_name"] == "on_chat_model_stream":
                         continue
                     print(tmp)
                     # except:

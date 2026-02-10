@@ -20,7 +20,8 @@ from nova.hooks import Agent_Hooks_Instance
 from nova.llms import LLMS_Provider_Instance, Prompts_Provider_Instance
 from nova.memory import SQLITESTORE
 from nova.model.agent import Context, Messages, State
-from nova.utils.common import get_today_str
+from nova.tools import upsert_memory_tool
+from nova.utils.common import extract_ai_message_content, get_today_str
 from nova.utils.log_utils import log_error_set_color
 
 logger = logging.getLogger(__name__)
@@ -120,18 +121,23 @@ async def memorizer(
 
     # 4 大模型
     response = await LLMS_Provider_Instance.llm_wrap_hooks(
-        _thread_id, _NODE_NAME, await _assemble_prompt(_messages), _model_name
+        _thread_id,
+        _NODE_NAME,
+        await _assemble_prompt(_messages),
+        _model_name,
+        tools=[upsert_memory_tool],
     )
 
     # 5 判断下一个节点的逻辑
     tool_calls = getattr(response, "tool_calls", [])
     if not tool_calls:  # 如果没有工具调用，则正常返回 - 回复结果
+        content, reasoning_content = extract_ai_message_content(response)
         return Command(
             goto="__end__",
             update={
                 "code": 0,
                 "err_message": "ok",
-                "data": {_NODE_NAME: response},
+                "data": {"content": content, "reasoning_content": reasoning_content},
             },
         )
 
@@ -140,7 +146,7 @@ async def memorizer(
         update={
             "code": 0,
             "err_message": "ok",
-            "data": {_NODE_NAME: response},
+            "data": {"result": response},
         },
     )
 
@@ -170,7 +176,7 @@ async def memorizer_tools(
     _user_id = cast(str, _config.get("user_id"))
 
     # Extract tool calls from the last message
-    tool_calls = getattr(_data.get("memorizer"), "tool_calls", [])
+    tool_calls = getattr(_data.get("result"), "tool_calls", [])
     if not tool_calls:
         _err_message = log_error_set_color(
             _thread_id, _NODE_NAME, "no tool calls found"
@@ -214,7 +220,7 @@ async def memorizer_tools(
         update={
             "code": 0,
             "err_message": "ok",
-            "data": {_NODE_NAME: results},
+            "data": {"result": results},
         },
     )
 

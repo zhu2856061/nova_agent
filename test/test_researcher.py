@@ -14,7 +14,7 @@ async def agent_client():
         "context": {
             "thread_id": "Nova",
             "task_dir": "merlin",
-            "model": "deepseek",
+            "model": "basic",
         },
         "state": {
             "messages": {
@@ -47,7 +47,7 @@ async def agent_client():
                 if chunk:
                     # try:
                     tmp = json.loads(chunk)
-                    if tmp["data"]["event"] == "on_chat_model_stream":
+                    if tmp["data"]["event_name"] == "on_chat_model_stream":
                         continue
                     print(tmp)
                     # except:

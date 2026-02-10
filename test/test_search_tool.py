@@ -5,7 +5,7 @@ import os
 
 os.environ["CONFIG_PATH"] = "../config.yaml"
 
-from nova.tools.llm_searcher import llm_searcher_tool
+from nova.tools import llm_searcher_tool
 
 # 同步调用
 result = llm_searcher_tool.invoke(

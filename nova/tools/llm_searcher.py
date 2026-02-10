@@ -7,7 +7,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from typing import Annotated, Dict, List, Optional, Type
+from typing import Annotated, List, Optional, Type
 
 from langchain_core.messages import HumanMessage
 from langchain_core.tools import BaseTool, InjectedToolArg
@@ -34,7 +34,7 @@ class SearchToolInput(BaseModel):
     max_results: Annotated[int, InjectedToolArg] = Field(
         default=5, description="Maximum number of results to return"
     )
-    runtime: Optional[Dict] = None
+    summarize_model: Optional[str] = None
 
 
 async def summarize_webpage(model: str, content: str):

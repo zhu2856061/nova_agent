@@ -12,7 +12,7 @@ request_data = {
     "context": {
         "thread_id": "Nova",
         "task_dir": "merlin",
-        "model": "deepseek",
+        "model": "basic",
         "config": {"user_id": "merlin"},
     },
     "state": {

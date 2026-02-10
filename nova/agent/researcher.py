@@ -125,7 +125,7 @@ async def researcher_tools(
     tool_calls = cast(AIMessage, _most_recent_message).tool_calls  # type: ignore
     coros = []
     for tool_call in tool_calls:
-        tmp = {**tool_call["args"], "runtime": {"summarize_model": _model_name}}
+        tmp = {**tool_call["args"], "summarize_model": _model_name}
         coros.append(execute_tool_safely(llm_searcher_tool, tmp))
     observations = await asyncio.gather(*coros)
 
@@ -193,7 +193,7 @@ async def wechat_researcher_tools(
     tool_calls = cast(AIMessage, _most_recent_message).tool_calls  # type: ignore
     coros = []
     for tool_call in tool_calls:
-        tmp = {**tool_call["args"], "runtime": {"summarize_model": _model_name}}
+        tmp = {**tool_call["args"], "summarize_model": _model_name}
         coros.append(execute_tool_safely(wechat_searcher_tool, tmp))
     observations = await asyncio.gather(*coros)
 

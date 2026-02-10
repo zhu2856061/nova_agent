@@ -109,7 +109,11 @@ async def clarify_with_user(
 
     # 4 大模型
     response = await LLMS_Provider_Instance.llm_wrap_hooks(
-        _thread_id, _NODE_NAME, _assemble_prompt(_messages), _model_name
+        _thread_id,
+        _NODE_NAME,
+        _assemble_prompt(_messages),
+        _model_name,
+        structured_output=ClarifyWithUser,
     )
 
     if not isinstance(response, ClarifyWithUser):
@@ -129,7 +133,7 @@ async def clarify_with_user(
                 "code": 0,
                 "err_message": "ok",
                 "messages": Messages(type="end"),
-                "data": {_NODE_NAME: response.model_dump()},
+                "data": {"result": response.model_dump()},
             },
         )
     else:
@@ -139,7 +143,6 @@ async def clarify_with_user(
                 "code": 0,
                 "err_message": "ok",
                 "messages": [HumanMessage(content=response.verification)],
-                "data": {_NODE_NAME: response.model_dump()},
             },
         )
 
@@ -177,7 +180,7 @@ async def write_research_brief(
         _NODE_NAME,
         _assemble_prompt(_messages),
         _model_name,
-        structured_output=[ResearchQuestion],
+        structured_output=ResearchQuestion,
     )
 
     if not isinstance(response, ResearchQuestion):
@@ -263,7 +266,6 @@ async def supervisor(
         update={
             "messages": response,
             "user_guidance": state.user_guidance,
-            "data": {_NODE_NAME: response},
         },
     )
 
@@ -283,7 +285,7 @@ async def supervisor_tools(
     _max_researcher_iterations = runtime.context.config.get(
         "max_researcher_iterations", 3
     )
-    _supervisor = state.data.get("supervisor")
+    _supervisor = state.messages.value[-1]
     _research_iterations = state.user_guidance["research_iterations"]
 
     # 执行
@@ -348,17 +350,11 @@ async def supervisor_tools(
                 tool_call_id=overflow_conduct_research_call["id"],
             )
         )
-    # raw_notes_concat = "\n".join(
-    #     [
-    #         "\n".join(observation.get("raw_notes", []))
-    #         for observation in tool_results
-    #     ]
-    # )
+
     return Command(
         goto="supervisor",
         update={
             "messages": tool_messages,
-            # "data": {_NODE_NAME: raw_notes_concat},
         },
     )
 
@@ -433,7 +429,7 @@ async def final_report_generation(
                     "err_message": "ok",
                     "messages": Messages(type="end"),
                     "user_guidance": state.user_guidance,
-                    "data": {_NODE_NAME: final_report.content},
+                    "data": {"result": final_report.content},
                 },
             )
 

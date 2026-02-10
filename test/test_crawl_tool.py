@@ -5,7 +5,7 @@ import os
 
 os.environ["CONFIG_PATH"] = "../config.yaml"
 
-from nova.tools.web_crawler import web_crawler_tool
+from nova.tools import web_crawler_tool
 
 # 同步调用
 result = web_crawler_tool.invoke(
