@@ -276,14 +276,14 @@ class ChainStreamHandler(EventHandler):
         name = safe_get(event, "name", "")
         node_name = get_node_name(langgraph_node, name)
 
-        interrupt_content = safe_get(event, "data.chunk.__interrupt__")
+        interrupt_content = safe_get(event, "data.chunk")
         if interrupt_content:
             return {
                 "event_name": "human_in_loop",
                 "event_info": {
                     "trace_id": trace_id,
                     "node_name": node_name,
-                    "output": safe_get(interrupt_content, "0.value", ""),
+                    "output": interrupt_content,
                 },
             }
         return None

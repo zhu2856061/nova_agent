@@ -94,7 +94,7 @@ async def theme_slicer(
             "code": 0,
             "err_message": "ok",
             "messages": Messages(type="add", value=[AIMessage(content=_data)]),
-            "data": {_NODE_NAME: _data},
+            "data": {"result": _data},
         },
     )
 
@@ -107,7 +107,6 @@ async def human_feedback(
 
     # 变量
     _thread_id = runtime.context.thread_id
-
     value = interrupt(
         {
             "message_id": _thread_id,

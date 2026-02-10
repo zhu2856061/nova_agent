@@ -8,6 +8,7 @@ from functools import wraps
 from typing import Any, Callable, Dict, Optional
 
 from langchain_core.messages import BaseMessage
+from langgraph.errors import GraphInterrupt
 from langgraph.runtime import Runtime
 from langgraph.types import Command
 
@@ -17,6 +18,61 @@ from nova.utils.log_utils import log_error_set_color, log_info_set_color
 
 # ========== 全局 Logger 定义 ==========
 logger = logging.getLogger(__name__)
+
+
+def extract_interrupt_data_from_exc(e: Exception) -> Dict[str, Any]:
+    """
+    针对格式 (Interrupt(value={'message_id': 'Nova', ...}, id='xxx'),) 提取数据
+
+    Args:
+        e: 捕获到的 GraphInterrupt 异常对象
+
+    Returns:
+        dict: 提取出的 message_id/content 等数据（无数据返回空字典）
+    """
+    try:
+        # 步骤1：先获取异常的 args（print(e) 显示的就是 args 内容）
+        if not hasattr(e, "args") or len(e.args) == 0:
+            logger.warning("GraphInterrupt 异常无 args 数据")
+            return {}
+
+        # 步骤2：取 args[0]（Interrupt 对象）
+        interrupt_obj = e.args[0]
+        if not interrupt_obj:
+            logger.warning("Interrupt 对象为空")
+            return {}
+
+        # 步骤3：从 Interrupt 对象提取 value 字段（核心数据）
+        # 方式1：直接属性访问（优先）
+        if hasattr(interrupt_obj, "value") and isinstance(interrupt_obj.value, dict):
+            return interrupt_obj.value
+
+        # 方式2：如果是 NamedTuple/元组，尝试按字段名提取
+        if isinstance(interrupt_obj, tuple):
+            # 遍历 Interrupt 对象的字段，找到 value
+            for field in dir(interrupt_obj):
+                if field == "value" and isinstance(getattr(interrupt_obj, field), dict):
+                    return getattr(interrupt_obj, field)
+
+        # 步骤4：兜底：解析字符串（针对 print(e) 显示的格式）
+        exc_str = str(interrupt_obj)
+        import re
+
+        # 匹配 { ... } 中的字典内容
+        dict_match = re.search(r"value=({.*?})", exc_str, re.DOTALL)
+        if dict_match:
+            import json
+
+            # 处理单引号转双引号，兼容 JSON 解析
+            dict_str = dict_match.group(1).replace("'", '"')
+            return json.loads(dict_str)
+
+        logger.warning(f"未从 Interrupt 对象提取到数据：{exc_str}")
+        return {}
+
+    except Exception as extract_err:
+        logger.error(f"提取 Interrupt 数据失败：{str(extract_err)}", exc_info=True)
+        return {}
 
 
 class AgentHooks:
@@ -45,11 +101,18 @@ class AgentHooks:
     ):
         code = state.code
         err_message = state.err_message
-        message = self.truncate_text(str(state.messages.value[-1]))
+        message = state.messages
+        user_guidance = str(state.user_guidance)
         data = self.truncate_text(str(state.data))
         model = runtime.context.model
         config = str(runtime.context.config)
         thread_id = runtime.context.thread_id
+
+        message = (
+            self.truncate_text(str(state.messages.value[-1]))
+            if message
+            else self.truncate_text(user_guidance)
+        )
 
         message = f"[ENTER] -> {node_name}: code={code} | err_message={err_message} | message={message}... | data={data}... | model={model} | config={config}..."
 
@@ -65,11 +128,18 @@ class AgentHooks:
     ):
         code = state.code
         err_message = state.err_message
-        message = self.truncate_text(str(state.messages.value[-1]))
+        message = state.messages
+        user_guidance = str(state.user_guidance)
         data = self.truncate_text(str(state.data))
         model = runtime.context.model
         config = str(runtime.context.config)
         thread_id = runtime.context.thread_id
+
+        message = (
+            self.truncate_text(str(state.messages.value[-1]))
+            if message
+            else self.truncate_text(user_guidance)
+        )
 
         message = f"[EXIT: {elapsed:.3f}s] <- {node_name}: code={code} | err_message={err_message} | message={message}... | data={data}... | model={model} | config={config}..."
 
@@ -129,7 +199,8 @@ class AgentHooks:
                     await self.after_node(func_name, state, runtime, elapsed)
 
                     return result
-
+                except GraphInterrupt as e:
+                    return extract_interrupt_data_from_exc(e)  # type: ignore
                 except Exception as e:
                     # 执行异常钩子
                     return await self.on_error(runtime, func_name, e)

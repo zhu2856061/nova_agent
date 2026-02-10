@@ -108,23 +108,19 @@ async def stream_agent_events(
                 response = handle_event(trace_id, event)  # type: ignore
                 if response:
                     # response = convert_langchain_objects_to_dict(response)
-                    if response.get("event") == "error":
-                        try:
-                            res = AgentResponse(
-                                code=0,
-                                data=response,
-                            ).model_dump_json()
-                        except Exception:
-                            res = AgentResponse(
-                                code=1,
-                                err_message="data is not json serializable",
-                            ).model_dump_json()
+                    if response.get("event_name") == "error":
+                        res = AgentResponse(
+                            code=1,
+                            data=response.get("event_info", {}),
+                        ).model_dump_json()
 
                         yield res
                         return
 
                     try:
-                        res = AgentResponse(code=0, data=response).model_dump_json()
+                        res = AgentResponse(
+                            code=0, err_message="ok", data=response
+                        ).model_dump_json()
                     except Exception:
                         res = AgentResponse(
                             code=1, err_message="data is not json serializable"
@@ -190,23 +186,18 @@ async def human_in_loop(request: AgentRequest):
                         response = handle_event(trace_id, event)  # type: ignore
                         if response:
                             # response = convert_langchain_objects_to_dict(response)
-                            if response.get("event") == "error":
-                                try:
-                                    res = AgentResponse(
-                                        code=0, data=response
-                                    ).model_dump_json()
-                                except Exception:
-                                    res = AgentResponse(
-                                        code=1,
-                                        err_message="data is not json serializable",
-                                    ).model_dump_json()
+                            if response.get("event_name") == "error":
+                                res = AgentResponse(
+                                    code=1,
+                                    data=response.get("event_info", {}),
+                                ).model_dump_json()
 
                                 yield res
                                 return
 
                             try:
                                 res = AgentResponse(
-                                    code=0, data=response
+                                    code=0, err_message="ok", data=response
                                 ).model_dump_json()
                             except Exception:
                                 res = AgentResponse(

@@ -16,13 +16,13 @@ from nova.controller.exceptions import NOVAException, create_error_response
 from nova.service.agent_service import add_register_agent_endpoints, agent_router
 from nova.service.chat_service import chat_router
 
-from .agent.chat_sample import chat_agent
+from .agent.chat_sample import compile_chat_sample_agent
 
 logger = logging.getLogger(__name__)
 
 
 # 用户自定义的agent 在这里注册进服务
-add_register_agent_endpoints("mk", chat_agent)
+add_register_agent_endpoints("chat_sample", compile_chat_sample_agent())
 
 
 # --- FastAPI App Initialization ---

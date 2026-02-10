@@ -14,6 +14,7 @@ from langgraph.types import Command
 from nova.hooks import Agent_Hooks_Instance
 from nova.llms import LLMS_Provider_Instance
 from nova.model.agent import Context, State
+from nova.utils.common import extract_ai_message_content
 
 logger = logging.getLogger(__name__)
 # ######################################################################################
@@ -45,17 +46,19 @@ async def chat_sample(state: State, runtime: Runtime[Context]):
         _model_name,
     )
 
+    content, reasoning_content = extract_ai_message_content(response)
+
     return Command(
         goto="__end__",
         update={
             "code": 0,
             "err_message": "ok",
-            "data": {_NODE_NAME: response},
+            "data": {"content": content, "reasoning_content": reasoning_content},
         },
     )
 
 
-def compile_chat_agent():
+def compile_chat_sample_agent():
     # chat graph
     _agent = StateGraph(State, context_schema=Context)
     _agent.add_node("chat_sample", chat_sample)
@@ -63,6 +66,3 @@ def compile_chat_agent():
 
     checkpointer = InMemorySaver()
     return _agent.compile(checkpointer=checkpointer)
-
-
-chat_agent = compile_chat_agent()

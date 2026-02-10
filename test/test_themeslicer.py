@@ -22,7 +22,7 @@ async def agent_client():
                 "value": [
                     {
                         "role": "user",
-                        "content": "请帮忙写一篇废土世界的 AI 叛乱，偏科幻的小说, 大概3章节，每章节大约2000字",  #
+                        "content": "我是小明，很喜欢足球",  #
                     },
                 ],
             },
@@ -46,9 +46,12 @@ async def agent_client():
             async for chunk in response.aiter_bytes():
                 if chunk:
                     tmp = json.loads(chunk.decode("utf-8"))
-                    if tmp["data"]["event"] == "on_chat_model_stream":
-                        continue
-                    print(tmp)
+                    try:
+                        if tmp["data"]["event_name"] == "on_chat_model_stream":
+                            continue
+                        print(tmp)
+                    except Exception:
+                        print("==>", tmp)
 
 
 async def human_in_loop_client():
@@ -89,5 +92,5 @@ async def human_in_loop_client():
 
 
 if __name__ == "__main__":
-    # asyncio.run(agent_client())
-    asyncio.run(human_in_loop_client())
+    asyncio.run(agent_client())
+    # asyncio.run(human_in_loop_client())

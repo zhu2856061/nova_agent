@@ -9,7 +9,7 @@ import operator
 import time
 from datetime import datetime
 from functools import wraps
-from typing import Any, Dict, List, Union, cast
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 from langchain_core.messages import (
     AIMessage,
@@ -230,3 +230,69 @@ def convert_base_message(
             f"创建 {target_type.__name__} 实例失败，可能是缺少必填参数或参数不兼容。"
             f"错误详情：{str(e)}"
         ) from e
+
+
+def extract_ai_message_content(
+    ai_message: Union[AIMessage, Dict[str, Any]],
+) -> Tuple[Optional[str], Optional[str]]:
+    """
+    从 AIMessage 对象（或其字典形式）中提取 content 和 reasoning_content
+
+    Args:
+        ai_message: LangChain AIMessage 对象 或 其序列化后的字典
+
+    Returns:
+        tuple: (content, reasoning_content)
+               - 字段存在返回对应字符串，不存在返回 None
+    """
+    try:
+        # ========== 第一步：统一转换为字典（兼容 AIMessage 对象/纯字典） ==========
+        if isinstance(ai_message, AIMessage):
+            # 从 AIMessage 对象转为字典（保留所有字段）
+            msg_dict = ai_message.model_dump()
+        elif isinstance(ai_message, dict):
+            # 已是字典，直接使用
+            msg_dict = ai_message
+        else:
+            logger.warning(
+                f"输入类型错误，仅支持 AIMessage 或 dict，当前类型: {type(ai_message)}"
+            )
+            return None, None
+
+        # ========== 第二步：提取核心字段 ==========
+        # 1. 提取 content（AI回答的核心内容）
+        content = msg_dict.get("content")
+
+        # 2. 提取 reasoning_content（思考过程，适配多层嵌套）
+        reasoning_content = None
+        # 主路径：additional_kwargs → reasoning_content
+        if "additional_kwargs" in msg_dict:
+            reasoning_content = msg_dict["additional_kwargs"].get("reasoning_content")
+            # 兜底路径：additional_kwargs → provider_specific_fields → reasoning_content
+            if not reasoning_content:
+                reasoning_content = (
+                    msg_dict["additional_kwargs"]
+                    .get("provider_specific_fields", {})
+                    .get("reasoning_content")
+                )
+
+        # ========== 第三步：数据清洗 ==========
+        # 去除前后空格，空字符串转为 None
+        content = (
+            content.strip() if isinstance(content, str) and content.strip() else None
+        )
+        reasoning_content = (
+            reasoning_content.strip()
+            if isinstance(reasoning_content, str) and reasoning_content.strip()
+            else None
+        )
+
+        logger.debug(
+            f"提取成功：content长度={len(content) if content else 0}, "
+            f"reasoning_content长度={len(reasoning_content) if reasoning_content else 0}"
+        )
+        return content, reasoning_content
+
+    except Exception as e:
+        logger.error(f"提取 AIMessage 内容失败: {str(e)}", exc_info=True)
+        return None, None

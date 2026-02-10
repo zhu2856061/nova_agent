@@ -8,7 +8,7 @@ import json
 import httpx
 
 
-async def agent_client():
+async def agent_client(chat_router):
     request_data = {
         "trace_id": "123",
         "context": {
@@ -34,7 +34,7 @@ async def agent_client():
         # 发送 POST 请求到 /stream_llm 路由
         async with client.stream(
             "POST",
-            "http://0.0.0.0:2021/agent/chat",
+            f"http://0.0.0.0:2021/agent/{chat_router}",
             json=request_data,
             timeout=600.0,
         ) as response:
@@ -55,4 +55,6 @@ async def agent_client():
 
 
 if __name__ == "__main__":
-    asyncio.run(agent_client())
+    # chat_router = "chat"
+    chat_router = "chat_sample"
+    asyncio.run(agent_client(chat_router))
