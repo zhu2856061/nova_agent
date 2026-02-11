@@ -100,15 +100,14 @@ async def extract_setting(state: State, runtime: Runtime[Context]):
         _NODE_NAME,
         _assemble_prompt(),
         _model_name,
+        structured_output=ExtractSetting,
     )
 
     _result = {
-        _NODE_NAME: {
-            "topic": response.topic,  # type: ignore
-            "genre": response.genre,  # type: ignore
-            "number_of_chapters": response.number_of_chapters,  # type: ignore
-            "word_number": response.word_number,  # type: ignore
-        }
+        "topic": response.topic,  # type: ignore
+        "genre": response.genre,  # type: ignore
+        "number_of_chapters": response.number_of_chapters,  # type: ignore
+        "word_number": response.word_number,  # type: ignore
     }
 
     os.makedirs(f"{_work_dir}/middle", exist_ok=True)
@@ -121,7 +120,7 @@ async def extract_setting(state: State, runtime: Runtime[Context]):
     return {
         "code": 0,
         "err_message": "ok",
-        "data": _result,
+        "data": {"result": _result},
         "human_in_loop_node": _NODE_NAME,
     }
 
@@ -155,7 +154,7 @@ async def core_seed(state: State, runtime: Runtime[Context]):
                 "file_path": f"{_work_dir}/middle/extract_setting.md",
             }
         )
-        _extract_setting_result = json.loads(_extract_setting_result)["extract_setting"]
+        _extract_setting_result = json.loads(_extract_setting_result)
         tmp = {
             **_extract_setting_result,
             "user_guidance": _human_in_loop_value,
@@ -179,19 +178,19 @@ async def core_seed(state: State, runtime: Runtime[Context]):
         _model_name,
     )
 
-    _result = {_NODE_NAME: response.content}
+    _result = response.content
 
     os.makedirs(f"{_work_dir}/middle", exist_ok=True)
     await write_file_tool.arun(
         {
             "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
-            "text": json.dumps(_result, ensure_ascii=False),
+            "text": _result,
         }
     )
     return {
         "code": 0,
         "err_message": "ok",
-        "data": _result,
+        "data": {"result": _result},
         "human_in_loop_node": _NODE_NAME,
     }
 
@@ -226,7 +225,7 @@ async def world_building(state: State, runtime: Runtime[Context]):
                 "file_path": f"{_work_dir}/middle/extract_setting.md",
             }
         )
-        _extract_setting_result = json.loads(_extract_setting_result)["extract_setting"]
+        _extract_setting_result = json.loads(_extract_setting_result)
 
         # 种子结果
         _core_seed_result = await read_file_tool.arun(
@@ -234,7 +233,7 @@ async def world_building(state: State, runtime: Runtime[Context]):
                 "file_path": f"{_work_dir}/middle/core_seed.md",
             }
         )
-        _core_seed_result = json.loads(_core_seed_result)
+        _core_seed_result = {"core_seed": _core_seed_result}
 
         # 聚合所有信息
         _extract_setting_result.update(_core_seed_result)
@@ -260,7 +259,7 @@ async def world_building(state: State, runtime: Runtime[Context]):
         _model_name,
     )
 
-    _result = {_NODE_NAME: response.content}
+    _result = response.content
 
     os.makedirs(f"{_work_dir}/middle", exist_ok=True)
     await write_file_tool.arun(
@@ -272,7 +271,7 @@ async def world_building(state: State, runtime: Runtime[Context]):
     return {
         "code": 0,
         "err_message": "ok",
-        "data": _result,
+        "data": {"result": _result},
         "human_in_loop_node": _NODE_NAME,
     }
 
@@ -307,7 +306,7 @@ async def character_dynamics(state: State, runtime: Runtime[Context]):
                 "file_path": f"{_work_dir}/middle/extract_setting.md",
             }
         )
-        _extract_setting_result = json.loads(_extract_setting_result)["extract_setting"]
+        _extract_setting_result = json.loads(_extract_setting_result)
 
         # 种子结果
         _core_seed_result = await read_file_tool.arun(
@@ -315,7 +314,8 @@ async def character_dynamics(state: State, runtime: Runtime[Context]):
                 "file_path": f"{_work_dir}/middle/core_seed.md",
             }
         )
-        _core_seed_result = json.loads(_core_seed_result)
+        _core_seed_result = {"core_seed": _core_seed_result}
+        _extract_setting_result.update(_core_seed_result)
 
         # 世界观结果
         _world_building_result = await read_file_tool.arun(
@@ -323,16 +323,14 @@ async def character_dynamics(state: State, runtime: Runtime[Context]):
                 "file_path": f"{_work_dir}/middle/world_building.md",
             }
         )
-        _world_building_result = json.loads(_world_building_result)
-
-        # 聚合所有信息
-        _extract_setting_result.update(_core_seed_result)
+        _world_building_result = {"world_building": _world_building_result}
         _extract_setting_result.update(_world_building_result)
 
         tmp = {**_extract_setting_result, "user_guidance": _human_in_loop_value}
         _prompt_tamplate = Prompts_Provider_Instance.get_template(
             "ainovel", _NODE_NAME, prompt_dir
         )
+
         return [
             HumanMessage(
                 content=Prompts_Provider_Instance.prompt_apply_template(
@@ -349,19 +347,19 @@ async def character_dynamics(state: State, runtime: Runtime[Context]):
         _model_name,
     )
 
-    _result = {_NODE_NAME: response.content}
+    _result = response.content
 
     os.makedirs(f"{_work_dir}/middle", exist_ok=True)
     await write_file_tool.arun(
         {
             "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
-            "text": json.dumps(_result, ensure_ascii=False),
+            "text": _result,
         }
     )
     return {
         "code": 0,
         "err_message": "ok",
-        "data": _result,
+        "data": {"result": _result},
         "human_in_loop_node": _NODE_NAME,
     }
 
@@ -396,7 +394,7 @@ async def plot_arch(state: State, runtime: Runtime[Context]):
                 "file_path": f"{_work_dir}/middle/extract_setting.md",
             }
         )
-        _extract_setting_result = json.loads(_extract_setting_result)["extract_setting"]
+        _extract_setting_result = json.loads(_extract_setting_result)
 
         # 种子结果
         _core_seed_result = await read_file_tool.arun(
@@ -404,7 +402,8 @@ async def plot_arch(state: State, runtime: Runtime[Context]):
                 "file_path": f"{_work_dir}/middle/core_seed.md",
             }
         )
-        _core_seed_result = json.loads(_core_seed_result)
+        _core_seed_result = {"core_seed": _core_seed_result}
+        _extract_setting_result.update(_core_seed_result)
 
         # 世界观结果
         _world_building_result = await read_file_tool.arun(
@@ -412,7 +411,8 @@ async def plot_arch(state: State, runtime: Runtime[Context]):
                 "file_path": f"{_work_dir}/middle/world_building.md",
             }
         )
-        _world_building_result = json.loads(_world_building_result)
+        _world_building_result = {"world_building": _world_building_result}
+        _extract_setting_result.update(_world_building_result)
 
         # 角色信息
         _character_dynamics_result = await read_file_tool.arun(
@@ -420,11 +420,7 @@ async def plot_arch(state: State, runtime: Runtime[Context]):
                 "file_path": f"{_work_dir}/middle/character_dynamics.md",
             }
         )
-        _character_dynamics_result = json.loads(_character_dynamics_result)
-
-        # 聚合所有信息
-        _extract_setting_result.update(_core_seed_result)
-        _extract_setting_result.update(_world_building_result)
+        _character_dynamics_result = {"character_dynamics": _character_dynamics_result}
         _extract_setting_result.update(_character_dynamics_result)
 
         tmp = {**_extract_setting_result, "user_guidance": _human_in_loop_value}
@@ -447,20 +443,20 @@ async def plot_arch(state: State, runtime: Runtime[Context]):
         _model_name,
     )
 
-    _result = {_NODE_NAME: response.content}
+    _result = response.content
 
     os.makedirs(f"{_work_dir}/middle", exist_ok=True)
     await write_file_tool.arun(
         {
             "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
-            "text": json.dumps(_result, ensure_ascii=False),
+            "text": _result,
         }
     )
-    _result = {_NODE_NAME: response.content}
+    _result = response.content
     return {
         "code": 0,
         "err_message": "ok",
-        "data": _result,
+        "data": {"result": _result},
         "human_in_loop_node": _NODE_NAME,
     }
 
@@ -492,9 +488,7 @@ async def chapter_blueprint(state: State, runtime: Runtime[Context]):
             "file_path": f"{_work_dir}/middle/extract_setting.md",
         }
     )
-    _number_of_chapters = json.loads(_number_of_chapters)["extract_setting"][
-        "number_of_chapters"
-    ]
+    _number_of_chapters = json.loads(_number_of_chapters)["number_of_chapters"]
 
     # 提示词
     async def _assemble_prompt(chapter_list, start, end):
@@ -504,7 +498,7 @@ async def chapter_blueprint(state: State, runtime: Runtime[Context]):
                 "file_path": f"{_work_dir}/middle/extract_setting.md",
             }
         )
-        _extract_setting_result = json.loads(_extract_setting_result)["extract_setting"]
+        _extract_setting_result = json.loads(_extract_setting_result)
 
         # 种子结果
         _core_seed_result = await read_file_tool.arun(
@@ -512,7 +506,8 @@ async def chapter_blueprint(state: State, runtime: Runtime[Context]):
                 "file_path": f"{_work_dir}/middle/core_seed.md",
             }
         )
-        _core_seed_result = json.loads(_core_seed_result)
+        _core_seed_result = {"core_seed": _core_seed_result}
+        _extract_setting_result.update(_core_seed_result)
 
         # 世界观结果
         _world_building_result = await read_file_tool.arun(
@@ -520,7 +515,8 @@ async def chapter_blueprint(state: State, runtime: Runtime[Context]):
                 "file_path": f"{_work_dir}/middle/world_building.md",
             }
         )
-        _world_building_result = json.loads(_world_building_result)
+        _world_building_result = {"world_building": _world_building_result}
+        _extract_setting_result.update(_world_building_result)
 
         # 角色信息
         _character_dynamics_result = await read_file_tool.arun(
@@ -528,7 +524,8 @@ async def chapter_blueprint(state: State, runtime: Runtime[Context]):
                 "file_path": f"{_work_dir}/middle/character_dynamics.md",
             }
         )
-        _character_dynamics_result = json.loads(_character_dynamics_result)
+        _character_dynamics_result = {"character_dynamics": _character_dynamics_result}
+        _extract_setting_result.update(_character_dynamics_result)
 
         # 三幕式情节架构
         _plot_arch_result = await read_file_tool.arun(
@@ -536,12 +533,7 @@ async def chapter_blueprint(state: State, runtime: Runtime[Context]):
                 "file_path": f"{_work_dir}/middle/plot_arch.md",
             }
         )
-        _plot_arch_result = json.loads(_plot_arch_result)
-
-        # 聚合所有信息
-        _extract_setting_result.update(_core_seed_result)
-        _extract_setting_result.update(_world_building_result)
-        _extract_setting_result.update(_character_dynamics_result)
+        _plot_arch_result = {"plot_arch": _plot_arch_result}
         _extract_setting_result.update(_plot_arch_result)
 
         tmp = {
@@ -554,6 +546,7 @@ async def chapter_blueprint(state: State, runtime: Runtime[Context]):
         _prompt_tamplate = Prompts_Provider_Instance.get_template(
             "ainovel", _NODE_NAME, prompt_dir
         )
+
         return [
             HumanMessage(
                 content=Prompts_Provider_Instance.prompt_apply_template(
@@ -579,19 +572,19 @@ async def chapter_blueprint(state: State, runtime: Runtime[Context]):
 
         current_start = current_end + 1
 
-    _result = {_NODE_NAME: "\n\n".join(final_chapter_blueprint)}
+    _result = "\n\n".join(final_chapter_blueprint)
 
     os.makedirs(f"{_work_dir}/middle", exist_ok=True)
     await write_file_tool.arun(
         {
             "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
-            "text": json.dumps(_result, ensure_ascii=False),
+            "text": _result,
         }
     )
     return {
         "code": 0,
         "err_message": "ok",
-        "data": _result,
+        "data": {"result": _result},
         "human_in_loop_node": _NODE_NAME,
     }
 
@@ -614,60 +607,50 @@ async def build_architecture(state: State, runtime: Runtime[Context]):
         _work_dir = os.path.join(_task_dir, _thread_id)
     os.makedirs(_work_dir, exist_ok=True)
 
-    # 抽取设置结果
+    # 小说设定结果
     _extract_setting_result = await read_file_tool.arun(
         {
             "file_path": f"{_work_dir}/middle/extract_setting.md",
         }
     )
-
-    _extract_setting_result = json.loads(_extract_setting_result)["extract_setting"]
-
-    # 小说设定
+    _extract_setting_result = json.loads(_extract_setting_result)
+    # 存储小说设定
     await write_file_tool.arun(
         {
             "file_path": f"{_work_dir}/novel_extract_setting.md",
             "text": json.dumps(_extract_setting_result, ensure_ascii=False),
         }
     )
-
     # 种子结果
     _core_seed_result = await read_file_tool.arun(
         {
             "file_path": f"{_work_dir}/middle/core_seed.md",
         }
     )
-    _core_seed_result = json.loads(_core_seed_result)
-
     # 世界观结果
     _world_building_result = await read_file_tool.arun(
         {
             "file_path": f"{_work_dir}/middle/world_building.md",
         }
     )
-    _world_building_result = json.loads(_world_building_result)
-
     # 角色信息
     _character_dynamics_result = await read_file_tool.arun(
         {
             "file_path": f"{_work_dir}/middle/character_dynamics.md",
         }
     )
-    _character_dynamics_result = json.loads(_character_dynamics_result)
-
     # 三幕式情节架构
     _plot_arch_result = await read_file_tool.arun(
         {
             "file_path": f"{_work_dir}/middle/plot_arch.md",
         }
     )
-    _plot_arch_result = json.loads(_plot_arch_result)
 
     # 聚合所有信息
-    _extract_setting_result.update(_core_seed_result)
-    _extract_setting_result.update(_world_building_result)
-    _extract_setting_result.update(_character_dynamics_result)
-    _extract_setting_result.update(_plot_arch_result)
+    _extract_setting_result.update({"core_seed": _core_seed_result})
+    _extract_setting_result.update({"world_building": _world_building_result})
+    _extract_setting_result.update({"character_dynamics": _character_dynamics_result})
+    _extract_setting_result.update({"plot_arch": _plot_arch_result})
 
     final_content = (
         "#=== 0) 小说设定 ===\n"
@@ -681,12 +664,14 @@ async def build_architecture(state: State, runtime: Runtime[Context]):
         "#=== 4) 三幕式情节架构 ===\n"
         f"{_extract_setting_result['plot_arch']}\n"
     )
+
     await write_file_tool.arun(
         {
             "file_path": f"{_work_dir}/novel_architecture.md",
             "text": final_content,
         }
     )
+
     log_info_set_color(
         _thread_id, _NODE_NAME, f"save to {_work_dir}/novel_architecture.md"
     )
@@ -697,25 +682,22 @@ async def build_architecture(state: State, runtime: Runtime[Context]):
             "file_path": f"{_work_dir}/middle/chapter_blueprint.md",
         }
     )
-    _chapter_blueprint_result = json.loads(_chapter_blueprint_result)
     await write_file_tool.arun(
         {
             "file_path": f"{_work_dir}/novel_chapter_blueprint.md",
-            "text": _chapter_blueprint_result["chapter_blueprint"],
+            "text": _chapter_blueprint_result,
         }
     )
     log_info_set_color(
         _thread_id, _NODE_NAME, f"save to {_work_dir}/novel_chapter_blueprint.md"
     )
     final_content = (
-        final_content
-        + "\n#=== 3) 世界观 ===\n\n"
-        + _chapter_blueprint_result["chapter_blueprint"]
+        final_content + "\n#=== 5) 世界观 ===\n\n" + _chapter_blueprint_result
     )
     return {
         "code": 0,
         "err_message": "ok",
-        "data": final_content,
+        "data": {"result": final_content},
         "human_in_loop_node": _NODE_NAME,
     }
 
@@ -760,7 +742,7 @@ async def human_in_loop_guidance(
 
 
 # 人工确认
-@Agent_Hooks_Instance.node_with_hooks(node_name="human_in_loop_agree")
+# @Agent_Hooks_Instance.node_with_hooks(node_name="human_in_loop_agree")
 async def human_in_loop_agree(
     state: State, runtime: Runtime[Context]
 ) -> Command[

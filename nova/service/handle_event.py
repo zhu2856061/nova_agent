@@ -4,7 +4,9 @@
 # @Moto   : Knowledge comes from decomposition
 from __future__ import annotations
 
+import ast
 import logging
+import re
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, Optional
 
@@ -78,6 +80,51 @@ def safe_get(data: Dict[str, Any], path: str, default: Any = None) -> Any:
         return value if value is not None else default
     except (KeyError, AttributeError, IndexError):
         return default
+
+
+def extract_interrupt_data_from_exc(chunk) -> Dict[str, Any]:
+    """
+    针对格式 (Interrupt(value={'message_id': 'Nova', ...}, id='xxx'),) 提取数据
+
+    Args:
+        e: 捕获到的 GraphInterrupt 异常对象
+
+    Returns:
+        dict: 提取出的 message_id/content 等数据（无数据返回空字典）
+    """
+    try:
+        # 1. 处理封装在 list 或 tuple 中的情况 (Common in LangGraph)
+        target = chunk
+        if isinstance(chunk, (list, tuple)) and len(chunk) > 0:
+            target = chunk[0]
+
+        if target is None:
+            return {}
+
+        # 2. 方式 A: 直接访问 Interrupt 对象的 value 属性 (推荐方式)
+        if hasattr(target, "value"):
+            val = target.value
+            return val if isinstance(val, dict) else {"content": str(val)}
+
+        # 3. 方式 B: 如果 target 本身就是 dict
+        if isinstance(target, dict):
+            return target
+
+        # 4. 方式 C: 字符串解析兜底 (处理极端的序列化场景)
+        target_str = str(target)
+        if "value=" in target_str:
+            # 匹配 value={...}
+            match = re.search(r"value=({.*?})", target_str, re.DOTALL)
+            if match:
+                # 使用 ast.literal_eval 处理 Python 字典格式字符串（比 json 更兼容单引号）
+                return ast.literal_eval(match.group(1))
+
+        logger.warning(f"无法识别的 Interrupt 格式: {type(target)}")
+        return {}
+
+    except Exception as extract_err:
+        logger.error(f"提取 Interrupt 数据失败：{str(extract_err)}", exc_info=True)
+        return {}
 
 
 # ========== 事件处理器映射（策略模式） ==========
@@ -276,14 +323,17 @@ class ChainStreamHandler(EventHandler):
         name = safe_get(event, "name", "")
         node_name = get_node_name(langgraph_node, name)
 
-        interrupt_content = safe_get(event, "data.chunk")
-        if interrupt_content:
+        chunk = safe_get(event, "data.chunk")
+        # {'__interrupt__': (Interrupt(value={'message_id': 'Nova', 'content': '对于`extract_setting`的结果是否满意，不满意的话，可以输入修改建议，若是满意的话，可以输入`满意`'}, id='3ac7d93243535334efbd8665429a406a'),)}
+
+        if chunk and isinstance(chunk, dict) and "__interrupt__" in chunk:
+            chunk = extract_interrupt_data_from_exc(chunk.get("__interrupt__"))
             return {
                 "event_name": "human_in_loop",
                 "event_info": {
                     "trace_id": trace_id,
                     "node_name": node_name,
-                    "output": interrupt_content,
+                    "output": chunk,
                 },
             }
         return None
@@ -365,204 +415,3 @@ def handle_event(trace_id: str, event: Dict[str, Any]) -> Optional[Dict[str, Any
                 "output": str(e),
             },
         }
-
-
-# # 事件处理
-# def handle_event(trace_id, event):
-#     try:
-#         kind = event.get("event")
-#         data = event.get("data")
-#         name = event.get("name")
-#         metadata = event.get("metadata", {})
-
-#         langgraph_node = str(metadata.get("langgraph_node", ""))
-
-#         # parent_ids = event.get("parent_ids", [])
-#         # checkpoint_ns = str(metadata.get("checkpoint_ns", ""))
-#         # langgraph_step = str(metadata.get("langgraph_step", ""))
-#         # run_id = str(event.get("run_id", ""))
-
-#         if kind == "on_chain_start":
-#             _name = langgraph_node + "|" + name
-#             # 工具内部执行过程不再展示
-#             if "RunnableSequence" in _name and "tool" in _name:
-#                 return None
-#             node_name = name if langgraph_node == "" else langgraph_node
-#             ydata = {
-#                 "event_name": "on_chain_start",
-#                 "event_info": {
-#                     "node_name": node_name,
-#                     "trace_id": trace_id,
-#                 },
-#             }
-
-#             return ydata
-
-#         elif kind == "on_chain_end":
-#             _name = langgraph_node + "|" + name
-#             # 工具内部执行过程不再展示
-#             if "RunnableSequence" in _name and "tool" in _name:
-#                 return None
-#             output = data["output"] if data.get("output") else ""
-#             if isinstance(output, Command):
-#                 output = output.update
-#             node_name = name if langgraph_node == "" else langgraph_node
-#             ydata = {
-#                 "event_name": "on_chain_end",
-#                 "event_info": {
-#                     "node_name": node_name,
-#                     "output": output,
-#                 },
-#             }
-#             return ydata
-
-#         elif kind == "on_tool_start":
-#             node_name = name if langgraph_node == "" else langgraph_node
-
-#             ydata = {
-#                 "event_name": "on_tool_start",
-#                 "event_info": {
-#                     "node_name": node_name,
-#                     "input": data["input"] if data.get("input") else "",
-#                 },
-#             }
-#             return ydata
-
-#         elif kind == "on_tool_end":
-#             node_name = name if langgraph_node == "" else langgraph_node
-
-#             ydata = {
-#                 "event_name": "on_tool_end",
-#                 "event_info": {
-#                     "node_name": node_name,
-#                     "output": data["output"] if data.get("output") else "",
-#                 },
-#             }
-#             return ydata
-
-#         elif kind == "on_chat_model_start":
-#             _name = langgraph_node + "|" + name
-#             # 工具内部执行过程不再展示
-#             if "ChatLiteLLMRouter" in name and "tool" in _name:
-#                 return None
-
-#             node_name = name if langgraph_node == "" else langgraph_node
-#             ydata = {
-#                 "event_name": "on_chat_model_start",
-#                 "event_info": {
-#                     "node_name": node_name,
-#                     "trace_id": trace_id,
-#                 },
-#             }
-#             return ydata
-
-#         elif kind == "on_chat_model_end":
-#             _name = langgraph_node + "|" + name
-#             # 工具内部执行过程不再展示
-#             if "ChatLiteLLMRouter" in _name and "tool" in _name:
-#                 return None
-
-#             node_name = name if langgraph_node == "" else langgraph_node
-#             ydata = {
-#                 "event_name": "on_chat_model_end",
-#                 "event_info": {
-#                     "node_name": node_name,
-#                     "output": {
-#                         "content": data["output"].content,
-#                         "reasoning_content": data["output"].additional_kwargs.get(
-#                             "reasoning_content", ""
-#                         ),
-#                         "tool_calls": data["output"].tool_calls,
-#                     },
-#                 },
-#             }
-#             return ydata
-
-#         elif kind == "on_chat_model_stream":
-#             _name = langgraph_node + "|" + name
-#             # 工具内部执行过程不再展示
-#             if "ChatLiteLLMRouter" in _name and "tool" in _name:
-#                 return None
-
-#             node_name = name if langgraph_node == "" else langgraph_node
-
-#             content = data["chunk"].content
-#             reasoning_content = data["chunk"].additional_kwargs.get("reasoning_content")
-#             # tool_calls = data["chunk"].additional_kwargs.get("tool_calls")
-
-#             if reasoning_content:
-#                 """
-#                 {'chunk': AIMessageChunk(additional_kwargs={'reasoning_content':'Got'}, response_metadata={}, id='run--e09f0e5e-54d2-4c64-87cc-223168efe685')}
-#                 """
-#                 ydata = {
-#                     "event_name": "on_chat_model_stream",
-#                     "event_info": {
-#                         "node_name": node_name,
-#                         "output": {
-#                             "message_id": data["chunk"].id,
-#                             "reasoning_content": data["chunk"].additional_kwargs[
-#                                 "reasoning_content"
-#                             ],
-#                         },
-#                     },
-#                 }
-
-#             elif content:
-#                 """
-#                 {'chunk': AIMessageChunk(content='Got', additional_kwargs={}, response_metadata={}, id='run--e09f0e5e-54d2-4c64-87cc-223168efe685')}
-#                 """
-#                 ydata = {
-#                     "event_name": "on_chat_model_stream",
-#                     "event_info": {
-#                         "node_name": node_name,
-#                         "output": {"message_id": data["chunk"].id, "content": content},
-#                     },
-#                 }
-
-#             else:
-#                 return None
-
-#             return ydata
-
-#         elif kind == "on_chain_stream":
-#             node_name = name if langgraph_node == "" else langgraph_node
-#             try:
-#                 interrupt_content = data["chunk"].get("__interrupt__")
-#             except Exception:
-#                 interrupt_content = None
-
-#             if interrupt_content:
-#                 ydata = {
-#                     "event_name": "human_in_loop",
-#                     "event_info": {
-#                         "node_name": node_name,
-#                         "output": interrupt_content[0].value,
-#                     },
-#                 }
-#                 return ydata
-
-#         elif kind == "on_parser_end":
-#             node_name = name if langgraph_node == "" else langgraph_node
-#             ydata = {
-#                 "event_name": "on_parser_end",
-#                 "event_info": {
-#                     "node_name": node_name,
-#                     "output": data["output"],
-#                 },
-#             }
-
-#         else:
-#             return None
-
-#     except Exception as e:
-#         logger.error(
-#             f"Event processing failed (trace_id={trace_id}): {str(e)}", exc_info=True
-#         )
-#         ydata = {
-#             "event_name": "error",
-#             "event_info": {
-#                 "node_name": _name,
-#                 "output": str(e),
-#             },
-#         }
-#         return ydata

@@ -168,9 +168,10 @@ async def human_in_loop(request: AgentRequest):
             raise HTTPException(status_code=400, detail="agent_name is required")
 
         agent = get_agent(agent_name)
-
         if not stream:
-            response = await agent.ainvoke(state, context=context, config=config)
+            response = await agent.ainvoke(
+                Command(resume=user_guidance), context=context, config=config
+            )
             return AgentResponse(code=0, data=response)
 
         # Streaming handler for human-in-loop

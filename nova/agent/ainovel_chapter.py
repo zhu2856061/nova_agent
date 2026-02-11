@@ -273,15 +273,15 @@ async def global_summary(state: State, runtime: Runtime[Context]):
         _model_name,
     )
 
-    _result = {_NODE_NAME: response.content}
+    _result = response.content
 
     await write_file_tool.arun(
         {
             "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/{_NODE_NAME}.md",
-            "text": json.dumps(_result, ensure_ascii=False),
+            "text": _result,
         }
     )
-    return {"code": 0, "err_message": "ok", "data": _result}
+    return {"code": 0, "err_message": "ok", "data": {"result": _result}}
 
 
 # 创建角色状态
@@ -353,14 +353,18 @@ async def create_character_state(state: State, runtime: Runtime[Context]):
         _assemble_prompt(),
         _model_name,
     )
-    _result = {"character_state": response.content}
+    _result = response.content
     await write_file_tool.arun(
         {
             "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/character_state.md",
-            "text": json.dumps(_result, ensure_ascii=False),
+            "text": _result,
         }
     )
-    return {"code": 0, "err_message": "ok", "data": _result}
+    return {
+        "code": 0,
+        "err_message": "ok",
+        "data": {"result": _result},
+    }
 
 
 # 更新角色状态
@@ -436,15 +440,15 @@ async def update_character_state(state: State, runtime: Runtime[Context]):
         _model_name,
     )
 
-    _result = {"character_state": response.content}
+    _result = response.content
 
     await write_file_tool.arun(
         {
             "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/character_state.md",
-            "text": json.dumps(_result, ensure_ascii=False),
+            "text": _result,
         }
     )
-    return {"code": 0, "err_message": "ok", "data": _result}
+    return {"code": 0, "err_message": "ok", "data": {"result": _result}}
 
 
 # 最近3章节，当前章节，下一章节，构建当前章节的摘要
@@ -561,15 +565,15 @@ async def summarize_recent_chapters(state: State, runtime: Runtime[Context]):
         _assemble_prompt(),
         _model_name,
     )
-    _result = {_NODE_NAME: response.content}
+    _result = response.content
     await write_file_tool.arun(
         {
             "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/{_NODE_NAME}.md",
-            "text": json.dumps(_result, ensure_ascii=False),
+            "text": _result,
         }
     )
 
-    return {"code": 0, "err_message": "ok", "data": _result}
+    return {"code": 0, "err_message": "ok", "data": {"result": _result}}
 
 
 # 首章节内容
@@ -695,14 +699,14 @@ async def first_chapter_draft(state: State, runtime: Runtime[Context]):
     )
 
     log_info_set_color(_thread_id, _NODE_NAME, response)
-    _result = {"chapter_draft": response.content}
+    _result = response.content
     await write_file_tool.arun(
         {
             "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/chapter_draft.md",
-            "text": f"## 第{_current_chapter_id}章 {_chapter_info['chapter_title']}\n\n{response.content}",
+            "text": f"## 第{_current_chapter_id}章 {_chapter_info['chapter_title']}\n\n{_result}",
         }
     )
-    return {"code": 0, "err_message": "ok", "data": _result}
+    return {"code": 0, "err_message": "ok", "data": {"result": _result}}
 
 
 # 下一章节内容
@@ -901,14 +905,14 @@ async def next_chapter_draft(state: State, runtime: Runtime[Context]):
         _model_name,
     )
 
-    _result = {"chapter_draft": response.content}
+    _result = response.content
     await write_file_tool.arun(
         {
             "file_path": f"{_work_dir}/chapter/chapter_{_current_chapter_id}/chapter_draft.md",
-            "text": f"## 第{_current_chapter_id}章 {_chapter_info['chapter_title']}\n\n{response.content}",
+            "text": f"## 第{_current_chapter_id}章 {_chapter_info['chapter_title']}\n\n{_result}",
         }
     )
-    return {"code": 0, "err_message": "ok", "data": _result}
+    return {"code": 0, "err_message": "ok", "data": {"result": _result}}
 
 
 # 人工指导
@@ -941,14 +945,6 @@ async def human_in_loop_guidance(
 
     value = interrupt({"message_id": _thread_id, "content": guidance_tip})
 
-    # # 确定当前属于第几章
-    # dir_path = Path(f"{_work_dir}")
-    # file_count = sum(
-    #     1
-    #     for item in dir_path.iterdir()
-    #     if item.is_dir() and item.name.startswith("chapter")
-    # )
-    # _current_chapter_id = file_count + 1
     os.makedirs(f"{_work_dir}/chapter/chapter_{_current_chapter_id}", exist_ok=True)
 
     _new_v = []
@@ -984,6 +980,7 @@ async def human_in_loop_guidance(
 
 
 # 人工确认
+@Agent_Hooks_Instance.node_with_hooks(node_name="human_in_loop_agree")
 async def human_in_loop_agree(
     state: State, runtime: Runtime[Context]
 ) -> Command[
@@ -996,7 +993,7 @@ async def human_in_loop_agree(
 ]:
     # 变量
     _thread_id = runtime.context.thread_id
-    _task_dir = runtime.context.task_dir
+    _task_dir = runtime.context.task_dir or CONF.SYSTEM.task_dir
     _code = state.code
     _human_in_loop_node = state.human_in_loop_node
 
@@ -1018,10 +1015,10 @@ async def human_in_loop_agree(
 
     if value["human_in_loop"] == "满意":
         # 获得小说设定
-
         _novel_setting = await read_file_tool.arun(
             {"file_path": f"{_work_dir}/novel_extract_setting.md"}
         )
+
         _number_of_chapters = json.loads(_novel_setting)["number_of_chapters"]
         _current_chapter_id = state.user_guidance.get(
             "current_chapter_id", float("inf")

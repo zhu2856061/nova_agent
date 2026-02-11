@@ -13,7 +13,6 @@ async def ainovel_agent_client():
         "trace_id": "123",
         "context": {
             "thread_id": "Nova",
-            "task_dir": "merlin",
             "model": "basic",
         },
         "state": {
@@ -26,6 +25,7 @@ async def ainovel_agent_client():
                     },
                 ],
             },
+            # "user_guidance": {"current_chapter_id": 2},
         },
         "stream": True,
     }
@@ -54,13 +54,12 @@ async def ainovel_human_in_loop_client():
         "trace_id": "123",
         "context": {
             "thread_id": "Nova",
-            "task_dir": "merlin",
             "model": "basic",
         },
         "state": {
             "user_guidance": {
                 "human_in_loop": "满意",
-                "agent_name": "ainovel_chapter",
+                "agent_name": "ainovel_chapter",  # ainovel_architect
             },
         },
         "stream": True,
