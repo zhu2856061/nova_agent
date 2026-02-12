@@ -4,32 +4,61 @@
 # @Moto   : Knowledge comes from decomposition
 from __future__ import annotations
 
+import asyncio
+import json
+
+import httpx
+
+"""
 import os
 import sys
-
 sys.path.append("..")
 os.environ["CONFIG_PATH"] = "../config.yaml"
 from nova.embeddings import Embeddings_Instances
 
 embeddings = Embeddings_Instances.embed_query("质检效果")
-
-
-# from langchain_openai import OpenAIEmbeddings
-
-# # 初始化 Embedding 模型
-# embeddings = OpenAIEmbeddings(
-#     model="Qwen3-Embedding-8B-agent",  # 这里必须与 vLLM 启动时的 model 参数一致
-#     base_url="http://10.25.71.72:15001/v1",  # 你的 vLLM 地址
-#     api_key="",
-#     check_embedding_ctx_length=False,  # Qwen 长度较长，建议关闭检查或手动设置
-# )
-
-# # 测试生成向量
-# text = "你好，请将这段话转化为向量。"
-# vector = embeddings.embed_query(text)
-# print(f"向量维度: {len(vector)}")
-
 """
-通用嵌入服务实现
-支持通过API调用部署在各种平台上的嵌入模型
-"""
+
+
+async def agent_client(chat_router):
+    request_data = {
+        "trace_id": "123",
+        "context": {
+            "thread_id": "Nova",
+        },
+        "state": {
+            "data": {
+                "input_path": "/root/workspace/gitlab/nova_agent/test/data.csv",
+                "output_path": "/root/workspace/gitlab/nova_agent/test",
+            },
+        },
+        "stream": True,
+    }
+    # 使用 httpx 异步客户端发送请求
+    async with httpx.AsyncClient(timeout=600.0) as client:
+        # 发送 POST 请求到 /stream_llm 路由
+        async with client.stream(
+            "POST",
+            f"http://0.0.0.0:2021/agent/{chat_router}",
+            json=request_data,
+            timeout=600.0,
+        ) as response:
+            # 检查响应状态码
+            if response.status_code != 200:
+                print(f"Error: {response.status_code}")
+                return
+
+            async for chunk in response.aiter_bytes():
+                if chunk:
+                    tmp = json.loads(chunk.decode("utf-8"))
+                    try:
+                        if tmp["data"]["event_name"] == "on_chat_model_stream":
+                            continue
+                    except Exception:
+                        print(tmp)
+                    print(tmp)
+
+
+if __name__ == "__main__":
+    _router = "analyze_intent_health"
+    asyncio.run(agent_client(_router))

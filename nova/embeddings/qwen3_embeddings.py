@@ -158,17 +158,15 @@ class Qwen3Embeddings(Embeddings):
 
         # 使用线程池并发处理批量嵌入（提升效率）
         embed_func = partial(self._get_embedding, model_name, prompt=prompt)
-        with DEFAULT_THREAD_POOL as executor:
-            futures = [executor.submit(embed_func, text) for text in texts]
-            for idx, future in enumerate(futures):
-                try:
-                    embeddings.append(future.result())
-                    logger.debug(f"成功嵌入第 {idx + 1} 个文档")
-                except Exception as e:
-                    logger.error(
-                        f"嵌入第 {idx + 1} 个文档失败: {str(e)}", exc_info=True
-                    )
-                    raise e
+
+        futures = [DEFAULT_THREAD_POOL.submit(embed_func, text) for text in texts]
+        for idx, future in enumerate(futures):
+            try:
+                embeddings.append(future.result())
+                logger.debug(f"成功嵌入第 {idx + 1} 个文档")
+            except Exception as e:
+                logger.error(f"嵌入第 {idx + 1} 个文档失败: {str(e)}", exc_info=True)
+                raise e
 
         logger.info(f"文档列表嵌入完成，成功生成 {len(embeddings)} 个向量")
         return embeddings

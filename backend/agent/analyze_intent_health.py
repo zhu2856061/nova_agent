@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from collections import defaultdict
 
 import numpy as np
@@ -17,7 +18,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 
 from nova.embeddings import Embeddings_Instances
 from nova.hooks import Agent_Hooks_Instance
-from nova.llms import LLMS_Provider_Instance
+from nova.llms import Prompts_Provider_Instance
 from nova.model.agent import Context, State
 
 logger = logging.getLogger(__name__)
@@ -33,21 +34,24 @@ logger = logging.getLogger(__name__)
 
 
 # 函数
+@Agent_Hooks_Instance.node_with_hooks(node_name="analyze_intent_health")
 async def analyze_intent_health(state: State, runtime: Runtime[Context]):
     """
     检查意图健康，其中输入列必须为： 标准问，相似问
 
     """
-
-    _NODE_NAME = "analyze_intent_health"
-
     # 变量
     _thread_id = runtime.context.thread_id
-    _model_name = runtime.context.model
-    _csv_path = state.data["csv_path"]
+    _input_path = state.data["input_path"]
+    _output_dir = state.data["output_path"]
+
+    # 提示词
+    _prompt_tamplate = Prompts_Provider_Instance.get_template(
+        "embeddings", "chatbot_qwen3_embedding_8b"
+    )
 
     #
-    _df = pd.read_csv(_csv_path)
+    _df = pd.read_csv(_input_path)
     _intent_map = defaultdict(list)
 
     for _, row in _df.iterrows():
@@ -62,7 +66,9 @@ async def analyze_intent_health(state: State, runtime: Runtime[Context]):
     # 2. 计算内聚度 (Intra-intent Cohesion)
     for intent in _intent_names:
         queries = _intent_map[intent]
-        embeddings = qwen3_embeddings_instances.embed_documents(_model_name, queries)
+        embeddings = Embeddings_Instances.embed_documents(
+            queries, prompt=_prompt_tamplate
+        )
 
         # 计算该意图的中心点（质心）
         centroid = np.mean(embeddings, axis=0)
@@ -81,7 +87,7 @@ async def analyze_intent_health(state: State, runtime: Runtime[Context]):
 
     # 3. 计算耦合度 (Inter-intent Coupling / Conflict)
     # 计算意图中心点之间的两两相似度矩阵
-    dist_matrix = cosine_similarity(_intent_centroids)
+    dist_matrix = cosine_similarity(_intent_centroids)  # type: ignore
 
     conflicts = []
     for i in range(len(_intent_names)):
@@ -100,6 +106,8 @@ async def analyze_intent_health(state: State, runtime: Runtime[Context]):
     # 4. 输出结果
     report_df = pd.DataFrame(_report)
     conflict_df = pd.DataFrame(conflicts).sort_values(by="语义相似度", ascending=False)
+    report_df.to_csv(os.path.join(_output_dir, "report.csv"), index=False)
+    conflict_df.to_csv(os.path.join(_output_dir, "conflict.csv"), index=False)
 
     logger.info("\n--- 意图内聚度扫描 (得分越低越乱) ---")
     logger.info(report_df.sort_values(by="内聚度得分").head(10))  # 打印最乱的10个
@@ -112,22 +120,16 @@ async def analyze_intent_health(state: State, runtime: Runtime[Context]):
         update={
             "code": 0,
             "err_message": "ok",
-            "data": {"report_df": report_df, "conflict_df": conflict_df},
+            # "data": {"report_df": report_df, "conflict_df": conflict_df},
         },
     )
 
 
-def compile_agent():
-    # chat graph
+def compile_analyze_intent_health_agent():
+    # graph
     _agent = StateGraph(State, context_schema=Context)
-    _agent.add_node(
-        "analyze_intent_health",
-        node_with_hooks(analyze_intent_health, "analyze_intent_health"),
-    )
+    _agent.add_node("analyze_intent_health", analyze_intent_health)
     _agent.add_edge(START, "analyze_intent_health")
 
     checkpointer = InMemorySaver()
     return _agent.compile(checkpointer=checkpointer)
-
-
-analyze_intent_health_agent = compile_agent()
