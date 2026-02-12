@@ -15,8 +15,9 @@ from langgraph.runtime import Runtime
 from langgraph.types import Command
 from sklearn.metrics.pairwise import cosine_similarity
 
-from nova.hooks.utils import node_with_hooks
-from nova.embeddings.qwen3_embeddings import qwen3_embeddings_instances
+from nova.embeddings import Embeddings_Instances
+from nova.hooks import Agent_Hooks_Instance
+from nova.llms import LLMS_Provider_Instance
 from nova.model.agent import Context, State
 
 logger = logging.getLogger(__name__)

@@ -125,10 +125,9 @@ class EmbeddingModelConfig(BaseModel):
     type: str = Field(
         ..., pattern=r"^openai$", description="嵌入模型类型（目前仅支持openai）"
     )
-    name: str = Field(..., description="模型具体名称")
     base_url: str = Field(..., description="嵌入模型API基础地址")
     api_key: str = Field(default="", description="嵌入模型API密钥")
-    timeout: int = Field(default=30, ge=10, description="请求超时时间（秒）")
+    timeout: int = Field(default=3, ge=2, description="请求超时时间（秒）")
 
     @field_validator("base_url")
     def validate_api_url(cls, v: str) -> str:

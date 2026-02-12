@@ -12,7 +12,6 @@ from typing import Dict, List, Optional
 import openai
 from langchain_core.embeddings import Embeddings
 from langchain_core.runnables.config import run_in_executor
-from pydantic import Field
 
 from nova.model.config import EmbeddingModelConfig
 
@@ -28,8 +27,6 @@ class Qwen3Embeddings(Embeddings):
     """基于API的嵌入模型实现"""
 
     # Pydantic字段：支持配置校验和序列化
-    instances: Dict[str, openai.OpenAI] = Field(default_factory=dict)
-    default_model_name: Optional[str] = Field(None, description="默认使用的模型名称")
 
     def __init__(
         self,
@@ -44,6 +41,9 @@ class Qwen3Embeddings(Embeddings):
             model_name: 模型名称
             timeout: 请求超时时间（秒）
         """
+        self.instances: Dict = {}
+        self.default_model_name = None
+
         logger.info("初始化Qwen3系列嵌入模型...")
 
         # 创建OpenAI客户端实例

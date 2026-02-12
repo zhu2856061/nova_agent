@@ -85,13 +85,13 @@ LLM:
         max_retries: 2
 
 EMBEDDING:
-  default_model_name: "qwen3_embedding_8b"
+  default_model_name: "openai/Qwen3-Embedding-8B-agent"
   model_list:
-    - model_name: "qwen3_embedding_8b"
+    - model_name: "openai/Qwen3-Embedding-8B-agent"
       type: "openai"
-      name: "Qwen3-Embedding-8B-agent" 
-      base_url: "http://10.25.71.72:15001/v1"
-      api_key: ""
+      base_url: "https://quarkml.oa.fenqile.com/v1"
+      api_key: "lx-ai-1234"
+      timeout: 2  # Embedding请求超时时间（秒）
 
 HOOK:
   Agent_Node_Hooks:
