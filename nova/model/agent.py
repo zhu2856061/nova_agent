@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 import operator
-from typing import Annotated, Any, Dict, List, cast
+from typing import Annotated, Any, Dict, List, Literal, cast
 
 from langchain_core.messages import MessageLikeRepresentation
 from langgraph.graph.message import (
@@ -64,6 +64,11 @@ def override_reducer(current_value: Messages, new_value: Any):
         return Messages(type="add", value=value)
 
 
+class Todo(BaseModel):
+    content: str
+    status: Literal["pending", "in_progress", "completed"]
+
+
 class State(BaseModel):
     code: int = Field(default=0, description="The code to use for the agent.")
     err_message: str = Field(default="ok", description="error message")
@@ -71,10 +76,16 @@ class State(BaseModel):
     messages: Annotated[Messages, override_reducer] = Field(
         default=Messages(type="", value=[]), description="user guidance"
     )
+    # messages: Annotated[
+    #     Union[Messages, List[MessageLikeRepresentation]], override_reducer
+    # ] = Field(default=Messages(type="", value=[]), description="user guidance")
     data: Dict = Field(default={}, description="data")
     human_in_loop_node: str = Field(
         default="",
         description="human_in_loop node for the agent.",
+    )
+    todos: list[Todo] = Field(
+        [], description="List of todo items for tracking task progress."
     )
 
 

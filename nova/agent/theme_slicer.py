@@ -55,7 +55,9 @@ async def theme_slicer(
     # 变量
     _thread_id = runtime.context.thread_id
     _model_name = runtime.context.model
-    _messages = state.messages.value
+    _messages = (
+        state.messages.value if isinstance(state.messages, Messages) else state.messages
+    )
     _human_in_loop_value = state.user_guidance.get("human_in_loop_value", "")
 
     # 提示词
@@ -107,6 +109,10 @@ async def human_feedback(
 
     # 变量
     _thread_id = runtime.context.thread_id
+    _messages = (
+        state.messages.value if isinstance(state.messages, Messages) else state.messages
+    )
+
     value = interrupt(
         {
             "message_id": _thread_id,
@@ -116,7 +122,7 @@ async def human_feedback(
     log_info_set_color(_thread_id, _NODE_NAME, value)
 
     _new_v = []
-    for v in state.messages.value:
+    for v in _messages:
         if isinstance(v, BaseMessage):
             v = convert_base_message(v)
         _new_v.append(v)

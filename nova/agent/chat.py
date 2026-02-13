@@ -13,7 +13,7 @@ from langgraph.types import Command
 
 from nova.hooks import Agent_Hooks_Instance
 from nova.llms import LLMS_Provider_Instance
-from nova.model.agent import Context, State
+from nova.model.agent import Context, Messages, State
 from nova.utils.common import extract_ai_message_content
 
 logger = logging.getLogger(__name__)
@@ -36,7 +36,9 @@ async def chat(state: State, runtime: Runtime[Context]):
     # 变量
     _thread_id = runtime.context.thread_id
     _model_name = runtime.context.model
-    _messages = state.messages.value
+    _messages = (
+        state.messages.value if isinstance(state.messages, Messages) else state.messages
+    )
 
     # 4 大模型
     response = await LLMS_Provider_Instance.llm_wrap_hooks(

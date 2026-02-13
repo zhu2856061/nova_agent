@@ -928,6 +928,9 @@ async def human_in_loop_guidance(
     # 变量
     _thread_id = runtime.context.thread_id
     _task_dir = runtime.context.task_dir or CONF.SYSTEM.task_dir
+    _messages = (
+        state.messages.value if isinstance(state.messages, Messages) else state.messages
+    )
 
     _work_dir = os.path.join(_task_dir, _thread_id)
     os.makedirs(_work_dir, exist_ok=True)
@@ -948,7 +951,7 @@ async def human_in_loop_guidance(
     os.makedirs(f"{_work_dir}/chapter/chapter_{_current_chapter_id}", exist_ok=True)
 
     _new_v = []
-    for v in state.messages.value:
+    for v in _messages:
         if isinstance(v, BaseMessage):
             v = convert_base_message(v)
         _new_v.append(v)
@@ -996,6 +999,9 @@ async def human_in_loop_agree(
     _task_dir = runtime.context.task_dir or CONF.SYSTEM.task_dir
     _code = state.code
     _human_in_loop_node = state.human_in_loop_node
+    _messages = (
+        state.messages.value if isinstance(state.messages, Messages) else state.messages
+    )
 
     _work_dir = os.path.join(_task_dir, _thread_id)
     os.makedirs(_work_dir, exist_ok=True)
@@ -1008,7 +1014,7 @@ async def human_in_loop_agree(
     _current_node = _human_in_loop_node
 
     _new_v = []
-    for v in state.messages.value:
+    for v in _messages:
         if isinstance(v, BaseMessage):
             v = convert_base_message(v)
         _new_v.append(v)

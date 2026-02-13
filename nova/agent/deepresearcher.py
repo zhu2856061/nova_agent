@@ -91,7 +91,9 @@ async def clarify_with_user(
     # 变量
     _thread_id = runtime.context.thread_id
     _model_name = runtime.context.model
-    _messages = state.messages.value
+    _messages = (
+        state.messages.value if isinstance(state.messages, Messages) else state.messages
+    )
 
     # 提示词
     def _assemble_prompt(messages):
@@ -157,7 +159,9 @@ async def write_research_brief(
     # 变量
     _thread_id = runtime.context.thread_id
     _model_name = runtime.context.model
-    _messages = state.messages.value
+    _messages = (
+        state.messages.value if isinstance(state.messages, Messages) else state.messages
+    )
 
     # 提示词
     def _assemble_prompt(messages):
@@ -219,7 +223,9 @@ async def supervisor(
     _model_name = runtime.context.model
 
     _max_concurrent = runtime.context.config.get("max_concurrent_research_units", 2)
-    _messages = state.messages.value
+    _messages = (
+        state.messages.value if isinstance(state.messages, Messages) else state.messages
+    )
     _research_iterations = state.user_guidance.get("research_iterations", 1)
 
     if not _messages:
@@ -280,12 +286,15 @@ async def supervisor_tools(
     # 变量
     _thread_id = runtime.context.thread_id
     _model_name = runtime.context.model
+    _messages = (
+        state.messages.value if isinstance(state.messages, Messages) else state.messages
+    )
 
     _max_concurrent = runtime.context.config.get("max_concurrent_research_units", 2)
     _max_researcher_iterations = runtime.context.config.get(
         "max_researcher_iterations", 3
     )
-    _supervisor = state.messages.value[-1]
+    _supervisor = _messages[-1]
     _research_iterations = state.user_guidance["research_iterations"]
 
     # 执行
@@ -374,7 +383,9 @@ async def final_report_generation(
 
     # _supervisor = state.data.get("supervisor")
     _research_brief = state.user_guidance.get("research_brief")
-    _messages = state.messages.value
+    _messages = (
+        state.messages.value if isinstance(state.messages, Messages) else state.messages
+    )
 
     if _messages is None or _research_brief is None:
         return Command(

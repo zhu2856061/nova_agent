@@ -65,7 +65,9 @@ async def extract_setting(state: State, runtime: Runtime[Context]):
     _model_name = runtime.context.model
     _config = runtime.context.config
     _user_guidance = state.user_guidance
-    _messages = state.messages.value
+    _messages = (
+        state.messages.value if isinstance(state.messages, Messages) else state.messages
+    )
 
     prompt_dir = _config.get("prompt_dir")
     result_dir = _config.get("result_dir")
@@ -719,6 +721,9 @@ async def human_in_loop_guidance(
     _thread_id = runtime.context.thread_id
     _task_dir = runtime.context.task_dir or CONF.SYSTEM.task_dir
     _human_in_loop_node = state.human_in_loop_node
+    _messages = (
+        state.messages.value if isinstance(state.messages, Messages) else state.messages
+    )
 
     _work_dir = os.path.join(_task_dir, _thread_id)
     os.makedirs(_work_dir, exist_ok=True)
@@ -727,7 +732,7 @@ async def human_in_loop_guidance(
     value = interrupt({"message_id": _thread_id, "content": guidance_tip})
 
     _new_v = []
-    for v in state.messages.value:
+    for v in _messages:
         if isinstance(v, BaseMessage):
             v = convert_base_message(v)
         _new_v.append(v)
@@ -764,6 +769,9 @@ async def human_in_loop_agree(
     _code = state.code
     _human_in_loop_node = state.human_in_loop_node
     _data = state.data
+    _messages = (
+        state.messages.value if isinstance(state.messages, Messages) else state.messages
+    )
 
     _work_dir = os.path.join(_task_dir, _thread_id)
     os.makedirs(_work_dir, exist_ok=True)
@@ -797,7 +805,7 @@ async def human_in_loop_agree(
             goto="__end__", update={"code": 1, "err_message": "node not found"}
         )
     _new_v = []
-    for v in state.messages.value:
+    for v in _messages:
         if isinstance(v, BaseMessage):
             v = convert_base_message(v)
         _new_v.append(v)

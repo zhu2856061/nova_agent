@@ -56,7 +56,9 @@ async def clarify_with_user(state: State, runtime: Runtime[Context]):
     # 变量
     _thread_id = runtime.context.thread_id
     _model_name = runtime.context.model
-    _messages = state.messages.value
+    _messages = (
+        state.messages.value if isinstance(state.messages, Messages) else state.messages
+    )
 
     # 提示词
     def _assemble_prompt(messages):

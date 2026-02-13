@@ -21,7 +21,7 @@ async def agent_client(chat_router):
                 "value": [
                     {
                         "role": "user",
-                        "content": "中国的首都在哪？",  #
+                        "content": "请查询网络上的信息，深圳的最近一周内的经济新闻",  #
                     },
                 ],
             },
@@ -55,5 +55,5 @@ async def agent_client(chat_router):
 
 if __name__ == "__main__":
     # chat_router = "chat"
-    chat_router = "chat_sample"
+    chat_router = "todos_list"
     asyncio.run(agent_client(chat_router))

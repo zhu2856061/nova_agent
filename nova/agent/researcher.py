@@ -49,7 +49,9 @@ async def researcher(
     # 变量
     _thread_id = runtime.context.thread_id
     _model_name = runtime.context.model
-    _messages = state.messages.value
+    _messages = (
+        state.messages.value if isinstance(state.messages, Messages) else state.messages
+    )
     _tool_call_iterations = state.user_guidance.get("tool_call_iterations", 0)
 
     # 提示词
@@ -237,7 +239,9 @@ async def compress_research(
     # 变量
     _thread_id = runtime.context.thread_id
     _model_name = runtime.context.model
-    _messages = state.messages.value
+    _messages = (
+        state.messages.value if isinstance(state.messages, Messages) else state.messages
+    )
 
     # 提示词
     def _assemble_prompt(messages):

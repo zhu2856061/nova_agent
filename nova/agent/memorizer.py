@@ -82,7 +82,9 @@ async def memorizer(
     _thread_id = runtime.context.thread_id
     _model_name = runtime.context.model
     _config = runtime.context.config
-    _messages = state.messages.value
+    _messages = (
+        state.messages.value if isinstance(state.messages, Messages) else state.messages
+    )
 
     # 2 变量检查
     if _config.get("user_id") is None or len(_messages) <= 0:

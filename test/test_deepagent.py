@@ -16,15 +16,12 @@ async def agent_client(chat_router):
             "model": "basic",
         },
         "state": {
-            "messages": {
-                "type": "add",
-                "value": [
-                    {
-                        "role": "user",
-                        "content": "中国的首都在哪？",  #
-                    },
-                ],
-            },
+            "messages": [
+                {
+                    "role": "user",
+                    "content": "What is langgraph?",  #
+                },
+            ],
         },
         "stream": True,
     }
@@ -55,5 +52,5 @@ async def agent_client(chat_router):
 
 if __name__ == "__main__":
     # chat_router = "chat"
-    chat_router = "chat_sample"
+    chat_router = "deepagent_sample"
     asyncio.run(agent_client(chat_router))
