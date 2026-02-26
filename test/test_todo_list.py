@@ -21,7 +21,19 @@ async def agent_client(chat_router):
                 "value": [
                     {
                         "role": "user",
-                        "content": "请查询网络上的信息，深圳的最近一周内的经济新闻",  #
+                        "content": "帮忙开发客服系统, 千珏 职业赛场使用率 数据分析",  #
+                    },
+                    {
+                        "role": "user",
+                        "content": "帮忙开发客服系统, 千珏 职业赛场使用率 数据分析",  #
+                    },
+                    {
+                        "role": "user",
+                        "content": "帮忙开发客服系统, 千珏 职业赛场使用率 数据分析",  #
+                    },
+                    {
+                        "role": "user",
+                        "content": "帮忙开发客服系统, 千珏 职业赛场使用率 数据分析",  #
                     },
                 ],
             },

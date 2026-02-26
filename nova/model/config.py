@@ -39,6 +39,7 @@ class SystemConfig(BaseModel):
     log_dir: str = Field("./logs", description="日志目录")
     task_dir: str = Field(..., description="任务目录（支持环境变量）")
     prompt_template_dir: str = Field(..., description="提示词模板目录（支持环境变量）")
+    skill_dir: str = Field(..., description="技能目录（支持环境变量）")
 
     @field_validator("IP_PORT")
     @classmethod

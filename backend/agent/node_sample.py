@@ -10,7 +10,11 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import START, StateGraph
 
 from nova.model.agent import Context, State
-from nova.node.factory import create_todos_list_node
+from nova.node.factory import (
+    create_patch_tools_node,
+    create_summarization_node,
+    create_todos_list_node,
+)
 
 logger = logging.getLogger(__name__)
 # ######################################################################################
@@ -25,12 +29,14 @@ logger = logging.getLogger(__name__)
 
 # 函数
 todos_list_node = create_todos_list_node()
+patch_tools_node = create_patch_tools_node()
+summarization_node = create_summarization_node(10)
 
 
-def compile_todos_list_agent():
+def compile_node_agent():
     # chat graph
     _agent = StateGraph(State, context_schema=Context)
-    _agent.add_node("todos_list", todos_list_node)
+    _agent.add_node("todos_list", summarization_node)
     _agent.add_edge(START, "todos_list")
 
     checkpointer = InMemorySaver()

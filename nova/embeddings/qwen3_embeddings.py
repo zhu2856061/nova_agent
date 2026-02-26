@@ -41,7 +41,7 @@ class Qwen3Embeddings(Embeddings):
             model_name: 模型名称
             timeout: 请求超时时间（秒）
         """
-        self.instances: Dict = {}
+        self.instances: Dict[str, openai.OpenAI] = {}
         self.default_model_name = None
 
         logger.info("初始化Qwen3系列嵌入模型...")
@@ -80,7 +80,7 @@ class Qwen3Embeddings(Embeddings):
         """测试客户端连通性（轻量校验）"""
         try:
             # 发送一个空文本的嵌入请求（部分服务可能不支持，可注释）
-            client.embeddings.create(input="", model=model_name)
+            client.embeddings.create(input="test", model=model_name)
         except Exception as e:
             # 捕获非致命错误，仅日志提示
             logger.warning(

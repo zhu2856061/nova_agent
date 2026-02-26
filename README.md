@@ -72,7 +72,10 @@ sh run_langgraph_cli.sh
 
 🚀[2026-02-12] 基于新的架构，开发-对话系统中话术质量评估Agent
 
-🚀[2026-02-13] skill能力 - 复杂任务的todo list 能力
+🚀[2026-02-13] skill能力 - 复杂任务的todo list 能力 [重构 TodoListMiddleware]
+
+⏳[todo] 文件操作能力：ls, read_file, write_file, edit_file, glob, and grep [重构 FilesystemMiddleware]
+
 
 
 ⏳[todo] skill能力
