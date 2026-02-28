@@ -1,3 +1,22 @@
+# ===============================================================
+# 1. 系统常规设置
+#
+# IP_PORT: 后端服务监听的 IP:PORT
+# WORKERS: 后端服务启动的进程数
+# TIMEOUT: 后端服务请求超时时间（秒）
+# NAME: 服务名称
+# DESC: 服务描述
+# VERSION: 服务版本
+# DEBUG: 是否开启 DEBUG 模式
+
+# store_dir: 存储目录
+# cache_dir: 缓存目录
+# log_dir: 日志目录
+# task_dir: 任务目录
+# prompt_template_dir: 提示模板目录
+# skill_dir: 技能目录
+
+# ===============================================================
 SYSTEM:
   IP_PORT: "0.0.0.0:2021"
   WORKERS: 2
@@ -15,7 +34,22 @@ SYSTEM:
 
   prompt_template_dir: $PROMPT_PATH
   skill_dir: $SKILL_PATH
-
+# ===============================================================
+# 2. 大模型API 配置
+# default_model_name 默认模型
+# model_list: 模型列表
+  # model_name: 模型名称
+  # litellm_params: 模型参数配置
+  # # model: 模型名称
+  # # api_base: API 地址
+  # # api_key: API密钥
+  # # cache: 是否缓存结果
+  # # verbose: 是否打印日志
+  # # request_timeout: 请求超时时间（秒）
+  # # temperature: 模型温度
+  # # top_p: 模型 nucleus 采样概率
+  # # max_retries: 最大重试次数
+# ===============================================================
 LLM:
   default_model_name: "basic"
   model_list:
@@ -85,15 +119,33 @@ LLM:
         top_k: 10
         max_retries: 2
 
+# ===============================================================
+# 3. 嵌入模型API 配置
+# default_model_name 默认模型
+# model_list: 模型列表
+#   # model_name: 模型名称
+#   # type: 模型类型
+#   # base_url: API 地址
+#   # api_key: API密钥
+#   # timeout: 模型超时时间（秒）
+# ===============================================================
 EMBEDDING:
   default_model_name: "openai/Qwen3-Embedding-8B-agent"
   model_list:
     - model_name: "openai/Qwen3-Embedding-8B-agent"
       type: "openai"
-      base_url: "https://quarkml.oa.fenqile.com/v1"
-      api_key: "lx-ai-1234"
+      base_url: $LEXIN_LLM_URL
+      api_key: $LEXIN_LLM_API_KEY
       timeout: 2  # Embedding请求超时时间（秒）
 
+# ===============================================================
+
+# 4. 钩子函数配置
+# Agent_Node_Hooks: Agent 节点钩子函数配置
+#   truncate_max_length: 显示长度的最大值
+#   enable_timing: 是否显示耗时
+
+# ===============================================================
 HOOK:
   Agent_Node_Hooks:
     truncate_max_length: 2048
