@@ -20,9 +20,18 @@ from .file_manager import (
     ReadJsonTool,
     WriteJsonTool,
 )
+from .filesystem_manager import (
+    filesystem_edit_file_tool,
+    filesystem_glob_tool,
+    filesystem_grep_tool,
+    filesystem_ls_tool,
+    filesystem_read_file_tool,
+    filesystem_write_file_tool,
+)
 from .format_result import MarkdownToHtmlTool
 from .llm_searcher import LLMSearchTool
 from .memory_manager import UpsertMemoryTool
+from .todo_list import write_todos
 from .web_crawler import CrawlTool
 from .wechat_crawler import CrawlWechatTool
 from .wechat_searcher import WechatSearchTool
@@ -66,3 +75,13 @@ llm_searcher_tool = LLMSearchTool()
 
 # 更新记忆工具
 upsert_memory_tool = UpsertMemoryTool()
+
+__call__ = [
+    write_todos,
+    filesystem_edit_file_tool,
+    filesystem_glob_tool,
+    filesystem_grep_tool,
+    filesystem_ls_tool,
+    filesystem_read_file_tool,
+    filesystem_write_file_tool,
+]

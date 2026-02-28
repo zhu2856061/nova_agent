@@ -76,7 +76,7 @@ class SkillsProvider:
     def __init__(self, skill_template_dir: str) -> None:
         self.skill_template_dir = skill_template_dir
         self.system_prompt_template = SKILLS_SYSTEM_PROMPT
-        self.skills = self.get_list_skills()
+        self.skills = self.get_list_skills(self.skill_template_dir)
 
     def get_list_skills(self, dir=None) -> list[SkillMetadata]:
         """List all skills from a backend source.

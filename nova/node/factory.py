@@ -6,13 +6,15 @@ import json
 import logging
 import os
 import uuid
-from typing import List, cast
+from typing import Any, Dict, Literal, cast
 
 from langchain_core.messages import (
+    AIMessage,
     AnyMessage,
     HumanMessage,
     RemoveMessage,
     SystemMessage,
+    ToolCall,
     ToolMessage,
     convert_to_messages,
 )
@@ -20,14 +22,26 @@ from langchain_core.messages.utils import count_tokens_approximately, trim_messa
 from langgraph.graph.message import (
     REMOVE_ALL_MESSAGES,
 )
+from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.runtime import Runtime
-from pydantic import BaseModel
+from langgraph.types import Command
 
 from nova import CONF
 from nova.hooks import Agent_Hooks_Instance
 from nova.llms import LLMS_Provider_Instance, Prompts_Provider_Instance
-from nova.model.agent import Context, Messages, State, Todo
-from nova.tools import read_file_tool, write_file_tool
+from nova.model.agent import Context, Messages, State
+from nova.skills import Skill_Hooks_Instance
+from nova.tools import (
+    filesystem_edit_file_tool,
+    filesystem_glob_tool,
+    filesystem_grep_tool,
+    filesystem_ls_tool,
+    filesystem_read_file_tool,
+    filesystem_write_file_tool,
+    write_file_tool,
+    write_todos,
+)
+from nova.utils.common import split_remove_message
 
 # ######################################################################################
 # 配置
@@ -41,6 +55,8 @@ _DEFAULT_FALLBACK_MESSAGE_COUNT = 15
 
 
 def create_todos_list_node():
+    """创建一个todos_list节点"""
+
     @Agent_Hooks_Instance.node_with_hooks(node_name="todos_list")
     async def todos_list(state: State, runtime: Runtime[Context]):
         _NODE_NAME = "todos_list"
@@ -55,8 +71,6 @@ def create_todos_list_node():
             else state.messages
         )
 
-        _todos = state.todos
-
         _work_dir = os.path.join(_task_dir, _thread_id)
         os.makedirs(_work_dir, exist_ok=True)
 
@@ -67,37 +81,9 @@ def create_todos_list_node():
                 "node", "todo_list"
             )
 
-            _result = await read_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
-                }
-            )
-
-            try:
-                _result = json.loads(_result)
-            except Exception:
-                _result = {}
-
-            todos = _todos or _result
-
-            latest_update = _messages[-1].content  # type: ignore
-
-            user_content = f"""
-            ### 当前状态
-            - 现有清单: {json.dumps(todos, ensure_ascii=False)}
-            - 最新业务进展: {latest_update}
-            - 业务数据上下文: {json.dumps(state.data, ensure_ascii=False)}
-
-            请根据上述信息，给出更新后的全量 todo list。
-            """
-
             return [
                 SystemMessage(content=_system_instruction),
-                HumanMessage(content=user_content),
-            ]
-
-        class TodoListOutput(BaseModel):
-            new_todos: List[Todo]
+            ] + _messages
 
         # 4 大模型
         response = await LLMS_Provider_Instance.llm_wrap_hooks(
@@ -105,28 +91,38 @@ def create_todos_list_node():
             _NODE_NAME,
             await _assemble_prompt(),
             _model_name,
-            structured_output=TodoListOutput,
+            tools=[write_todos],
         )
 
-        if isinstance(response, TodoListOutput):
-            os.makedirs(f"{_work_dir}/middle", exist_ok=True)
-            await write_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
-                    "text": json.dumps(
-                        response.model_dump()["new_todos"], ensure_ascii=False
-                    ),
-                }
+        tool_calls = response.tool_calls
+        if not tool_calls:  # 如果没有工具调用，则正常返回 - 回复结果
+            return Command(
+                update={"code": 0, "err_message": "ok", "messages": [response]}
             )
-        else:
-            return {"code": 1, "err_message": f"todos list error: {response}"}
 
-        return {"code": 0, "err_message": "ok", "todos": response}
+        async def execute_tool_safely(tool, args):
+            try:
+                return await tool.ainvoke(args)
+            except Exception as e:
+                return f"Error executing tool: {str(e)}"
+
+        tool_message = await execute_tool_safely(write_todos, tool_calls[-1])
+        os.makedirs(f"{_work_dir}/middle", exist_ok=True)
+        await write_file_tool.arun(
+            {
+                "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
+                "text": json.dumps(tool_calls[-1]["args"], ensure_ascii=False),
+            }
+        )
+
+        return tool_message
 
     return todos_list
 
 
 def create_patch_tools_node():
+    """创建补丁工具节点"""
+
     @Agent_Hooks_Instance.node_with_hooks(node_name="patch_tools")
     async def patch_tools(state: State, runtime: Runtime[Context]):
         _NODE_NAME = "patch_tools"
@@ -173,12 +169,18 @@ def create_patch_tools_node():
                         logger.info(
                             f"[{_NODE_NAME}] thread_id:{_thread_id} tool msg: {tool_msg}"
                         )
-        return {"code": 0, "err_message": "ok", "messages": patched_messages}
+        return {
+            "code": 0,
+            "err_message": "ok",
+            "messages": Messages(type="override", value=patched_messages),
+        }
 
     return patch_tools
 
 
 def create_summarization_node(trigger: int = -1):
+    """创建总结节点"""
+
     def _ensure_message_ids(messages: list[AnyMessage]) -> None:
         """Ensure all messages have unique IDs for the add_messages reducer."""
         for msg in messages:
@@ -349,19 +351,25 @@ def create_summarization_node(trigger: int = -1):
     return summarization
 
 
-def agent_with_todos_skills_tools_node():
+def create_agent_with_todos_skills_tools_node(system_prompt_template: str = ""):
     """
     创建一个agent节点, 该agent具备如下功能：
-    1. 创建且维护一个todo list
-    2. 自身携带一个技能库
-    3. 内置一些工具：ls, read_file, write_file, edit_file, glob, and grep 主要是一些文件操作工具
-    4. 内置一个摘要总结
-
+    1. 自身携带一个技能库
+    2. 内置一些工具：ls, read_file, write_file, edit_file, glob, and grep 主要是一些文件操作工具
     """
+    tools = [
+        filesystem_edit_file_tool,
+        filesystem_glob_tool,
+        filesystem_grep_tool,
+        filesystem_ls_tool,
+        filesystem_read_file_tool,
+        filesystem_write_file_tool,
+        write_todos,
+    ]
 
-    @Agent_Hooks_Instance.node_with_hooks(node_name="skill_metadata")
-    async def skill_metadata(state: State, runtime: Runtime[Context]):
-        _NODE_NAME = "skill_metadata"
+    @Agent_Hooks_Instance.node_with_hooks(node_name="agent_with_skills_tools")
+    async def agent_with_skills_tools(state: State, runtime: Runtime[Context]):
+        _NODE_NAME = "agent_with_skills_tools"
 
         # 变量
         _thread_id = runtime.context.thread_id
@@ -372,73 +380,115 @@ def agent_with_todos_skills_tools_node():
             if isinstance(state.messages, Messages)
             else state.messages
         )
-
-        _todos = state.todos
+        _messages = split_remove_message(_messages)
 
         _work_dir = os.path.join(_task_dir, _thread_id)
         os.makedirs(_work_dir, exist_ok=True)
 
         # 提示词
-        async def _assemble_prompt():
+        def _assemble_prompt():
+            _system_prompt = [system_prompt_template]
 
-            _system_instruction = Prompts_Provider_Instance.get_template(
-                "node", "todo_list"
+            ## todo list
+            _system_prompt.append(
+                Prompts_Provider_Instance.get_template("node", "todo_list")
             )
 
-            _result = await read_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
-                }
+            ## 技能
+            _system_prompt.append(Skill_Hooks_Instance.get_skill_prompt_template())
+
+            ## 文件系统操作工具
+            _system_prompt.append(
+                Prompts_Provider_Instance.prompt_apply_template(
+                    Prompts_Provider_Instance.get_template("node", "filesystem"),
+                    {"base_path": os.path.abspath(_work_dir)},
+                )
             )
 
-            try:
-                _result = json.loads(_result)
-            except Exception:
-                _result = {}
-
-            todos = _todos or _result
-
-            latest_update = _messages[-1].content  # type: ignore
-
-            user_content = f"""
-            ### 当前状态
-            - 现有清单: {json.dumps(todos, ensure_ascii=False)}
-            - 最新业务进展: {latest_update}
-            - 业务数据上下文: {json.dumps(state.data, ensure_ascii=False)}
-
-            请根据上述信息，给出更新后的全量 todo list。
-            """
+            _system_prompt = "\n\n".join(_system_prompt)
 
             return [
-                SystemMessage(content=_system_instruction),
-                HumanMessage(content=user_content),
-            ]
-
-        class TodoListOutput(BaseModel):
-            new_todos: List[Todo]
+                SystemMessage(content=_system_prompt),
+            ] + _messages
 
         # 4 大模型
         response = await LLMS_Provider_Instance.llm_wrap_hooks(
-            _thread_id,
-            _NODE_NAME,
-            await _assemble_prompt(),
-            _model_name,
-            structured_output=TodoListOutput,
+            _thread_id, _NODE_NAME, _assemble_prompt(), _model_name, tools=tools
         )
 
-        if isinstance(response, TodoListOutput):
-            os.makedirs(f"{_work_dir}/middle", exist_ok=True)
-            await write_file_tool.arun(
-                {
-                    "file_path": f"{_work_dir}/middle/{_NODE_NAME}.md",
-                    "text": json.dumps(
-                        response.model_dump()["new_todos"], ensure_ascii=False
-                    ),
-                }
+        return Command(
+            update={"messages": [response]},
+        )
+
+    return agent_with_skills_tools, tools
+
+
+def create_route_edges():
+
+    # 4. 定义路由逻辑：判断是否需要调用工具
+    def route_edges(state: State, runtime: Runtime[Context]):
+        """
+        路由规则：
+        - 如果最后一条消息包含 tool_calls → 跳转到 tools 节点
+        - 否则 → 结束流程
+        """
+        # 变量
+        _thread_id = runtime.context.thread_id
+        _messages = (
+            state.messages.value
+            if isinstance(state.messages, Messages)
+            else state.messages
+        )
+        last_message = cast(AIMessage, _messages[-1])
+        # 检查LLM是否生成了工具调用指令
+        if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+            logger.info(
+                f"[{_thread_id}]: LLM 生成了工具调用指令: {last_message.tool_calls}"
             )
-        else:
-            return {"code": 1, "err_message": f"todos list error: {response}"}
+            return "tools"
 
-        return {"code": 0, "err_message": "ok", "todos": response}
+        return "__end__"
 
-    return skill_metadata
+    return route_edges
+
+
+def create_tool_node(tools):
+    class CustomToolNode(ToolNode):
+        def _parse_input(
+            self, input: Dict[str, Any]
+        ) -> tuple[list[ToolCall], Literal["list", "dict", "tool_calls"]]:
+            """
+            重写新版 _parse_input 方法（匹配官方签名）：
+            1. 识别自定义 Messages（BaseModel），提取 value 字段
+            2. 适配不同输入类型（list/dict/BaseModel）
+            3. 沿用原生逻辑提取 ToolCall 并返回类型标记
+            """
+            messages = getattr(input, "messages", [])
+
+            # 步骤 1：统一解析输入，提取 messages 列表
+            if isinstance(messages, dict):
+                # 输入是字典（如 {"messages": [...]}）
+                input_type: Literal["list", "dict", "tool_calls"] = "dict"
+            elif isinstance(messages, Messages):
+                # 输入是 BaseModel（优先处理你的自定义 Messages）
+                messages = messages.value
+                input_type = "dict"  # BaseModel 按 dict 类型标记处理
+            elif isinstance(messages, list):
+                # 输入是原生消息列表
+                input_type = "list"
+            else:
+                messages = []
+                input_type = "list"
+
+            # 步骤 3：提取工具调用（沿用原生逻辑：反向查找最后一条含 tool_calls 的 AIMessage）
+            tool_calls: list[ToolCall] = []
+            # 反向遍历，找到最后一条包含 tool_calls 的 AI 消息
+            for msg in reversed(messages):
+                if isinstance(msg, AIMessage) and msg.tool_calls:
+                    tool_calls = msg.tool_calls  # 取最新的工具调用
+                    break  # 找到后立即退出，只处理最后一条
+
+            # 步骤 4：返回符合签名的结果（tool_calls 列表 + 输入类型标记）
+            return tool_calls, input_type
+
+    return CustomToolNode(tools)

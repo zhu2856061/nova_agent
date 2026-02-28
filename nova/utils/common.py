@@ -296,3 +296,92 @@ def extract_ai_message_content(
     except Exception as e:
         logger.error(f"提取 AIMessage 内容失败: {str(e)}", exc_info=True)
         return None, None
+
+
+def split_remove_message(messages):
+    _messages_n = []
+    for _message in messages:
+        _messages_n.append(_message)
+        if _message.type == "remove":  # type: ignore
+            _messages_n = []
+    return _messages_n
+
+
+def format_content_with_line_numbers(
+    content: str | list[str],
+    start_line: int = 1,
+) -> str:
+    """Format file content with line numbers (cat -n style).
+
+    Chunks lines longer than MAX_LINE_LENGTH with continuation markers (e.g., 5.1, 5.2).
+
+    Args:
+        content: File content as string or list of lines
+        start_line: Starting line number (default: 1)
+
+    Returns:
+        Formatted content with line numbers and continuation markers
+    """
+    MAX_LINE_LENGTH = 10000
+    LINE_NUMBER_WIDTH = 6
+
+    if isinstance(content, str):
+        lines = content.split("\n")
+        if lines and lines[-1] == "":
+            lines = lines[:-1]
+    else:
+        lines = content
+
+    result_lines = []
+    for i, line in enumerate(lines):
+        line_num = i + start_line
+
+        if len(line) <= MAX_LINE_LENGTH:
+            result_lines.append(f"{line_num:{LINE_NUMBER_WIDTH}d}\t{line}")
+        else:
+            # Split long line into chunks with continuation markers
+            num_chunks = (len(line) + MAX_LINE_LENGTH - 1) // MAX_LINE_LENGTH
+            for chunk_idx in range(num_chunks):
+                start = chunk_idx * MAX_LINE_LENGTH
+                end = min(start + MAX_LINE_LENGTH, len(line))
+                chunk = line[start:end]
+                if chunk_idx == 0:
+                    # First chunk: use normal line number
+                    result_lines.append(f"{line_num:{LINE_NUMBER_WIDTH}d}\t{chunk}")
+                else:
+                    # Continuation chunks: use decimal notation (e.g., 5.1, 5.2)
+                    continuation_marker = f"{line_num}.{chunk_idx}"
+                    result_lines.append(
+                        f"{continuation_marker:>{LINE_NUMBER_WIDTH}}\t{chunk}"
+                    )
+
+    return "\n".join(result_lines)
+
+
+def perform_string_replacement(
+    content: str,
+    old_string: str,
+    new_string: str,
+    replace_all: bool,
+) -> tuple[str, int] | str:
+    """Perform string replacement with occurrence validation.
+
+    Args:
+        content: Original content
+        old_string: String to replace
+        new_string: Replacement string
+        replace_all: Whether to replace all occurrences
+
+    Returns:
+        Tuple of (new_content, occurrences) on success, or error message string
+    """
+    occurrences = content.count(old_string)
+
+    if occurrences == 0:
+        return f"Error: String not found in file: '{old_string}'"
+
+    if occurrences > 1 and not replace_all:
+        return f"Error: String '{old_string}' appears {occurrences} times in file. Use replace_all=True to replace all instances, or provide a more specific string with surrounding context."
+
+    new_content = content.replace(old_string, new_string)
+    return new_content, occurrences

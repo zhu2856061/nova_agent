@@ -1,0 +1,100 @@
+SYSTEM:
+  IP_PORT: "0.0.0.0:2021"
+  WORKERS: 2
+  TIMEOUT: 1800
+  NAME: "Nova Service"
+  DESC: "一个通用的Agent服务"
+  VERSION: "0.0.1"
+  DEBUG: False
+
+  store_dir: "./store"
+  cache_dir: "./cache"
+
+  log_dir: "./logs"
+  task_dir: $TASK_DIR
+
+  prompt_template_dir: $PROMPT_PATH
+  skill_dir: $SKILL_PATH
+
+LLM:
+  default_model_name: "basic"
+  model_list:
+    - model_name: "basic"
+      litellm_params:
+        model: "openai/Qwen3-235B-A22B"
+        api_base: $LEXIN_LLM_URL
+        api_key: $LEXIN_LLM_API_KEY
+        cache: true
+        verbose: true
+        request_timeout: 600
+        temperature: 0.2
+        top_p: 0.2
+        max_retries: 2
+
+    - model_name: "reasoning"
+      litellm_params:
+        model: "openai/Qwen3-235B-A22B"
+        api_base: $LEXIN_LLM_URL
+        api_key: $LEXIN_LLM_API_KEY
+        cache: true
+        verbose: true
+        request_timeout: 600
+        temperature: 0.2
+        top_p: 0.2
+        top_k: 10
+        max_retries: 2
+
+    - model_name: "basic_no_thinking"
+      litellm_params:
+        model: "openai/Qwen3-235B-A22B"
+        api_base: $LEXIN_LLM_URL
+        api_key: $LEXIN_LLM_API_KEY
+        cache: true
+        verbose: true
+        request_timeout: 600
+        temperature: 0.2
+        top_p: 0.2
+        top_k: 10
+        max_retries: 2
+        chat_template_kwargs:
+          enable_thinking: false # 关闭思考模式
+
+    - model_name: "deepseek"
+      litellm_params:
+        model: "deepseek/deepseek-chat"
+        api_base: $DEEPSEEK_URL
+        api_key: $DEEPSEEK_API_KEY
+        cache: true
+        verbose: true
+        request_timeout: 600
+        temperature: 0.2
+        top_p: 0.2
+        top_k: 10
+        max_retries: 2
+
+    - model_name: "gemini"
+      litellm_params:
+        model: "openai/gemini-2.0-flash"
+        api_base: $GEMINI_URL
+        api_key: $GEMINI_API_KEY
+        cache: true
+        verbose: true
+        request_timeout: 600
+        temperature: 0.2
+        top_p: 0.2
+        top_k: 10
+        max_retries: 2
+
+EMBEDDING:
+  default_model_name: "openai/Qwen3-Embedding-8B-agent"
+  model_list:
+    - model_name: "openai/Qwen3-Embedding-8B-agent"
+      type: "openai"
+      base_url: "https://quarkml.oa.fenqile.com/v1"
+      api_key: "lx-ai-1234"
+      timeout: 2  # Embedding请求超时时间（秒）
+
+HOOK:
+  Agent_Node_Hooks:
+    truncate_max_length: 2048
+    enable_timing: true
