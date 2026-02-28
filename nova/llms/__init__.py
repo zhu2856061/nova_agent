@@ -9,6 +9,9 @@ from nova import CONF
 from .llm import LLMSProvider
 from .template import PromptsProvider
 
+LLMS_Provider_Instance = None
+Prompts_Provider_Instance = None
 # 全局变量
-LLMS_Provider_Instance = LLMSProvider(CONF.LLM)
-Prompts_Provider_Instance = PromptsProvider(CONF.SYSTEM.prompt_template_dir)
+if CONF:
+    LLMS_Provider_Instance = LLMSProvider(CONF.LLM)
+    Prompts_Provider_Instance = PromptsProvider(CONF.SYSTEM.prompt_template_dir)

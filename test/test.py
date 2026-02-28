@@ -5,7 +5,7 @@
 import sys
 
 sys.path.append("..")
-from nova.tools import filesystem_glob_tool
+from nova.tools.newsnow_crawler import DataFetcher
 
 """
 测试服务LLM是否正常
@@ -45,5 +45,5 @@ param = {
     "type": "tool_call",
 }
 
-tmp = filesystem_glob_tool.invoke(input=param)
+tmp = DataFetcher().crawl_websites(ids_list=["toutiao", "baidu"])
 print(tmp)

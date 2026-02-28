@@ -8,8 +8,10 @@ from nova import CONF
 
 from .qwen3_embeddings import Qwen3Embeddings
 
-# 全局变量
-Embeddings_Instances = Qwen3Embeddings(
-    configs=CONF.EMBEDDING.model_list,
-    default_model_name=CONF.EMBEDDING.default_model_name,
-)
+Embeddings_Instances = None
+if CONF:
+    # 全局变量
+    Embeddings_Instances = Qwen3Embeddings(
+        configs=CONF.EMBEDDING.model_list,
+        default_model_name=CONF.EMBEDDING.default_model_name,
+    )

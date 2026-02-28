@@ -8,5 +8,6 @@ from nova import CONF
 
 from .skill_hook import SkillsProvider
 
-# 全局变量
-Skill_Hooks_Instance = SkillsProvider(CONF.SYSTEM.skill_dir)
+Skill_Hooks_Instance = None
+if CONF:
+    Skill_Hooks_Instance = SkillsProvider(CONF.SYSTEM.skill_dir)

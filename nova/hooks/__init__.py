@@ -8,5 +8,7 @@ from nova import CONF
 
 from .agent_hooks import AgentHooks
 
-# 全局变量
-Agent_Hooks_Instance = AgentHooks(CONF.HOOK.Agent_Node_Hooks)
+Agent_Hooks_Instance = None
+if CONF:
+    # 全局变量
+    Agent_Hooks_Instance = AgentHooks(CONF.HOOK.Agent_Node_Hooks)

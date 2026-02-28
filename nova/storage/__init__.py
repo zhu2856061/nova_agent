@@ -9,6 +9,8 @@ from nova import CONF
 from .local_dict import InDictStore
 from .local_file import LocalFileStore
 
-# 全局变量
-LOCAL_FILE_STORE = LocalFileStore(CONF.SYSTEM.store_dir)
-LOCAL_DICT_STORE = InDictStore()
+LOCAL_FILE_STORE = None
+LOCAL_DICT_STORE = None
+if CONF:
+    LOCAL_FILE_STORE = LocalFileStore(CONF.SYSTEM.store_dir)
+    LOCAL_DICT_STORE = InDictStore()

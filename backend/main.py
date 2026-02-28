@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from nova import CONF
+from nova import CONF, Initialize
 from nova.controller.exceptions import NOVAException, create_error_response
 from nova.service.agent_service import add_register_agent_endpoints, agent_router
 from nova.service.chat_service import chat_router
@@ -32,11 +32,14 @@ add_register_agent_endpoints(
 add_register_agent_endpoints("deepagent_sample", compile_deepagent_sample_agent())
 add_register_agent_endpoints("todos_list", compile_node_agent())
 
+Initialize()
+
 
 # --- FastAPI App Initialization ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """定义 FastAPI 生命周期事件"""
+
     # 启动时加载分词器和模型
     logger.info("init eveything")
     yield

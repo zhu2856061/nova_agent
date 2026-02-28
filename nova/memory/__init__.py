@@ -9,6 +9,9 @@ from nova import CONF
 from .sqlite_cache import SQLiteCacheFixed
 from .sqlite_memory import SQLiteStoreFixed
 
-# 全局变量
-SQLITECACHE = SQLiteCacheFixed(CONF.SYSTEM.cache_dir)
-SQLITESTORE = SQLiteStoreFixed(CONF.SYSTEM.cache_dir)
+SQLITECACHE = None
+SQLITESTORE = None
+
+if CONF:
+    SQLITECACHE = SQLiteCacheFixed(CONF.SYSTEM.cache_dir)
+    SQLITESTORE = SQLiteStoreFixed(CONF.SYSTEM.cache_dir)

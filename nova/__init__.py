@@ -8,13 +8,18 @@ import os
 
 from nova.model.config import AppConfig
 
-# 第一步取env中的值，里面有一些LLM的
-AppConfig.set_dotenv()
+CONF = None
 
-# 第二步，取配置项目
-config_path = os.environ.get("CONFIG_PATH", "./config.yaml")
-print(f"Loading configuration from {config_path}")
-CONF = AppConfig.from_yaml(config_path)
 
-# 第三步，设置日志样式
-CONF.set_log()
+def Initialize():
+    global CONF
+    # 第一步取env中的值，里面有一些LLM的
+    AppConfig.set_dotenv()
+
+    # 第二步，取配置项目
+    config_path = os.environ.get("CONFIG_PATH", "./config.yaml")
+    print(f"Loading configuration from {config_path}")
+    CONF = AppConfig.from_yaml(config_path)
+
+    # 第三步，设置日志样式
+    CONF.set_log()
