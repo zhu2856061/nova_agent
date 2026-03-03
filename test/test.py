@@ -5,7 +5,6 @@
 import sys
 
 sys.path.append("..")
-from nova.tools.newsnow_crawler import DataFetcher
 
 """
 测试服务LLM是否正常
@@ -32,18 +31,15 @@ from nova.tools.newsnow_crawler import DataFetcher
 # result = send_chat_request()
 # if result:
 #     print(result)
+import sys
 
+sys.path.append("..")
 
-param = {
-    "name": "filesystem_glob_tool",
-    "args": {
-        "pattern": "*",
-        "path": "/root/workspace/gitlab/nova_agent/merlin/Nova/",
-    },
-    "tool_call_id": "call_f956806abfe345ed98ab78c0",
-    "id": "call_f956806abfe345ed98ab78c0",
-    "type": "tool_call",
-}
+from nova.sandbox.sandbox_provider import get_sandbox_provider
 
-tmp = DataFetcher().crawl_websites(ids_list=["toutiao", "baidu"])
+sandbox = get_sandbox_provider().get("local")
+
+tmp = sandbox.execute(
+    command="cd /root/workspace/gitlab/nova_agent/test && python testtxt.py"
+)
 print(tmp)

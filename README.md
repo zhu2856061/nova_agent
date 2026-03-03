@@ -74,7 +74,17 @@ sh run_langgraph_cli.sh
 
 🚀[2026-02-13] skill能力 - 复杂任务的todo list 能力 [重构 TodoListMiddleware]
 
-⏳[todo] 文件操作能力：ls, read_file, write_file, edit_file, glob, and grep [重构 FilesystemMiddleware]
+🚀[todo] 文件操作能力：ls, read_file, write_file, edit_file, glob, and grep [重构 FilesystemMiddleware]
+
+⏳[todo] 设计一个通用型agent,其核心结构为：
+    预置工具：
+        1 网络搜索
+        2 代码执行（依赖sandbox）
+        3 文件操作
+        4 询问澄清
+        5 子任务Agent创建
+
+    预置环境：sandbox
 
 
 

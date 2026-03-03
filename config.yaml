@@ -34,6 +34,7 @@ SYSTEM:
 
   prompt_template_dir: $PROMPT_PATH
   skill_dir: $SKILL_PATH
+
 # ===============================================================
 # 2. 大模型API 配置
 # default_model_name 默认模型
@@ -150,3 +151,13 @@ HOOK:
   Agent_Node_Hooks:
     truncate_max_length: 2048
     enable_timing: true
+
+# ===============================================================
+
+# 4. 沙盒配置
+# use: 沙盒使用环境
+
+
+# ===============================================================
+Sandbox:
+  use: "local"

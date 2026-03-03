@@ -76,12 +76,12 @@ llm_searcher_tool = LLMSearchTool()
 # 更新记忆工具
 upsert_memory_tool = UpsertMemoryTool()
 
-__call__ = [
-    write_todos,
-    filesystem_edit_file_tool,
-    filesystem_glob_tool,
-    filesystem_grep_tool,
-    filesystem_ls_tool,
-    filesystem_read_file_tool,
-    filesystem_write_file_tool,
+__all__ = [
+    "write_todos",
+    "filesystem_edit_file_tool",
+    "filesystem_glob_tool",
+    "filesystem_grep_tool",
+    "filesystem_ls_tool",
+    "filesystem_read_file_tool",
+    "filesystem_write_file_tool",
 ]

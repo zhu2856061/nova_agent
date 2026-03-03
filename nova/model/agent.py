@@ -88,6 +88,11 @@ class State(BaseModel):
         [], description="List of todo items for tracking task progress."
     )
 
+    sandbox_id: str = Field(
+        default="",
+        description="sandbox_id for the agent.",
+    )
+
 
 class Context(BaseModel):
     thread_id: str = Field("default", description="the thread_id")

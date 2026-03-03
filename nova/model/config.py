@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from dotenv import load_dotenv
 from pydantic import (
@@ -173,6 +173,13 @@ class HookConfig(BaseModel):
     )
 
 
+class SandboxConfig(BaseModel):
+    use: Literal["local"] = Field("local", description="使用沙箱")
+    container_path: str = Field(
+        default="", description="容器路径（如 /home/user/container）"
+    )
+
+
 # ------------------------------ 总配置模型 ------------------------------
 class AppConfig(BaseModel):
     """应用总配置模型（对应整个YAML文件）"""
@@ -181,6 +188,7 @@ class AppConfig(BaseModel):
     LLM: LLMConfig = Field(..., description="LLM模型配置")
     EMBEDDING: EmbeddingConfig = Field(..., description="嵌入模型配置")
     HOOK: HookConfig = Field(..., description="Hook配置")
+    Sandbox: SandboxConfig = Field(..., description="沙箱配置")
 
     @classmethod
     def replace_env_vars(cls, value: str) -> str:

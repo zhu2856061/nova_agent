@@ -1,9 +1,15 @@
+# -*- coding: utf-8 -*-
+# @Time   : 2026/03/02 10:24
+# @Author : zip
+# @Moto   : Knowledge comes from decomposition
+from __future__ import annotations
+
+from typing import Any, Dict, Optional
+
 """
 自定义异常类定义
 定义应用中的各种异常类型，包含具体的错误代码和详细信息
 """
-
-from typing import Any, Dict, Optional
 
 
 class NOVAException(Exception):
