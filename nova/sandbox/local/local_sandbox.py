@@ -4,25 +4,34 @@
 # @Moto   : Knowledge comes from decomposition
 from __future__ import annotations
 
+import asyncio
+import logging
 import os
 import re
 import subprocess
 from pathlib import Path
-from typing import Literal
+from typing import List, Literal
 
+from nova.model.agent import Todo
 from nova.sandbox.local.utils import (
     build_grep_results_dict,
+    clean_markdown_links,
     format_content_with_line_numbers,
     format_grep_results,
     get_shell,
     list_dir,
     perform_string_replacement,
     python_search,
+    resolve_path,
     ripgrep_search,
     truncate_if_too_long,
     validate_path,
 )
 from nova.sandbox.sandbox import Sandbox
+from nova.tools.baidu_serper import SerpBaiduTool
+from nova.tools.web_crawler import CrawlTool
+
+logger = logging.getLogger(__name__)
 
 
 class LocalSandbox(Sandbox):
@@ -37,25 +46,6 @@ class LocalSandbox(Sandbox):
         """
         super().__init__(id)
         self.path_mappings = path_mappings or {}
-
-    def _resolve_path(self, path: str) -> Path:
-        """
-        Resolve container path to actual local path using mappings.
-
-        Args:
-            path: Path that might be a container path
-
-        Returns:
-            Resolved local path
-        """
-        cwd = Path.cwd()
-        validated_path = Path(path)
-
-        if not validated_path.is_absolute():
-            validated_path = (cwd / validated_path).resolve()
-
-        # No mapping found, return original path
-        return validated_path
 
     def _reverse_resolve_path(self, path: str) -> str:
         """
@@ -154,7 +144,7 @@ class LocalSandbox(Sandbox):
 
         def replace_match(match: re.Match) -> str:
             matched_path = match.group(0)
-            return str(self._resolve_path(matched_path))
+            return str(resolve_path(matched_path))
 
         return pattern.sub(replace_match, command)
 
@@ -163,7 +153,7 @@ class LocalSandbox(Sandbox):
         validated_path = validate_path(file_path)
 
         # 确定路径
-        validated_path = self._resolve_path(validated_path)
+        validated_path = resolve_path(validated_path)
 
         if not validated_path.exists() or not validated_path.is_file():
             return f"Error: File '{file_path}' not found"
@@ -196,7 +186,7 @@ class LocalSandbox(Sandbox):
         validated_path = validate_path(file_path)
 
         # 确定路径
-        validated_path = self._resolve_path(validated_path)
+        validated_path = resolve_path(validated_path)
 
         if validated_path.exists():
             return f"Cannot write to {file_path} because it already exists. Read and then make an edit, or write to a new path."
@@ -234,7 +224,7 @@ class LocalSandbox(Sandbox):
         validated_path = validate_path(file_path)
 
         # 确定路径
-        validated_path = self._resolve_path(validated_path)
+        validated_path = resolve_path(validated_path)
 
         if not validated_path.exists() or not validated_path.is_file():
             return f"Error: File '{file_path}' not found"
@@ -272,7 +262,7 @@ class LocalSandbox(Sandbox):
         validated_path = validate_path(path)
 
         # 确定路径
-        validated_path = self._resolve_path(validated_path)
+        validated_path = resolve_path(validated_path)
 
         if not validated_path.exists() or not validated_path.is_dir():
             return f"Error: dir '{path}' not found"
@@ -289,7 +279,7 @@ class LocalSandbox(Sandbox):
         except (OSError, PermissionError) as e:
             return f"Error ls dir '{path}': {e}"
 
-    def glob(self, pattern: str, path: str = "/"):
+    def glob(self, pattern: str, path: str = "/") -> str:
         if pattern.startswith("/"):
             pattern = pattern.lstrip("/")
 
@@ -297,7 +287,7 @@ class LocalSandbox(Sandbox):
         validated_path = validate_path(path)
 
         # 确定路径
-        validated_path = self._resolve_path(validated_path)
+        validated_path = resolve_path(validated_path)
 
         if not validated_path.exists() or not validated_path.is_dir():
             return f"Error: File '{path}' not found"
@@ -330,12 +320,12 @@ class LocalSandbox(Sandbox):
         output_mode: Literal[
             "files_with_matches", "content", "count"
         ] = "files_with_matches",
-    ):
+    ) -> str:
         # 判断路径
         validated_path = validate_path(path or ".")
 
         # 确定路径
-        validated_path = self._resolve_path(validated_path)
+        validated_path = resolve_path(validated_path)
 
         try:
             re.compile(pattern)
@@ -366,7 +356,7 @@ class LocalSandbox(Sandbox):
 
         return str(formatted)
 
-    def execute(self, command: str):
+    def execute(self, command: str) -> str:
         # Resolve container paths in command before execution
         resolved_command = self._resolve_paths_in_command(command)
 
@@ -387,3 +377,80 @@ class LocalSandbox(Sandbox):
         final_output = output if output else "(no output)"
         # Reverse resolve local paths back to container paths in output
         return self._reverse_resolve_paths_in_output(final_output)
+
+    async def web_search(self, queries: List[str]) -> str:
+        logger.info(f"开始网络检索：检索词: {queries}")
+
+        serp_tool = SerpBaiduTool()
+        crawl_tool = CrawlTool()
+        # 获取搜索结果
+        search_tasks = []
+        for query in queries:
+            search_tasks.append(serp_tool.arun({"query": query, "max_results": 3}))
+        search_results = await asyncio.gather(*search_tasks)
+
+        unique_results = {}
+        for response in search_results:
+            for result in response["result"]:
+                url = result["link"]
+                if url not in unique_results:
+                    unique_results[url] = {**result, "query": response["query"]}
+
+        logger.info(f"Search results size: {len(unique_results)}")
+
+        # 获取网站内容
+        crawl_tasks = [
+            crawl_tool.arun({"url": url}) for url, result in unique_results.items()
+        ]
+        crawl_results = await asyncio.gather(*crawl_tasks)
+
+        for response in crawl_results:
+            url = response["url"]
+            result = response["result"]
+            if url in unique_results:
+                text = " ".join(
+                    [
+                        clean_markdown_links(tx["text"])
+                        for tx in result["content"]
+                        if tx["type"] == "text"
+                    ]
+                )
+
+                unique_results[url]["raw_content"] = text
+
+        # 汇总信息
+        all_info = []
+        for result in unique_results.values():
+            all_info.append(
+                f"**query**: {result['query']}\n\n**title**: {result['title']}\n\n**abstract**: {result['abstract']}\n\n**content**: {result['raw_content']}\n"
+            )
+
+        logger.info(f"网络检索完成，检索结果数量: {len(all_info)}")
+        return "\n\n---\n\n".join(all_info)
+
+    def ask_clarification(
+        self,
+        question: str,
+        clarification_type: Literal[
+            "missing_info",
+            "ambiguous_requirement",
+            "approach_choice",
+            "risk_confirmation",
+            "suggestion",
+        ],
+        context: str | None = None,
+        options: list[str] | None = None,
+    ) -> str:
+        return f"Clarification request processed by middleware, question: {question}, clarification_type: {clarification_type}, reason: {context}"
+
+    def create_subtask(
+        self,
+        description: str,
+        prompt: str,
+        subagent_type: Literal["general-purpose"] | Literal["bash"],
+        max_turns: int | None = None,
+    ) -> str:
+        return ""
+
+    def todo_list(self, todos: list[Todo]) -> str:
+        return f"Updated todo list to {todos}"

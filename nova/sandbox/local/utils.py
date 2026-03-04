@@ -438,3 +438,22 @@ def get_shell() -> str:
         "No suitable shell executable found. Tried /bin/zsh, /bin/bash, "
         "/bin/sh, and `sh` on PATH."
     )
+
+
+def clean_markdown_links(text):
+    # 移除各种类型的链接
+    patterns = [
+        # Markdown链接 [text](url)
+        (r"\[([^\]]+)\]\([^)]+\)", r"\1"),
+        # HTML链接
+        (r'<a\s+[^>]*href="[^"]*"[^>]*>(.*?)</a>', r"\1"),
+        # 纯URL链接
+        (r"https?://\S+", ""),
+        # 带括号的URL
+        (r"\(https?://[^)]+\)", ""),
+    ]
+
+    for pattern, replacement in patterns:
+        text = re.sub(pattern, replacement, text)  # type: ignore
+
+    return text.strip()  # type: ignore

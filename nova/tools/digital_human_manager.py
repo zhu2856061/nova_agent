@@ -4,7 +4,7 @@
 # @Moto   : Knowledge comes from decomposition
 from __future__ import annotations
 
-from typing import Annotated, Literal
+from typing import Annotated, List, Literal
 
 from langchain.tools import InjectedToolCallId, ToolRuntime, tool
 
@@ -13,11 +13,9 @@ from nova.controller.sandbox_exceptions import (
     SandboxNotFoundError,
     SandboxRuntimeError,
 )
-from nova.model.agent import Context, State
+from nova.model.agent import Context, State, Todo
 from nova.sandbox.sandbox import Sandbox
 from nova.sandbox.sandbox_provider import get_sandbox_provider
-
-# builtin tools - web search
 
 
 # ======================================================================================
@@ -80,6 +78,7 @@ def ensure_sandbox_initialized(
     return sandbox
 
 
+# builtin tools
 # ======================================================================================
 # 网络搜索
 WEB_SEARCH_TOOL_DESCRIPTION = """A search engine optimized for comprehensive, accurate, and trusted results.
@@ -91,60 +90,32 @@ Examples:
 """
 
 
-@tool(description=WEB_SEARCH_TOOL_DESCRIPTION)
-def web_search_tool(tool_call_id: Annotated[str, InjectedToolCallId], query: str):
-    def _serpbaidu():
-        pass
+@tool("web_search", description=WEB_SEARCH_TOOL_DESCRIPTION)
+def sandbox_web_search_tool(
+    tool_call_id: Annotated[str, InjectedToolCallId],
+    runtime: ToolRuntime[Context, State],
+    query: List[str],
+):
+    try:
+        sandbox = ensure_sandbox_initialized(runtime)
+        result = sandbox.web_search(query)
+        return result
 
-    def _crawl():
-        pass
-
-    def _run():
-        pass
-
-
-# ======================================================================================
-
-
-# ======================================================================================
-# 代码执行 - 依赖于sandbox，使用aiosandbox: https://github.com/agent-infra/sandbox
-CODE_EXECUTE_TOOL_DESCRIPTION = """
-"""
-
-
-@tool(description=WEB_SEARCH_TOOL_DESCRIPTION)
-def code_execute_tool(tool_call_id: Annotated[str, InjectedToolCallId], code: str):
-    # TODO: 依赖于sandbox, 这里使用aiosandbox: https://github.com/agent-infra/sandbox
-    def _run_in_sandbox():
-        pass
+    except SandboxError as e:
+        return f"Error: {e}"
+    except Exception as e:
+        return f"Error: Unexpected error listing directory: {type(e).__name__}: {e}"
 
 
 # ======================================================================================
-
-
-# ======================================================================================
-# 文件操作 - 依赖于sandbox，使用aiosandbox: https://github.com/agent-infra/sandbox
-FILE_OPERATION_DESCRIPTION = """
-"""
-
-
-@tool(description=FILE_OPERATION_DESCRIPTION)
-def file_operation(tool_call_id: Annotated[str, InjectedToolCallId], path: str):
-    # TODO: 依赖于sandbox, 这里使用aiosandbox: https://github.com/agent-infra/sandbox
-    def _run_in_sandbox():
-        pass
-
-
-# ======================================================================================
-
 
 # ======================================================================================
 # 子任务创建
-SUBTASK_CREATION_DESCRIPTION = """\n"""
+SUBAGENT_CREATION_DESCRIPTION = """\n"""
 
 
-@tool(description=SUBTASK_CREATION_DESCRIPTION)
-def create_subtask(
+@tool("create_subagent", description=SUBAGENT_CREATION_DESCRIPTION)
+def create_subagent_tool(
     tool_call_id: Annotated[str, InjectedToolCallId],
     runtime: ToolRuntime[Context, State],
     description: str,
@@ -193,9 +164,10 @@ ASK_CLARIFICATION_DESCRIPTION = """Ask the user for clarification when you need 
 """
 
 
-@tool(description=ASK_CLARIFICATION_DESCRIPTION)
-def ask_clarification(
+@tool("ask_clarification", description=ASK_CLARIFICATION_DESCRIPTION)
+def ask_clarification_tool(
     tool_call_id: Annotated[str, InjectedToolCallId],
+    runtime: ToolRuntime[Context, State],
     question: str,
     clarification_type: Literal[
         "missing_info",
@@ -207,7 +179,17 @@ def ask_clarification(
     context: str | None = None,
     options: list[str] | None = None,
 ) -> str:
-    return "Clarification request processed by middleware"
+    try:
+        sandbox = ensure_sandbox_initialized(runtime)
+        result = sandbox.ask_clarification(
+            question, clarification_type, context, options
+        )
+        return result
+
+    except SandboxError as e:
+        return f"Error: {e}"
+    except Exception as e:
+        return f"Error: Unexpected error: {type(e).__name__}: {e}"
 
 
 # ======================================================================================
@@ -247,13 +229,12 @@ def sandbox_read_file_tool(
     try:
         sandbox = ensure_sandbox_initialized(runtime)
         result = sandbox.read_file(file_path, offset, limit)
-
         return result
 
     except SandboxError as e:
         return f"Error: {e}"
     except Exception as e:
-        return f"Error: Unexpected error listing directory: {type(e).__name__}: {e}"
+        return f"Error: Unexpected error: {type(e).__name__}: {e}"
 
 
 # ======================================================================================
@@ -281,13 +262,12 @@ def sandbox_write_file_tool(
     try:
         sandbox = ensure_sandbox_initialized(runtime)
         result = sandbox.write_file(file_path, content, append)
-
         return result
 
     except SandboxError as e:
         return f"Error: {e}"
     except Exception as e:
-        return f"Error: Unexpected error listing directory: {type(e).__name__}: {e}"
+        return f"Error: Unexpected error: {type(e).__name__}: {e}"
 
 
 # ======================================================================================
@@ -318,7 +298,6 @@ def sandbox_edit_file_tool(
     try:
         sandbox = ensure_sandbox_initialized(runtime)
         result = sandbox.edit_file(file_path, old_string, new_string, replace_all)
-
         return result
 
     except SandboxError as e:
@@ -356,7 +335,7 @@ def sandbox_ls_tool(
     except SandboxError as e:
         return f"Error: {e}"
     except Exception as e:
-        return f"Error: Unexpected error listing directory: {type(e).__name__}: {e}"
+        return f"Error: Unexpected error: {type(e).__name__}: {e}"
 
 
 # ======================================================================================
@@ -506,3 +485,101 @@ def sandbox_execute_tool(
         return f"Error: {e}"
     except Exception as e:
         return f"Error: Unexpected error: {type(e).__name__}: {e}"
+
+
+WRITE_TODOS_TOOL_DESCRIPTION = """Use this tool to create and manage a structured task list for your current work session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.
+
+Only use this tool if you think it will be helpful in staying organized. If the user's request is trivial and takes less than 3 steps, it is better to NOT use this tool and just do the task directly.
+
+## When to Use This Tool
+Use this tool in these scenarios:
+
+1. Complex multi-step tasks - When a task requires 3 or more distinct steps or actions
+2. Non-trivial and complex tasks - Tasks that require careful planning or multiple operations
+3. User explicitly requests todo list - When the user directly asks you to use the todo list
+4. User provides multiple tasks - When users provide a list of things to be done (numbered or comma-separated)
+5. The plan may need future revisions or updates based on results from the first few steps
+
+## How to Use This Tool
+1. When you start working on a task - Mark it as in_progress BEFORE beginning work.
+2. After completing a task - Mark it as completed and add any new follow-up tasks discovered during implementation.
+3. You can also update future tasks, such as deleting them if they are no longer necessary, or adding new tasks that are necessary. Don't change previously completed tasks.
+4. You can make several updates to the todo list at once. For example, when you complete a task, you can mark the next task you need to start as in_progress.
+
+## When NOT to Use This Tool
+It is important to skip using this tool when:
+1. There is only a single, straightforward task
+2. The task is trivial and tracking it provides no benefit
+3. The task can be completed in less than 3 trivial steps
+4. The task is purely conversational or informational
+
+## Task States and Management
+
+1. **Task States**: Use these states to track progress:
+   - pending: Task not yet started
+   - in_progress: Currently working on (you can have multiple tasks in_progress at a time if they are not related to each other and can be run in parallel)
+   - completed: Task finished successfully
+
+2. **Task Management**:
+   - Update task status in real-time as you work
+   - Mark tasks complete IMMEDIATELY after finishing (don't batch completions)
+   - Complete current tasks before starting new ones
+   - Remove tasks that are no longer relevant from the list entirely
+   - IMPORTANT: When you write this todo list, you should mark your first task (or tasks) as in_progress immediately!.
+   - IMPORTANT: Unless all tasks are completed, you should always have at least one task in_progress to show the user that you are working on something.
+
+3. **Task Completion Requirements**:
+   - ONLY mark a task as completed when you have FULLY accomplished it
+   - If you encounter errors, blockers, or cannot finish, keep the task as in_progress
+   - When blocked, create a new task describing what needs to be resolved
+   - Never mark a task as completed if:
+     - There are unresolved issues or errors
+     - Work is partial or incomplete
+     - You encountered blockers that prevent completion
+     - You couldn't find necessary resources or dependencies
+     - Quality standards haven't been met
+
+4. **Task Breakdown**:
+   - Create specific, actionable items
+   - Break complex tasks into smaller, manageable steps
+   - Use clear, descriptive task names
+
+Being proactive with task management demonstrates attentiveness and ensures you complete all requirements successfully
+Remember: If you only need to make a few tool calls to complete a task, and it is clear what you need to do, it is better to just do the task directly and NOT call this tool at all."""
+
+
+@tool(description=WRITE_TODOS_TOOL_DESCRIPTION)
+def write_todos_tool(
+    tool_call_id: Annotated[str, InjectedToolCallId],
+    runtime: ToolRuntime[Context, State],
+    todos: list[Todo],
+) -> str:
+    try:
+        sandbox = ensure_sandbox_initialized(runtime)
+        result = sandbox.todo_list(todos)
+        return result
+
+    except SandboxError as e:
+        return f"Error: {e}"
+    except Exception as e:
+        return f"Error: Unexpected error: {type(e).__name__}: {e}"
+
+
+# ===========================
+# 数字人核心工具
+
+Digital_Human_Manager = {
+    "web_search": sandbox_web_search_tool,
+    # "create_subagent": create_subagent_tool,
+    "ask_clarification": ask_clarification_tool,
+    "read_file": sandbox_read_file_tool,
+    "write_file": sandbox_write_file_tool,
+    "edit_file": sandbox_edit_file_tool,
+    "ls": sandbox_ls_tool,
+    "glob": sandbox_glob_tool,
+    "grep": sandbox_grep_tool,
+    "execute": sandbox_execute_tool,
+    "write_todos": write_todos_tool,
+}
+
+# ===========================

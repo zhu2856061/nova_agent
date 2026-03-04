@@ -5,7 +5,9 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import Literal
+from typing import List, Literal
+
+from nova.model.agent import Todo
 
 
 class Sandbox(ABC):
@@ -62,27 +64,12 @@ class Sandbox(ABC):
 
     @abstractmethod
     def ls(self, path: str) -> str:
-        """List the contents of a directory.
-
-        Args:
-            path: The absolute path of the directory to list.
-
-        Returns:
-            The contents of the directory.
-        """
+        """列出指定目录下的文件、子目录名称，以及它们的属性（如权限、大小、修改时间等）"""
         pass
 
     @abstractmethod
     def glob(self, pattern: str, path: str = "/") -> str:
-        """List the contents of a directory.
-
-        Args:
-            path: The absolute path of the directory to list.
-            max_depth: The maximum depth to traverse. Default is 2.
-
-        Returns:
-            The contents of the directory.
-        """
+        """用于文件路径匹配 / 通配的核心工具，它能按指定的模式快速查找符合条件的文件 / 目录"""
         pass
 
     @abstractmethod
@@ -95,14 +82,8 @@ class Sandbox(ABC):
             "files_with_matches", "content", "count"
         ] = "files_with_matches",
     ) -> str:
-        """List the contents of a directory.
-
-        Args:
-            path: The absolute path of the directory to list.
-            max_depth: The maximum depth to traverse. Default is 2.
-
-        Returns:
-            The contents of the directory.
+        """在文件或输入流中搜索匹配指定字符串 / 正则表达式的行，并输出这些行
+        命令行里的 “查找 / 搜索” 工具，支持精准匹配、模糊匹配、正则匹配等多种方式
         """
         pass
 
@@ -117,6 +98,41 @@ class Sandbox(ABC):
             The standard or error output of the command.
         """
         pass
+
+    @abstractmethod
+    def web_search(self, queries: List[str]) -> str:
+        """网络搜索功能"""
+        pass
+
+    @abstractmethod
+    def ask_clarification(
+        self,
+        question: str,
+        clarification_type: Literal[
+            "missing_info",
+            "ambiguous_requirement",
+            "approach_choice",
+            "risk_confirmation",
+            "suggestion",
+        ],
+        context: str | None = None,
+        options: list[str] | None = None,
+    ) -> str:
+        return f"Clarification request processed by middleware, question: {question}, clarification_type: {clarification_type}, reason: {context}"
+
+    @abstractmethod
+    def create_subtask(
+        self,
+        description: str,
+        prompt: str,
+        subagent_type: Literal["general-purpose", "bash"],
+        max_turns: int | None = None,
+    ):
+        pass
+
+    @abstractmethod
+    def todo_list(self, todos: list[Todo]) -> str:
+        return f"Updated todo list to {todos}"
 
 
 class SandboxProvider(ABC):
