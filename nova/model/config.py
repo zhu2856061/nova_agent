@@ -293,3 +293,69 @@ class AppConfig(BaseModel):
 
     def set_log(self):
         set_log(self.SYSTEM.log_dir)
+
+    @classmethod
+    def get_default(cls) -> "AppConfig":
+        """
+        直接返回一套代码内置的默认 AppConfig，不从任何文件读取
+        """
+        return cls(
+            SYSTEM=SystemConfig(
+                IP_PORT="0.0.0.0:8000",
+                WORKERS=1,
+                TIMEOUT=60,
+                NAME="default-agent-service",
+                DESC="Default agent service",
+                VERSION="0.1.0",
+                DEBUG=False,
+                store_dir="./store",
+                cache_dir="./cache",
+                log_dir="./logs",
+                task_dir="./tasks",
+                prompt_template_dir="./prompts",
+                skill_dir="./skills",
+            ),
+            LLM=LLMConfig(
+                default_model_name="default",
+                model_list=[
+                    LiteLLMModelConfig(
+                        model_name="default",
+                        litellm_params=LiteLLMParams(
+                            model="default-model",
+                            api_base="http://localhost:11434/v1",
+                            api_key="no-key",
+                            cache=False,
+                            verbose=True,
+                            request_timeout=600,
+                            temperature=0.2,
+                            top_p=0.2,
+                            top_k=20,
+                            max_retries=2,
+                            chat_template_kwargs=None,
+                        ),
+                    )
+                ],
+            ),
+            EMBEDDING=EmbeddingConfig(
+                default_model_name="default-embedding",
+                model_list=[
+                    EmbeddingModelConfig(
+                        model_name="default-embedding",
+                        type="openai",
+                        base_url="http://localhost:11434/v1",
+                        api_key="no-key",
+                        timeout=3,
+                    )
+                ],
+            ),
+            HOOK=HookConfig(
+                Agent_Node_Hooks=AgentNodeHooksConfig(
+                    truncate_max_length=1024,
+                    enable_timing=True,
+                )
+            ),
+            Sandbox=SandboxConfig(
+                use="local",
+                container_path="",
+            ),
+        )

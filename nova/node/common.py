@@ -2,6 +2,8 @@
 # @Time   : 2026/02/13 10:24
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
+from __future__ import annotations
+
 import logging
 import os
 from typing import Any, Dict, Literal, cast
@@ -29,23 +31,15 @@ logger = logging.getLogger(__name__)
 # 全局变量
 
 
-class BasicNode:
-    """节点基类, 分三个过程
-    1 进入LLM Model 之前，主要是准备好： 提示词
-    2 LLM Model 过程
-    3 LLM Model 之后，主要是处理： 输出结果
-    """
+# 创建一个最基础的节点
+def create_basic_node(prompt_dir, node_name, tools=None, structured_output=None):
 
-    def __init__(self):
-        pass
-
-    async def after_model_hooks(self, response: AIMessage):
+    async def _after_model_hooks(response: AIMessage):
         return Command(
             update={"messages": [response]},
         )
 
-    async def before_model_hooks(
-        self,
+    async def _before_model_hooks(
         _messages,
         prompt_dir,
         prompt_name,
@@ -60,49 +54,49 @@ class BasicNode:
             SystemMessage(content=_system_instruction),
         ] + _messages
 
-    def create_node(self, prompt_dir, node_name, tools=None, structured_output=None):
-        @Agent_Hooks_Instance.node_with_hooks(node_name=node_name)
-        async def _node(state: State, runtime: Runtime[Context]):
-            # 获取运行时变量
-            _thread_id = runtime.context.thread_id
-            _task_dir = runtime.context.task_dir or CONF.SYSTEM.task_dir
-            _model_name = runtime.context.model
-            _config = runtime.context.config
+    @Agent_Hooks_Instance.node_with_hooks(node_name=node_name)
+    async def _node(state: State, runtime: Runtime[Context]):
+        # 获取运行时变量
+        _thread_id = runtime.context.thread_id
+        _task_dir = runtime.context.task_dir or CONF.SYSTEM.task_dir
+        _model_name = runtime.context.model
+        _config = runtime.context.config
 
-            # 获取状态变量
-            _user_guidance = state.user_guidance
-            _messages = (
-                state.messages.value
-                if isinstance(state.messages, Messages)
-                else state.messages
-            )
+        # 获取状态变量
+        _user_guidance = state.user_guidance
+        _messages = (
+            state.messages.value
+            if isinstance(state.messages, Messages)
+            else state.messages
+        )
 
-            # 创建工作目录
-            _work_dir = os.path.join(_task_dir, _thread_id)
-            os.makedirs(_work_dir, exist_ok=True)
+        # 创建工作目录
+        _work_dir = os.path.join(_task_dir, _thread_id)
+        os.makedirs(_work_dir, exist_ok=True)
 
-            # before model hooks
-            response = await self.before_model_hooks(
-                _messages, prompt_dir, node_name, runtime, _user_guidance
-            )
+        # before model hooks
+        response = await _before_model_hooks(
+            _messages, prompt_dir, node_name, runtime, _user_guidance
+        )
 
-            # model process
-            response = await LLMS_Provider_Instance.llm_wrap_hooks(
-                _thread_id,
-                node_name,
-                response,
-                _model_name,
-                tools=tools,
-                structured_output=structured_output,
-                **_config,
-            )
+        # model process
+        response = await LLMS_Provider_Instance.llm_wrap_hooks(
+            _thread_id,
+            node_name,
+            response,
+            _model_name,
+            tools=tools,
+            structured_output=structured_output,
+            **_config,
+        )
 
-            # after model hooks
-            return await self.after_model_hooks(response)
+        # after model hooks
+        return await _after_model_hooks(response)
 
-        return _node
+    return _node
 
 
+# 创建路由->工具的表，条件边
 def create_route_tools_edges():
     """创建路由逻辑, 主要是路由到工具还是结束"""
 
@@ -133,7 +127,8 @@ def create_route_tools_edges():
     return route_edges
 
 
-def create_tool_node(self, tools):
+# 创建工具节点
+def create_tool_node(tools):
     """创建工具节点, 继承自ToolNode,
     因为Messages自定义了，原始的ToolNode无法使用，所以继承重写
     """

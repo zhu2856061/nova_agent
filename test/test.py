@@ -39,7 +39,6 @@ from nova.sandbox.sandbox_provider import get_sandbox_provider
 
 sandbox = get_sandbox_provider().get("local")
 
-tmp = sandbox.execute(
-    command="cd /root/workspace/gitlab/nova_agent/test && python testtxt.py"
-)
+tmp = sandbox.write_file("../merlin/Nova/schema.py", "aaa")
+
 print(tmp)

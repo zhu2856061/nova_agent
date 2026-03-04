@@ -11,7 +11,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from nova import CONF, Initialize
+from nova import CONF
 from nova.controller.exceptions import NOVAException, create_error_response
 from nova.service.agent_service import add_register_agent_endpoints, agent_router
 from nova.service.chat_service import chat_router
@@ -19,7 +19,7 @@ from nova.service.chat_service import chat_router
 from .agent.analyze_intent_health import compile_analyze_intent_health_agent
 from .agent.chat_sample import compile_chat_sample_agent
 from .agent.deepagent_sample import compile_deepagent_sample_agent
-from .agent.node_sample import compile_node_agent
+from .agent.super_nova import compile_super_nova_agent
 
 logger = logging.getLogger(__name__)
 
@@ -30,9 +30,7 @@ add_register_agent_endpoints(
     "analyze_intent_health", compile_analyze_intent_health_agent()
 )
 add_register_agent_endpoints("deepagent_sample", compile_deepagent_sample_agent())
-add_register_agent_endpoints("todos_list", compile_node_agent())
-
-Initialize()
+add_register_agent_endpoints("super_nova", compile_super_nova_agent())
 
 
 # --- FastAPI App Initialization ---

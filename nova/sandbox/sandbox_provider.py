@@ -20,8 +20,7 @@ def get_sandbox_provider() -> SandboxProvider:
     Returns:
         A sandbox provider instance.
     """
-    # use = CONF.Sandbox.use
-    use = "local"
+    use = CONF.Sandbox.use
     global _default_sandbox_provider
     if _default_sandbox_provider is None:
         if use == "local":

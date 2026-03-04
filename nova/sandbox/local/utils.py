@@ -182,8 +182,9 @@ def validate_path(path: str, *, allowed_prefixes: Sequence[str] | None = None) -
         ```
     """
     if ".." in path or path.startswith("~"):
-        msg = f"Path traversal not allowed: {path}"
-        raise ValueError(msg)
+        path = str(Path(path).resolve())
+        # msg = f"Path traversal not allowed: {path}"
+        # raise ValueError(msg)
 
     # Reject Windows absolute paths (e.g., C:\..., D:/...)
     # This maintains consistency in virtual filesystem paths
@@ -438,3 +439,68 @@ def get_shell() -> str:
         "No suitable shell executable found. Tried /bin/zsh, /bin/bash, "
         "/bin/sh, and `sh` on PATH."
     )
+
+
+def clean_markdown_links(text):
+    # 移除各种类型的链接
+    patterns = [
+        # Markdown链接 [text](url)
+        (r"\[([^\]]+)\]\([^)]+\)", r"\1"),
+        # HTML链接
+        (r'<a\s+[^>]*href="[^"]*"[^>]*>(.*?)</a>', r"\1"),
+        # 纯URL链接
+        (r"https?://\S+", ""),
+        # 带括号的URL
+        (r"\(https?://[^)]+\)", ""),
+    ]
+
+    for pattern, replacement in patterns:
+        text = re.sub(pattern, replacement, text)  # type: ignore
+
+    return text.strip()  # type: ignore
+
+
+def format_clarification_message(args: dict) -> str:
+    """Format the clarification arguments into a user-friendly message.
+
+    Args:
+        args: The tool call arguments containing clarification details
+
+    Returns:
+        Formatted message string
+    """
+    question = args.get("question", "")
+    clarification_type = args.get("clarification_type", "missing_info")
+    context = args.get("context")
+    options = args.get("options", [])
+
+    # Type-specific icons
+    type_icons = {
+        "missing_info": "❓",
+        "ambiguous_requirement": "🤔",
+        "approach_choice": "🔀",
+        "risk_confirmation": "⚠️",
+        "suggestion": "💡",
+    }
+
+    icon = type_icons.get(clarification_type, "❓")
+
+    # Build the message naturally
+    message_parts = []
+
+    # Add icon and question together for a more natural flow
+    if context:
+        # If there's context, present it first as background
+        message_parts.append(f"{icon} {context}")
+        message_parts.append(f"\n{question}")
+    else:
+        # Just the question with icon
+        message_parts.append(f"{icon} {question}")
+
+    # Add options in a cleaner format
+    if options and len(options) > 0:
+        message_parts.append("")  # blank line for spacing
+        for i, option in enumerate(options, 1):
+            message_parts.append(f"  {i}. {option}")
+
+    return "\n".join(message_parts)

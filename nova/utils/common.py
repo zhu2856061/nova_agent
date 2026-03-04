@@ -4,6 +4,7 @@
 # @Moto   : Knowledge comes from decomposition
 from __future__ import annotations
 
+import inspect
 import logging
 import operator
 import time
@@ -221,7 +222,37 @@ def convert_base_message(
         chat_role = common_kwargs["additional_kwargs"].pop("role", base_msg.type)
         common_kwargs["role"] = chat_role
 
-    # 5. 实例化目标类型并返回（过滤目标类型不支持的参数）
+    elif target_type == ToolMessage:
+        # 关键修复：处理 ToolMessage 的必填参数 tool_call_id
+        # 优先从 additional_kwargs 提取，再尝试从 base_msg 直接获取
+
+        tool_call_id = common_kwargs["additional_kwargs"].pop("tool_call_id", None)
+        if tool_call_id is None:
+            tool_call_id = getattr(base_msg, "tool_call_id", None)
+
+        if not tool_call_id:
+            logger.error(f"❌{common_kwargs}")
+            raise ValueError(
+                "转换为 ToolMessage 时，必须提供 tool_call_id 参数（可通过 BaseMessage 的 additional_kwargs 或直接属性传入）"
+            )
+        common_kwargs["tool_call_id"] = tool_call_id
+
+        # 可选：处理 ToolMessage 的其他可选参数（如 name）
+        if "name" in common_kwargs["additional_kwargs"]:
+            common_kwargs["name"] = common_kwargs["additional_kwargs"].pop("name")
+
+    # 5. 过滤掉目标类型不支持的参数（关键：避免传入多余参数导致报错）
+    # 获取目标类型的所有必填+可选参数名
+
+    target_signature = inspect.signature(target_type.__init__)
+    valid_params = list(target_signature.parameters.keys())
+    # 过滤 common_kwargs，只保留目标类型支持的参数
+    filtered_kwargs = {}
+    for key, value in common_kwargs.items():
+        if key in valid_params:
+            filtered_kwargs[key] = value
+
+    # 6. 实例化目标类型并返回（过滤目标类型不支持的参数）
     try:
         # 动态创建目标实例，自动过滤不支持的参数（如 BaseMessage 的 type 字段）
         return target_type(**common_kwargs)  # type: ignore

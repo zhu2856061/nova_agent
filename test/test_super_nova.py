@@ -11,29 +11,14 @@ import httpx
 async def agent_client(chat_router):
     request_data = {
         "trace_id": "123",
-        "context": {
-            "thread_id": "Nova",
-            "model": "basic",
-        },
+        "context": {"thread_id": "Nova", "model": "basic", "recursion_limit": 100},
         "state": {
             "messages": {
                 "type": "add",
                 "value": [
                     {
                         "role": "user",
-                        "content": "帮忙开发客服系统, 千珏 职业赛场使用率 数据分析",  #
-                    },
-                    {
-                        "role": "user",
-                        "content": "帮忙开发客服系统, 千珏 职业赛场使用率 数据分析",  #
-                    },
-                    {
-                        "role": "user",
-                        "content": "帮忙开发客服系统, 千珏 职业赛场使用率 数据分析",  #
-                    },
-                    {
-                        "role": "user",
-                        "content": "帮忙开发客服系统, 千珏 职业赛场使用率 数据分析",  #
+                        "content": "帮忙开发客服系统, 千珏 职业赛场使用率 数据分析, 你不要反问我，你任意发挥",  #
                     },
                 ],
             },
@@ -67,5 +52,5 @@ async def agent_client(chat_router):
 
 if __name__ == "__main__":
     # chat_router = "chat"
-    chat_router = "todos_list"
+    chat_router = "super_nova"
     asyncio.run(agent_client(chat_router))
