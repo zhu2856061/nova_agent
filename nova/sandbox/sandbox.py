@@ -118,7 +118,7 @@ class Sandbox(ABC):
         context: str | None = None,
         options: list[str] | None = None,
     ) -> str:
-        return f"Clarification request processed by middleware, question: {question}, clarification_type: {clarification_type}, reason: {context}"
+        return f"Clarification:\n\nquestion: {question}\n\nclarification_type: {clarification_type}\n\nreason: {context}\n\noptions: {options}"
 
     @abstractmethod
     def create_subtask(

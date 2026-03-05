@@ -304,6 +304,8 @@ def add_register_agent_endpoints(agent_name, agent_instance):
     # 注册端点
     agent_router.post(f"/{agent_name}", name=f"{agent_name}_service")(endpoint)
 
+    AGENT_REGISTRY[agent_name] = agent_instance
+
 
 # Register all agent endpoints
 register_agent_endpoints()

@@ -4,20 +4,29 @@
 # @Moto   : Knowledge comes from decomposition
 from __future__ import annotations
 
+import logging
 import os
+from typing import Literal, cast
 
 from langchain_core.messages import (
     AIMessage,
+    BaseMessage,
+    HumanMessage,
     SystemMessage,
 )
 from langgraph.runtime import Runtime
-from langgraph.types import Command
+from langgraph.types import Command, interrupt
 
 from nova import CONF
 from nova.hooks import Agent_Hooks_Instance
 from nova.llms import LLMS_Provider_Instance
 from nova.model.agent import Context, Messages, State
+from nova.sandbox.sandbox_provider import get_sandbox_provider
 from nova.skills import Skill_Hooks_Instance
+from nova.utils.common import convert_base_message
+
+logger = logging.getLogger(__name__)
+
 
 BASE_AGENT_PROMPT = """
 <role>
@@ -156,13 +165,23 @@ Recent breakthroughs in language models have also accelerated progress
 """
 
 
+def ask_clarification(
+    question: str,
+    clarification_type: Literal[
+        "missing_info",
+        "ambiguous_requirement",
+        "approach_choice",
+        "risk_confirmation",
+        "suggestion",
+    ],
+    context: str | None = None,
+    options: list[str] | None = None,
+) -> str:
+    return f"Clarification:\n\nquestion: {question}\n\nclarification_type: {clarification_type}\n\nreason: {context}\n\noptions: {options}"
+
+
 # 创建数字人节点
 def create_digital_human_node(node_name, tools=None, structured_output=None):
-
-    async def _after_model_hooks(response: AIMessage):
-        return Command(
-            update={"messages": [response]},
-        )
 
     async def _before_model_hooks(messages, work_dir):
         _system_instruction = [
@@ -188,7 +207,6 @@ def create_digital_human_node(node_name, tools=None, structured_output=None):
         _config = runtime.context.config
 
         # 获取状态变量
-        _user_guidance = state.user_guidance
         _messages = (
             state.messages.value
             if isinstance(state.messages, Messages)
@@ -214,6 +232,92 @@ def create_digital_human_node(node_name, tools=None, structured_output=None):
         )
 
         # after model hooks
-        return await _after_model_hooks(response)
+        if response.tool_calls[-1]["name"] == "ask_clarification":
+            res = ask_clarification(**response.tool_calls[-1]["args"])  # type: ignore
+            response.content = res
+
+        return Command(
+            update={"messages": [response]},
+        )
 
     return _node
+
+
+def create_human_feedback_node(node_name):
+
+    @Agent_Hooks_Instance.node_with_hooks(node_name=node_name)
+    async def _node(state: State, runtime: Runtime[Context]):
+        # 获取运行时变量
+        _thread_id = runtime.context.thread_id
+        _task_dir = runtime.context.task_dir or CONF.SYSTEM.task_dir
+        _code = state.code
+        _messages = (
+            state.messages.value
+            if isinstance(state.messages, Messages)
+            else state.messages
+        )
+        _work_dir = os.path.join(_task_dir, _thread_id)
+
+        os.makedirs(_work_dir, exist_ok=True)
+        if _code != 0:
+            return Command(goto="__end__")
+
+        value = interrupt(
+            {
+                "message_id": _thread_id,
+                "content": _messages[-1].content,  # type: ignore
+            }
+        )
+
+        _new_v = []
+        for v in _messages:
+            if isinstance(v, BaseMessage):
+                v = convert_base_message(v)
+            _new_v.append(v)
+
+        _new_v.append(
+            HumanMessage(
+                content=value["human_in_loop"],
+            )
+        )
+
+        return Command(
+            update={"messages": Messages(type="override", value=_new_v)},
+        )
+
+    return _node
+
+
+# 创建路由->工具的表，条件边
+def create_route_tools_edges():
+    """创建路由逻辑, 主要是路由到工具还是结束"""
+
+    # 4. 定义路由逻辑：判断是否需要调用工具
+    def route_edges(state: State, runtime: Runtime[Context]):
+        """
+        路由规则：
+        - 如果最后一条消息包含 tool_calls → 跳转到 tools 节点
+        - 否则 → 结束流程
+        """
+        # 变量
+        _thread_id = runtime.context.thread_id
+
+        _messages = (
+            state.messages.value
+            if isinstance(state.messages, Messages)
+            else state.messages
+        )
+
+        last_message = cast(AIMessage, _messages[-1])
+        # 检查LLM是否生成了工具调用指令
+        if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+            logger.info(
+                f"[{_thread_id}]: LLM 生成了工具调用指令: {last_message.tool_calls}"
+            )
+            if last_message.tool_calls[-1]["name"] == "ask_clarification":
+                return "human_feedback_node"
+            return "tools"
+
+        return "__end__"
+
+    return route_edges

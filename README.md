@@ -33,6 +33,8 @@ sh run_web.sh
 sh run_langgraph_cli.sh
 ```
 
+## 项目所有的路由
+http://localhost:2021/docs#/
 
 
 ## 项目进度
