@@ -7,8 +7,8 @@ from __future__ import annotations
 from nova import CONF
 
 from .agent_hooks import AgentHooks
+from .super_agent_hooks import SuperAgentHooks
 
-Agent_Hooks_Instance = None
-if CONF:
-    # 全局变量
-    Agent_Hooks_Instance = AgentHooks(CONF.HOOK.Agent_Node_Hooks)
+# 全局变量
+Agent_Hooks_Instance = AgentHooks(CONF.HOOK.Agent_Node_Hooks)
+Super_Agent_Hook_Instance = SuperAgentHooks(CONF.HOOK.Agent_Node_Hooks)

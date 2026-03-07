@@ -5,37 +5,16 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, AsyncGenerator
+from typing import AsyncGenerator
 
 import aiohttp
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from langchain_core.messages import BaseMessage
 from langchain_core.runnables.config import RunnableConfig
 from langgraph.types import Command
-from pydantic import BaseModel
 
-from nova.agent import (
-    ainovel_agent,
-    ainovel_architecture_agent,
-    ainovel_chapter_agent,
-    build_architecture_agent,
-    chapter_blueprint_agent,
-    character_dynamics_agent,
-    chat_agent,
-    core_seed_agent,
-    deepresearcher_agent,
-    extract_setting_agent,
-    first_chapter_draft_agent,
-    memorizer_agent,
-    next_chapter_draft_agent,
-    plot_arch_agent,
-    researcher_agent,
-    theme_slicer_agent,
-    wechat_researcher_agent,
-    world_building_agent,
-)
-from nova.model.agent import AgentRequest, AgentResponse
+from nova.agent import super_nova_agent, theme_slicer_agent
+from nova.model.service import SuperAgentRequest, SuperAgentResponse
 from nova.service.handle_event import handle_event
 
 logger = logging.getLogger(__name__)
@@ -48,26 +27,11 @@ agent_router = APIRouter(
     responses={404: {"description": "Not found"}},
 )
 
+
 # Central agent registry - maintains all agent mappings
 AGENT_REGISTRY = {
-    "chat": chat_agent,
-    "memorizer": memorizer_agent,
+    "super_nova": super_nova_agent,
     "themeslicer": theme_slicer_agent,
-    "researcher": researcher_agent,
-    "deepresearcher": deepresearcher_agent,
-    "wechat_researcher": wechat_researcher_agent,
-    "ainovel_extract_setting": extract_setting_agent,
-    "ainovel_core_seed": core_seed_agent,
-    "ainovel_world_building": world_building_agent,
-    "ainovel_character_dynamics": character_dynamics_agent,
-    "ainovel_plot_arch": plot_arch_agent,
-    "ainovel_chapter_blueprint": chapter_blueprint_agent,
-    "ainovel_build_architecture": build_architecture_agent,
-    "ainovel_architect": ainovel_architecture_agent,
-    "ainovel_first_chapter": first_chapter_draft_agent,
-    "ainovel_next_chapter": next_chapter_draft_agent,
-    "ainovel_chapter": ainovel_chapter_agent,
-    "ainovel": ainovel_agent,
 }
 
 
@@ -79,25 +43,9 @@ def get_agent(agent_name: str):
     return agent
 
 
-def convert_langchain_objects_to_dict(obj: Any) -> Any:
-    if isinstance(obj, BaseMessage):
-        return obj.model_dump()  # 稳
-
-    if isinstance(obj, BaseModel):
-        return obj.model_dump()  # 现在绝对安全，不会 MockValSer
-
-    if isinstance(obj, (list, tuple, set)):
-        return [convert_langchain_objects_to_dict(i) for i in obj]
-
-    if isinstance(obj, dict):
-        return {k: convert_langchain_objects_to_dict(v) for k, v in obj.items()}
-
-    return obj
-
-
 # Shared streaming handler
 async def stream_agent_events(
-    instance, trace_id: str, state, context: BaseModel, config: dict
+    instance, trace_id, state, context, config: dict
 ) -> AsyncGenerator:
     """Generic streaming handler for all agents"""
     try:
@@ -107,9 +55,8 @@ async def stream_agent_events(
             ):
                 response = handle_event(trace_id, event)  # type: ignore
                 if response:
-                    # response = convert_langchain_objects_to_dict(response)
                     if response.get("event_name") == "error":
-                        res = AgentResponse(
+                        res = SuperAgentResponse(
                             code=1,
                             data=response.get("event_info", {}),
                         ).model_dump_json()
@@ -118,11 +65,11 @@ async def stream_agent_events(
                         return
 
                     try:
-                        res = AgentResponse(
+                        res = SuperAgentResponse(
                             code=0, err_message="ok", data=response
                         ).model_dump_json()
                     except Exception:
-                        res = AgentResponse(
+                        res = SuperAgentResponse(
                             code=1, err_message="data is not json serializable"
                         ).model_dump_json()
 
@@ -130,7 +77,7 @@ async def stream_agent_events(
 
     except Exception as e:
         logger.error(f"Streaming error (trace_id={trace_id}): {str(e)}", exc_info=True)
-        error_response = AgentResponse(
+        error_response = SuperAgentResponse(
             code=500, err_message=f"Streaming failed: {str(e)}"
         )
         yield error_response.model_dump_json()
@@ -140,7 +87,7 @@ async def stream_agent_events(
 
 
 @agent_router.post("/human_in_loop")
-async def human_in_loop(request: AgentRequest):
+async def human_in_loop(request: SuperAgentRequest):
     if not request:
         logger.error(
             "human_in_loop error: Input instances cannot be empty", exc_info=True
@@ -150,12 +97,17 @@ async def human_in_loop(request: AgentRequest):
     try:
         trace_id = request.trace_id
         context = request.context
-        state = request.state
         stream = request.stream
-        thread_id = context.thread_id
-        config = RunnableConfig(configurable={"thread_id": thread_id})
-        user_guidance = state.user_guidance
 
+        thread_id = context.get("thread_id")
+        if not thread_id:
+            logger.error("human_in_loop error: thread_id is required", exc_info=True)
+            return SuperAgentResponse(
+                code=1, data={"err_message": "thread_id is required"}
+            )
+        config = RunnableConfig(configurable={"thread_id": thread_id})
+
+        user_guidance = request.state.get("user_guidance")
         if not user_guidance:
             logger.error(
                 "human_in_loop error: user_guidance is required", exc_info=True
@@ -172,7 +124,7 @@ async def human_in_loop(request: AgentRequest):
             response = await agent.ainvoke(
                 Command(resume=user_guidance), context=context, config=config
             )
-            return AgentResponse(code=0, data=response)
+            return SuperAgentResponse(code=0, data=response)
 
         # Streaming handler for human-in-loop
         async def stream_human_in_loop() -> AsyncGenerator:
@@ -186,9 +138,8 @@ async def human_in_loop(request: AgentRequest):
                     ):
                         response = handle_event(trace_id, event)  # type: ignore
                         if response:
-                            # response = convert_langchain_objects_to_dict(response)
                             if response.get("event_name") == "error":
-                                res = AgentResponse(
+                                res = SuperAgentResponse(
                                     code=1,
                                     data=response.get("event_info", {}),
                                 ).model_dump_json()
@@ -197,11 +148,11 @@ async def human_in_loop(request: AgentRequest):
                                 return
 
                             try:
-                                res = AgentResponse(
+                                res = SuperAgentResponse(
                                     code=0, err_message="ok", data=response
                                 ).model_dump_json()
                             except Exception:
-                                res = AgentResponse(
+                                res = SuperAgentResponse(
                                     code=1,
                                     err_message="data is not json serializable",
                                 ).model_dump_json()
@@ -213,7 +164,7 @@ async def human_in_loop(request: AgentRequest):
                     f"Human-in-loop error (trace_id={trace_id}): {str(e)}",
                     exc_info=True,
                 )
-                error_response = AgentResponse(
+                error_response = SuperAgentResponse(
                     code=500, err_message=f"Interaction failed: {str(e)}"
                 )
                 yield error_response.model_dump_json() + "\n"
@@ -233,7 +184,7 @@ async def human_in_loop(request: AgentRequest):
         raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
 
 
-async def agent_service(agent, request: AgentRequest):
+async def agent_service(agent, request: SuperAgentRequest):
     if not request:
         raise HTTPException(status_code=400, detail="Input instances cannot be empty")
 
@@ -242,12 +193,19 @@ async def agent_service(agent, request: AgentRequest):
         context = request.context
         state = request.state
         stream = request.stream
-        thread_id = request.context.thread_id
+
+        thread_id = context.get("thread_id")
+        if not thread_id:
+            logger.error("human_in_loop error: thread_id is required", exc_info=True)
+            return SuperAgentResponse(
+                code=1, data={"err_message": "thread_id is required"}
+            )
+
         config = {"configurable": {"thread_id": thread_id}}
 
         if not stream:
             response = await agent.ainvoke(state, context=context, config=config)
-            return AgentResponse(code=0, data=response)
+            return SuperAgentResponse(code=0, data=response)
         else:
             return StreamingResponse(
                 stream_agent_events(agent, trace_id, state, context, config),
@@ -268,7 +226,7 @@ def register_agent_endpoints():
         # 增加一层闭包，固定当前的 agent_name
         def create_endpoint_factory(current_agent_name):
             async def endpoint(
-                request: AgentRequest,
+                request: SuperAgentRequest,
                 agent=Depends(
                     lambda: get_agent(current_agent_name)
                 ),  # 使用固定的 current_agent_name
@@ -291,7 +249,7 @@ def add_register_agent_endpoints(agent_name, agent_instance):
     # 增加一层闭包，固定当前的 agent_name
     def create_endpoint_factory():
         async def endpoint(
-            request: AgentRequest,
+            request: SuperAgentRequest,
             agent=Depends(lambda: agent_instance),  # 使用固定的 current_agent_name
         ):
             return await agent_service(agent, request)

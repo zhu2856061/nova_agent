@@ -1,35 +1,29 @@
 # -*- coding: utf-8 -*-
-# @Time   : 2025/08/12 10:24
+# @Time   : 2026/03/12 10:24
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
 from __future__ import annotations
 
-import json
 import logging
 import os
-from math import log
-from typing import Annotated, List, cast
+from typing import Literal, cast
 
-from langchain.tools import InjectedToolCallId, ToolRuntime, tool
 from langchain_core.messages import (
     AIMessage,
     HumanMessage,
-    ToolMessage,
-    get_buffer_string,
+    SystemMessage,
 )
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import START, StateGraph
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.runtime import Runtime
 from langgraph.types import Command, interrupt
-from matplotlib.pyplot import isinteractive
-from pydantic import BaseModel, Field
 
 from nova import CONF
 from nova.hooks import Super_Agent_Hook_Instance
 from nova.llms import LLMS_Provider_Instance, Prompts_Provider_Instance
 from nova.model.super_agent import SuperContext, SuperState
-from nova.utils.log_utils import log_info_set_color
+from nova.tools.digital_human_manager import Digital_Human_Manager
 
 logger = logging.getLogger(__name__)
 # ######################################################################################
@@ -38,65 +32,69 @@ logger = logging.getLogger(__name__)
 
 # ######################################################################################
 # 全局变量
-class Topic(BaseModel):
-    id: int = Field(description="The id of the topic")
-    title: str = Field(description="The title of the topic")
-    description: str = Field(description="The description of the topic")
-    keywords: List[str] = Field(description="The keywords of the topic")
-
-
-TOPIC_DESCRIPTION = "get topic"
-
-
-@tool("topic_slicer", description=TOPIC_DESCRIPTION)
-async def topic_slicer_tool(
-    tool_call_id: Annotated[str, InjectedToolCallId],
-    runtime: ToolRuntime[SuperContext, SuperState],
-    topics: List[Topic],
+def ask_clarification(
+    question: str,
+    clarification_type: Literal[
+        "missing_info",
+        "ambiguous_requirement",
+        "approach_choice",
+        "risk_confirmation",
+        "suggestion",
+    ],
+    context: str | None = None,
+    options: list[str] | None = None,
 ) -> str:
-    try:
-        return json.dumps(topics)
-
-    except Exception as e:
-        return f"Error: Unexpected error: {type(e).__name__}: {e}"
+    return f"Clarification:\n\nquestion: {question}\n\nclarification_type: {clarification_type}\n\nreason: {context}\n\noptions: {options}"
 
 
 # ######################################################################################
-# 创建主题挖掘节点
-def create_theme_slicer_node(node_name, tools=None, structured_output=None):
+
+
+# 创建数字人节点
+def create_digital_human_node(node_name, tools=None, structured_output=None):
 
     async def _before_model_hooks(state: SuperState, runtime: Runtime[SuperContext]):
         # 核心：组装提示词
-        user_guidance = state.get("user_guidance")
-        _human_in_loop_value = (
-            user_guidance.get("human_in_loop_value", "") if user_guidance else ""
-        )
-        _messages = state.get("messages")
-        tmp = {
-            "content": get_buffer_string(_messages),
-            "user_guidance": _human_in_loop_value,
-        }
 
-        _prompt_tamplate = Prompts_Provider_Instance.get_template(
-            "theme", "theme_slicer"
+        # 当前messages
+        _messages = state.get("messages")
+
+        base_agent_system_prompt = Prompts_Provider_Instance.get_template(
+            "super_nova", "base_agent"
         )
-        return [
-            HumanMessage(
-                content=Prompts_Provider_Instance.prompt_apply_template(
-                    _prompt_tamplate, tmp
-                )
-            )
+
+        ask_clarification_system_prompt = Prompts_Provider_Instance.get_template(
+            "super_nova", "ask_clarification"
+        )
+
+        critical_reminders_system_prompt = Prompts_Provider_Instance.get_template(
+            "super_nova", "critical_reminders"
+        )
+
+        _system_instruction = [
+            base_agent_system_prompt,
+            ask_clarification_system_prompt,
+            critical_reminders_system_prompt,
         ]
+
+        _system_instruction = "\n\n".join(_system_instruction)
+        return [
+            SystemMessage(content=_system_instruction),
+        ] + _messages
 
     async def _after_model_hooks(
         state: SuperState, runtime: Runtime[SuperContext], response: AIMessage
     ):
 
+        if response.tool_calls[-1]["name"] == "ask_clarification":
+            res = ask_clarification(**response.tool_calls[-1]["args"])  # type: ignore
+            response.content = res
+
         return Command(
-            update={"messages": [response]},
+            update={"code": 0, "messages": [response]},
         )
 
-    @Super_Agent_Hook_Instance.node_with_hooks(node_name="theme_slicer")
+    @Super_Agent_Hook_Instance.node_with_hooks(node_name=node_name)
     async def _node(state: SuperState, runtime: Runtime[SuperContext]):
         # 获取运行时变量
         _thread_id = runtime.context.get("thread_id", "default")
@@ -119,10 +117,6 @@ def create_theme_slicer_node(node_name, tools=None, structured_output=None):
                 update={"code": -1, "messages": [AIMessage(content="No messages")]},
             )
 
-        if isinstance(_messages[-1], ToolMessage):
-            return Command(
-                goto="__end__",
-            )
         # 模型执行前
         response = await _before_model_hooks(state, runtime)
 
@@ -136,7 +130,6 @@ def create_theme_slicer_node(node_name, tools=None, structured_output=None):
             structured_output=structured_output,
             **_config,  # type: ignore
         )
-
         # 模型执行后
         return await _after_model_hooks(state, runtime, response)
 
@@ -173,54 +166,24 @@ def create_human_feedback_node(node_name):
         value = interrupt(
             {
                 "message_id": _thread_id,
-                "content": "对生成的topic进行确定",
+                "content": _messages[-1].content,  # type: ignore
             }
         )
-        log_info_set_color(_thread_id, "human_feedback", value)
-
         return Command(
             update={
-                "user_guidance": {"human_in_loop_value": value["human_in_loop"]},
+                "messages": [
+                    HumanMessage(
+                        content=value["human_in_loop"],
+                    )
+                ]
             },
         )
 
     return _node
 
 
-# 创建路由[ 反馈 ···> 主题 | END ]条件边
-def create_route_human_feedback_edges():
-    """创建路由逻辑, 主要是路由到工具还是结束"""
-
-    # 4. 定义路由逻辑：判断是否需要调用工具
-    def route_edges(state: SuperState, runtime: Runtime[SuperContext]):
-        """
-        路由规则：
-        - 根据用户的反馈，若是 内容=“确定或者1”，则跳转到 END
-        - 若是 内容!=“确定或者1”，则跳转到 主题挖掘
-        """
-
-        _code = state.get("code", 0)
-        if _code != 0:
-            return "__end__"
-
-        user_guidance = state.get("user_guidance")
-        _human_in_loop_value = (
-            user_guidance.get("human_in_loop_value", "") if user_guidance else ""
-        )
-
-        if not _human_in_loop_value:
-            return "__end__"
-
-        if _human_in_loop_value == "确定" or _human_in_loop_value == "1":
-            return "__end__"
-        else:
-            return "theme_slicer_node"
-
-    return route_edges
-
-
-# 创建路由[ 主题 ···> 反馈 | tools ]条件边
-def create_route_theme_slicer_edges():
+# 创建路由->工具的表，条件边
+def create_route_tools_edges():
     """创建路由逻辑, 主要是路由到工具还是结束"""
 
     # 4. 定义路由逻辑：判断是否需要调用工具
@@ -241,9 +204,6 @@ def create_route_theme_slicer_edges():
         if not _messages:
             return "__end__"
 
-        logger.info(f"[{_thread_id}]: _messages: {_messages}")
-        if isinstance(_messages[-1], ToolMessage):
-            return "human_feedback_node"
         if not isinstance(_messages[-1], AIMessage):
             return "__end__"
 
@@ -254,46 +214,43 @@ def create_route_theme_slicer_edges():
             logger.info(
                 f"[{_thread_id}]: LLM 生成了工具调用指令: {last_message.tool_calls}"
             )
+            if last_message.tool_calls[-1]["name"] == "ask_clarification":
+                return "human_feedback_node"
             return "tools"
 
-        return "human_feedback_node"
+        return "__end__"
 
     return route_edges
 
 
 # ######################################################################################
 # 编译图
-def compile_theme_slicer_agent():
-    tools = [topic_slicer_tool]
+def compile_super_nova_agent():
+
     # 节点和边
-    theme_slicer_node = create_theme_slicer_node(node_name="theme_slicer", tools=tools)
+    tools = Digital_Human_Manager.copy()
+    tools = [tools["ask_clarification"]]
+    digital_human_node = create_digital_human_node(
+        node_name="digital_human_node", tools=tools
+    )
     human_feedback_node = create_human_feedback_node(node_name="human_feedback_node")
     tool_node = ToolNode(tools=tools)
-
-    human_feedback_route_edges = create_route_human_feedback_edges()
-    theme_slicer_route_edges = create_route_theme_slicer_edges()
+    route_edges = create_route_tools_edges()
 
     # 构建图
     _agent = StateGraph(SuperState, context_schema=SuperContext)
-    _agent.add_node("theme_slicer_node", theme_slicer_node)
+    _agent.add_node("digital_human_node", digital_human_node)
     _agent.add_node("human_feedback_node", human_feedback_node)
     _agent.add_node("tools", tool_node)
-
-    _agent.add_edge(START, "theme_slicer_node")
+    _agent.add_edge(START, "digital_human_node")
+    _agent.add_edge("tools", "digital_human_node")
+    _agent.add_edge("human_feedback_node", "digital_human_node")
     _agent.add_conditional_edges(
-        source="theme_slicer_node",
-        path=theme_slicer_route_edges,
+        source="digital_human_node",
+        path=route_edges,
         path_map={
+            "tools": "tools",  # 路由到 tools 节点
             "human_feedback_node": "human_feedback_node",
-            "tools": "tools",
-            "__end__": "__end__",  # 结束流程
-        },
-    )
-    _agent.add_conditional_edges(
-        source="human_feedback_node",
-        path=human_feedback_route_edges,
-        path_map={
-            "theme_slicer_node": "theme_slicer_node",
             "__end__": "__end__",  # 结束流程
         },
     )

@@ -13,19 +13,15 @@ async def agent_client():
         "trace_id": "123",
         "context": {
             "thread_id": "Nova",
-            "task_dir": "merlin",
-            "model": "basic",
+            "model": "deepseek",
         },
         "state": {
-            "messages": {
-                "type": "add",
-                "value": [
-                    {
-                        "role": "user",
-                        "content": "我是小明，很喜欢足球",  #
-                    },
-                ],
-            },
+            "messages": [
+                {
+                    "type": "human",
+                    "content": "我是小明，很喜欢足球",  #
+                },
+            ],
         },
         "stream": True,
     }

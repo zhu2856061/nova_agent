@@ -21,7 +21,6 @@ from nova import CONF
 from nova.hooks import Agent_Hooks_Instance
 from nova.llms import LLMS_Provider_Instance
 from nova.model.agent import Context, Messages, State
-from nova.sandbox.sandbox_provider import get_sandbox_provider
 from nova.skills import Skill_Hooks_Instance
 from nova.utils.common import convert_base_message
 
@@ -187,10 +186,10 @@ def create_digital_human_node(node_name, tools=None, structured_output=None):
         _system_instruction = [
             BASE_AGENT_PROMPT,
             CLARIFICATION_SYSTEM_PROMPT,
-            WRITE_TODOS_SYSTEM_PROMPT,
-            Skill_Hooks_Instance.get_skill_prompt_template(),
-            FILESYSTEM_SYSTEM_PROMPT.format(work_dir=work_dir),
-            EXECUTION_SYSTEM_PROMPT,
+            # WRITE_TODOS_SYSTEM_PROMPT,
+            # Skill_Hooks_Instance.get_skill_prompt_template(),
+            # FILESYSTEM_SYSTEM_PROMPT.format(work_dir=work_dir),
+            # EXECUTION_SYSTEM_PROMPT,
             CRITICAL_REMINDER_PROMPT.format(work_dir=work_dir),
         ]
         _system_instruction = "\n\n".join(_system_instruction)
