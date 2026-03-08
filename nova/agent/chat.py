@@ -8,13 +8,9 @@ import logging
 
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import START, StateGraph
-from langgraph.runtime import Runtime
-from langgraph.types import Command
 
-from nova.hooks import Agent_Hooks_Instance
-from nova.llms import LLMS_Provider_Instance
-from nova.model.agent import Context, Messages, State
-from nova.utils.common import extract_ai_message_content
+from nova.model.super_agent import SuperContext, SuperState
+from nova.node.common import create_node
 
 logger = logging.getLogger(__name__)
 # ######################################################################################
@@ -28,42 +24,14 @@ logger = logging.getLogger(__name__)
 # ######################################################################################
 
 
-# 函数
-@Agent_Hooks_Instance.node_with_hooks(node_name="chat")
-async def chat(state: State, runtime: Runtime[Context]):
-    _NODE_NAME = "chat"
-
-    # 变量
-    _thread_id = runtime.context.thread_id
-    _model_name = runtime.context.model
-    _messages = (
-        state.messages.value if isinstance(state.messages, Messages) else state.messages
-    )
-
-    # 4 大模型
-    response = await LLMS_Provider_Instance.llm_wrap_hooks(
-        _thread_id,
-        _NODE_NAME,
-        _messages,
-        _model_name,
-    )
-    content, reasoning_content = extract_ai_message_content(response)
-
-    return Command(
-        goto="__end__",
-        update={
-            "code": 0,
-            "err_message": "ok",
-            "data": {"content": content, "reasoning_content": reasoning_content},
-        },
-    )
-
-
+# 编译图
 def compile_chat_agent():
-    checkpointer = InMemorySaver()
+    _chat_node = create_node("chat")
+
     # chat graph
-    _agent = StateGraph(State, context_schema=Context)
-    _agent.add_node("chat", chat)
+    _agent = StateGraph(SuperState, context_schema=SuperContext)
+    _agent.add_node("chat", _chat_node)
     _agent.add_edge(START, "chat")
 
+    checkpointer = InMemorySaver()
     return _agent.compile(checkpointer=checkpointer)

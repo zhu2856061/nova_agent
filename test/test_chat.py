@@ -13,18 +13,15 @@ async def agent_client(chat_router):
         "trace_id": "123",
         "context": {
             "thread_id": "Nova",
-            "model": "basic",
+            "model": "deepseek",
         },
         "state": {
-            "messages": {
-                "type": "add",
-                "value": [
-                    {
-                        "role": "user",
-                        "content": "中国的首都在哪？",  #
-                    },
-                ],
-            },
+            "messages": [
+                {
+                    "type": "human",
+                    "content": "中国的首都在哪？",  #
+                },
+            ],
         },
         "stream": True,
     }
@@ -55,5 +52,5 @@ async def agent_client(chat_router):
 
 if __name__ == "__main__":
     # chat_router = "chat"
-    chat_router = "chat_sample"
+    chat_router = "chat"
     asyncio.run(agent_client(chat_router))

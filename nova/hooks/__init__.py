@@ -7,8 +7,10 @@ from __future__ import annotations
 from nova import CONF
 
 from .agent_hooks import AgentHooks
+from .skill_hook import SkillsProvider
 from .super_agent_hooks import SuperAgentHooks
 
 # 全局变量
 Agent_Hooks_Instance = AgentHooks(CONF.HOOK.Agent_Node_Hooks)
 Super_Agent_Hook_Instance = SuperAgentHooks(CONF.HOOK.Agent_Node_Hooks)
+Skill_Hooks_Instance = SkillsProvider(CONF.SYSTEM.skill_dir)
