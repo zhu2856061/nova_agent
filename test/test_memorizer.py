@@ -11,20 +11,16 @@ request_data = {
     "trace_id": "123",
     "context": {
         "thread_id": "Nova",
-        "task_dir": "merlin",
         "model": "basic",
         "config": {"user_id": "merlin"},
     },
     "state": {
-        "messages": {
-            "type": "override",
-            "value": [
-                {
-                    "role": "user",
-                    "content": "Hi, I'm Bob and I enjoy playing tennis. Remember this.",  #
-                },
-            ],
-        },
+        "messages": [
+            {
+                "type": "human",
+                "content": "Hi, I'm Bob and I enjoy playing tennis. Remember this.",  #
+            },
+        ],
     },
     "stream": True,
 }
@@ -48,8 +44,8 @@ async def memorizer_client():
             async for chunk in response.aiter_bytes():
                 if chunk:
                     tmp = json.loads(chunk.decode("utf-8"))
-                    # if tmp["data"]["event"] == "on_chat_model_stream":
-                    #     continue
+                    if tmp["data"]["event_name"] == "on_chat_model_stream":
+                        continue
                     print(tmp)
 
 

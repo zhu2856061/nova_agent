@@ -4,25 +4,26 @@
 # @Moto   : Knowledge comes from decomposition
 from __future__ import annotations
 
-import asyncio
 import logging
+import os
 import uuid
-from typing import Literal, Optional, cast
+from typing import Annotated, cast
 
-from langchain_core.messages import SystemMessage
+from langchain.tools import InjectedToolCallId, ToolRuntime, tool
+from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import START, StateGraph
+from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.runtime import Runtime
 from langgraph.store.base import BaseStore
 from langgraph.types import Command
 
-from nova.hooks import Agent_Hooks_Instance
+from nova import CONF
+from nova.hooks import Super_Agent_Hook_Instance
 from nova.llms import LLMS_Provider_Instance, Prompts_Provider_Instance
 from nova.memory import SQLITESTORE
-from nova.model.agent import Context, Messages, State
-from nova.tools import upsert_memory_tool
-from nova.utils.common import extract_ai_message_content, get_today_str
-from nova.utils.log_utils import log_error_set_color
+from nova.model.super_agent import SuperContext, SuperState
+from nova.utils.common import get_today_str
 
 logger = logging.getLogger(__name__)
 # ######################################################################################
@@ -36,17 +37,7 @@ logger = logging.getLogger(__name__)
 # ######################################################################################
 # 函数
 
-
-async def upsert_memory(
-    content: str,
-    context: str,
-    *,
-    # Hide these arguments from the model.
-    user_id: str,
-    store: BaseStore,
-    memory_id: Optional[str] = None,
-):
-    """Upsert a memory in the database.
+TOPIC_DESCRIPTION = """Upsert a memory in the database.
 
     If a memory conflicts with an existing one, then just UPDATE the
     existing one by passing in memory_id - don't create two memories
@@ -59,11 +50,23 @@ async def upsert_memory(
             "This was mentioned while discussing career options in Europe."
         memory_id: ONLY PROVIDE IF UPDATING AN EXISTING MEMORY.
         The memory to overwrite.
-    """
+"""
 
-    mem_id = memory_id or uuid.uuid4()
-    await store.aput(
-        ("memories", user_id),
+
+@tool("upsert_memory", description=TOPIC_DESCRIPTION)
+async def upsert_memory_tool(
+    tool_call_id: Annotated[str, InjectedToolCallId],
+    runtime: ToolRuntime[SuperContext, SuperState],
+    content: str,
+    context: str,
+):
+
+    mem_id = uuid.uuid4()
+    _config = runtime.context.get("config")
+    _user_id = _config.get("user_id")  # type: ignore
+
+    await SQLITESTORE.aput(
+        ("memories", cast(str, _user_id)),
         key=str(mem_id),
         value={"content": content, "context": context},
     )
@@ -71,33 +74,61 @@ async def upsert_memory(
     return f"Stored memory {mem_id}"
 
 
-# 函数
-@Agent_Hooks_Instance.node_with_hooks(node_name="memorizer")
-async def memorizer(
-    state: State, runtime: Runtime[Context], **kwargs
-) -> Command[Literal["memorizer_tools", "__end__"]]:
-    _NODE_NAME = "memorizer"
+# 创建路由[ 记忆 ···> tools | END ]条件边
+def create_memorizer_route_edges():
+    """创建路由逻辑, 主要是路由到工具还是结束"""
 
-    # 1 变量
-    _thread_id = runtime.context.thread_id
-    _model_name = runtime.context.model
-    _config = runtime.context.config
-    _messages = (
-        state.messages.value if isinstance(state.messages, Messages) else state.messages
-    )
+    # 4. 定义路由逻辑：判断是否需要调用工具
+    def route_edges(state: SuperState, runtime: Runtime[SuperContext]):
+        """
+        路由规则：
+        - 如果最后一条消息包含 tool_calls → 跳转到 tools 节点
+        - 否则 → 结束流程
+        """
+        # 变量
+        _thread_id = runtime.context.get("thread_id", "default")
 
-    # 2 变量检查
-    if _config.get("user_id") is None or len(_messages) <= 0:
-        _err_message = log_error_set_color(_thread_id, _NODE_NAME, "user_id is empty")
-        return Command(goto="__end__", update={"code": 1, "err_message": _err_message})
+        _code = state.get("code", 0)
+        if _code != 0:
+            return "__end__"
 
-    _user_id = cast(str, _config.get("user_id"))
+        _messages = state.get("messages")
+        if not _messages:
+            return "__end__"
 
-    # 3 提示词
-    async def _assemble_prompt(messages):
-        # Retrieve the most recent memories for context
+        logger.info(f"[{_thread_id}]: _messages: {_messages[-1]}")
+
+        if not isinstance(_messages[-1], AIMessage):
+            return "__end__"
+
+        last_message = cast(AIMessage, _messages[-1])
+
+        # 检查LLM是否生成了工具调用指令
+        if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+            logger.info(
+                f"[{_thread_id}]: LLM 生成了工具调用指令: {last_message.tool_calls}"
+            )
+            return "tools"
+
+        return "__end__"
+
+    return route_edges
+
+
+# ######################################################################################
+# 创建记忆节点
+def create_memorizer_node(node_name, tools=None, structured_output=None):
+
+    async def _before_model_hooks(state: SuperState, runtime: Runtime[SuperContext]):
+        # 核心：组装提示词
+        _config = runtime.context.get("config")
+
+        _user_id = _config.get("user_id")  # type: ignore
+
+        _messages = state.get("messages")
+
         memories = await cast(BaseStore, SQLITESTORE).asearch(
-            ("memories", _user_id),
+            ("memories", cast(str, _user_id)),
             query=str([m.content for m in _messages[-3:]]),  # type: ignore
             limit=10,
         )
@@ -109,7 +140,7 @@ async def memorizer(
         }
 
         _prompt_tamplate = Prompts_Provider_Instance.get_template(
-            "memorizer", _NODE_NAME
+            "memorizer", "memorizer"
         )
         return [
             SystemMessage(
@@ -117,123 +148,94 @@ async def memorizer(
                     _prompt_tamplate, tmp
                 )
             )
-        ] + messages
+        ] + _messages
 
-        # LLM
+    async def _after_model_hooks(
+        state: SuperState, runtime: Runtime[SuperContext], response: AIMessage
+    ):
 
-    # 4 大模型
-    response = await LLMS_Provider_Instance.llm_wrap_hooks(
-        _thread_id,
-        _NODE_NAME,
-        await _assemble_prompt(_messages),
-        _model_name,
-        tools=[upsert_memory_tool],
-    )
+        # 去掉冗余信息
+        response.additional_kwargs = {}
+        response.response_metadata = {}
 
-    # 5 判断下一个节点的逻辑
-    tool_calls = getattr(response, "tool_calls", [])
-    if not tool_calls:  # 如果没有工具调用，则正常返回 - 回复结果
-        content, reasoning_content = extract_ai_message_content(response)
         return Command(
-            goto="__end__",
-            update={
-                "code": 0,
-                "err_message": "ok",
-                "data": {"content": content, "reasoning_content": reasoning_content},
-            },
+            update={"messages": [response]},
         )
 
-    return Command(
-        goto="memorizer_tools",
-        update={
-            "code": 0,
-            "err_message": "ok",
-            "data": {"result": response},
-        },
-    )
+    @Super_Agent_Hook_Instance.node_with_hooks(node_name="memorizer")
+    async def _node(state: SuperState, runtime: Runtime[SuperContext]):
+        # 获取运行时变量
+        _thread_id = runtime.context.get("thread_id", "default")
+        _model_name = runtime.context.get("model", "basic")
+        _config = runtime.context.get("config", {})
 
+        # 创建工作目录
+        _task_dir = runtime.context.get("task_dir", CONF.SYSTEM.task_dir)
+        _work_dir = os.path.join(cast(str, _task_dir), _thread_id)
+        # os.makedirs(_work_dir, exist_ok=True)
 
-@Agent_Hooks_Instance.node_with_hooks(node_name="memorizer_tools")
-async def memorizer_tools(
-    state: State, runtime: Runtime[Context], **kwargs
-) -> Command[Literal["__end__"]]:
-    _NODE_NAME = "memorizer_tools"
+        # 获取状态变量
+        _code = state.get("code", 0)
+        if _code != 0:
+            return Command(goto="__end__")
 
-    # 变量
-    _thread_id = runtime.context.thread_id
-    _config = runtime.context.config
-    _data = state.data
+        _messages = state.get("messages")
+        if not _messages:
+            return Command(
+                goto="__end__",
+                update={"code": -1, "messages": [AIMessage(content="No messages")]},
+            )
 
-    if _config.get("user_id") is None or _data is None:
-        _err_message = log_error_set_color(_thread_id, _NODE_NAME, "user_id is empty")
-        return Command(
-            goto="__end__",
-            update={
-                "code": 1,
-                "err_message": _err_message,
-                "messages": Messages(type="end"),
-            },
+        if isinstance(_messages[-1], ToolMessage):
+            return Command(
+                goto="__end__",
+            )
+        # 模型执行前
+        response = await _before_model_hooks(state, runtime)
+
+        # 模型执行中
+        response = await LLMS_Provider_Instance.llm_wrap_hooks(
+            _thread_id,
+            node_name,
+            response,
+            _model_name,
+            tools=tools,
+            structured_output=structured_output,
+            **_config,  # type: ignore
         )
 
-    _user_id = cast(str, _config.get("user_id"))
+        # 模型执行后
+        return await _after_model_hooks(state, runtime, response)
 
-    # Extract tool calls from the last message
-    tool_calls = getattr(_data.get("result"), "tool_calls", [])
-    if not tool_calls:
-        _err_message = log_error_set_color(
-            _thread_id, _NODE_NAME, "no tool calls found"
-        )
-        return Command(
-            goto="__end__",
-            update={
-                "code": 1,
-                "err_message": _err_message,
-                "messages": Messages(type="end"),
-            },
-        )
-
-    # Concurrently execute all upsert_memory calls
-    _upsert_memorys = []
-    for tc in tool_calls:
-        content = tc["args"].get("content")
-        context = tc["args"].get("context")
-        if not content or not context:
-            continue
-        _upsert_memorys.append(
-            upsert_memory(
-                content=content, context=context, user_id=_user_id, store=SQLITESTORE
-            ),
-        )
-
-    saved_memories = await asyncio.gather(*_upsert_memorys)
-    # Format the results of memory storage operations
-    # This provides confirmation to the model that the actions it took were completed
-    results = [
-        {
-            "role": "tool",
-            "content": mem,
-            "tool_call_id": tc["id"],
-        }
-        for tc, mem in zip(tool_calls, saved_memories)
-    ]
-
-    return Command(
-        goto="__end__",
-        update={
-            "code": 0,
-            "err_message": "ok",
-            "data": {"result": results},
-        },
-    )
+    return _node
 
 
 def compile_memorizer_agent():
+
+    tools = [upsert_memory_tool]
+    # 节点和边
+    memorizer_node = create_memorizer_node(node_name="memorizer", tools=tools)
+    tool_node = ToolNode(tools=tools)
+
+    memorizer_route_edges = create_memorizer_route_edges()
+
     # researcher subgraph
-    _agent = StateGraph(State, context_schema=Context)
-    _agent.add_node("memorizer", memorizer)
-    _agent.add_node("memorizer_tools", memorizer_tools)
-    _agent.add_edge(START, "memorizer")
+    _agent = StateGraph(SuperState, context_schema=SuperContext)
+    _agent.add_node("memorizer_node", memorizer_node)
+    _agent.add_node("tools", tool_node)
+    _agent.add_edge(START, "memorizer_node")
+
+    _agent.add_conditional_edges(
+        source="memorizer_node",
+        path=memorizer_route_edges,
+        path_map={
+            "tools": "tools",
+            "__end__": "__end__",  # 结束流程
+        },
+    )
 
     checkpointer = InMemorySaver()
-
-    return _agent.compile(checkpointer=checkpointer)
+    _agent = _agent.compile(checkpointer=checkpointer)
+    png_bytes = _agent.get_graph(xray=True).draw_mermaid()
+    logger.info(f"memorizer_agent: \n\n{png_bytes}")
+    return _agent

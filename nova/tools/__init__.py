@@ -30,7 +30,6 @@ from .filesystem_manager import (
 )
 from .format_result import MarkdownToHtmlTool
 from .llm_searcher import LLMSearchTool
-from .memory_manager import UpsertMemoryTool
 from .todo_list import write_todos
 from .web_crawler import CrawlTool
 from .wechat_crawler import CrawlWechatTool
@@ -73,8 +72,6 @@ wechat_searcher_tool = WechatSearchTool()
 # 带有总结的网络搜索工具
 llm_searcher_tool = LLMSearchTool()
 
-# 更新记忆工具
-upsert_memory_tool = UpsertMemoryTool()
 
 __all__ = [
     "write_todos",

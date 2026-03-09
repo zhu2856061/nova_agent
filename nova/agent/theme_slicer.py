@@ -85,7 +85,7 @@ async def topic_slicer_tool(
             update={
                 "messages": [
                     ToolMessage(
-                        json.dumps({"topics": tmp}),
+                        json.dumps({"topics": tmp}, ensure_ascii=False),
                         tool_call_id=tool_call_id,
                     )
                 ]
@@ -150,12 +150,13 @@ def create_theme_slicer_node(node_name, tools=None, structured_output=None):
     async def _node(state: SuperState, runtime: Runtime[SuperContext]):
         # 获取运行时变量
         _thread_id = runtime.context.get("thread_id", "default")
-        _task_dir = runtime.context.get("task_dir", CONF.SYSTEM.task_dir)
+
         _model_name = runtime.context.get("model", "basic")
         _config = runtime.context.get("config", {})
         # 创建工作目录
+        _task_dir = runtime.context.get("task_dir", CONF.SYSTEM.task_dir)
         _work_dir = os.path.join(cast(str, _task_dir), _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
+        # os.makedirs(_work_dir, exist_ok=True)
 
         # 获取状态变量
         _code = state.get("code", 0)
@@ -200,13 +201,13 @@ def create_human_feedback_node(node_name):
     async def _node(state: SuperState, runtime: Runtime[SuperContext]):
         # 获取运行时变量
         _thread_id = runtime.context.get("thread_id", "default")
-        _task_dir = runtime.context.get("task_dir", CONF.SYSTEM.task_dir)
+
         _model_name = runtime.context.get("model", "basic")
         _config = runtime.context.get("config", {})
         # 创建工作目录
+        _task_dir = runtime.context.get("task_dir", CONF.SYSTEM.task_dir)
         _work_dir = os.path.join(cast(str, _task_dir), _thread_id)
-
-        os.makedirs(_work_dir, exist_ok=True)
+        # os.makedirs(_work_dir, exist_ok=True)
 
         # 获取状态变量
         _code = state.get("code", 0)
