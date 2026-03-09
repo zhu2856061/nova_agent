@@ -67,6 +67,10 @@ def create_digital_human_node(node_name, tools=None, structured_output=None):
             "super_nova", "ask_clarification"
         )
 
+        web_search_system_prompt = Prompts_Provider_Instance.get_template(
+            "super_nova", "web_search"
+        )
+
         critical_reminders_system_prompt = Prompts_Provider_Instance.get_template(
             "super_nova", "critical_reminders"
         )
@@ -74,6 +78,7 @@ def create_digital_human_node(node_name, tools=None, structured_output=None):
         _system_instruction = [
             base_agent_system_prompt,
             ask_clarification_system_prompt,
+            web_search_system_prompt,
             critical_reminders_system_prompt,
         ]
 
@@ -90,8 +95,12 @@ def create_digital_human_node(node_name, tools=None, structured_output=None):
             res = ask_clarification(**response.tool_calls[-1]["args"])  # type: ignore
             response.content = res
 
+        # 去掉冗余信息
+        response.additional_kwargs = {}
+        response.response_metadata = {}
+
         return Command(
-            update={"code": 0, "messages": [response]},
+            update={"messages": [response], "data": {"result": response.content}},
         )
 
     @Super_Agent_Hook_Instance.node_with_hooks(node_name=node_name)
@@ -169,6 +178,9 @@ def create_human_feedback_node(node_name):
                 "content": _messages[-1].content,  # type: ignore
             }
         )
+
+        logger.info(f"[Human Feedback] {_thread_id} {value}")
+
         return Command(
             update={
                 "messages": [
@@ -182,7 +194,7 @@ def create_human_feedback_node(node_name):
     return _node
 
 
-# 创建路由->工具的表，条件边
+# 创建路由[主节点 -> 工具 | 人类反馈 | END ]的表，条件边
 def create_route_tools_edges():
     """创建路由逻辑, 主要是路由到工具还是结束"""
 
@@ -229,7 +241,8 @@ def compile_super_nova_agent():
 
     # 节点和边
     tools = Digital_Human_Manager.copy()
-    tools = [tools["ask_clarification"]]
+    tools = [tools["ask_clarification"], tools["web_search"]]
+
     digital_human_node = create_digital_human_node(
         node_name="digital_human_node", tools=tools
     )

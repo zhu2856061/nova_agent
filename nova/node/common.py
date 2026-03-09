@@ -60,8 +60,9 @@ def create_node(
                     "messages": [response],
                 },
             )
-        else:
-            response.additional_kwargs = {}
+        # 去掉冗余信息
+        response.additional_kwargs = {}
+        response.response_metadata = {}
 
         return Command(
             update={"messages": [response], "data": {"result": response.content}},

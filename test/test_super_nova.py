@@ -11,7 +11,7 @@ import httpx
 async def agent_client(chat_router):
     request_data = {
         "trace_id": "123",
-        "context": {"thread_id": "Nova", "model": "deepseek"},
+        "context": {"thread_id": "Nova", "model": "basic"},
         "state": {
             "messages": [
                 {
@@ -83,7 +83,6 @@ async def human_in_loop_client(chat_router):
 
 
 if __name__ == "__main__":
-    # chat_router = "chat"
     chat_router = "super_nova"
     asyncio.run(agent_client(chat_router))
     # asyncio.run(human_in_loop_client(chat_router))

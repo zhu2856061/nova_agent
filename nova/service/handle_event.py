@@ -262,9 +262,9 @@ class ChatModelEndHandler(EventHandler):
                 "node_name": node_name,
                 "output": {
                     "content": safe_get(event, "data.output.content", ""),
-                    "reasoning_content": safe_get(
-                        event, "data.output.additional_kwargs.reasoning_content", ""
-                    ),
+                    # "reasoning_content": safe_get(
+                    #     event, "data.output.additional_kwargs.reasoning_content", ""
+                    # ),
                     "tool_calls": safe_get(event, "data.output.tool_calls", []),
                 },
             },

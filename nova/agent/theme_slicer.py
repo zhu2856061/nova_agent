@@ -7,7 +7,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-from math import log
 from typing import Annotated, List, cast
 
 from langchain.tools import InjectedToolCallId, ToolRuntime, tool
@@ -22,7 +21,6 @@ from langgraph.graph import START, StateGraph
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.runtime import Runtime
 from langgraph.types import Command, interrupt
-from matplotlib.pyplot import isinteractive
 from pydantic import BaseModel, Field
 
 from nova import CONF
@@ -39,13 +37,26 @@ logger = logging.getLogger(__name__)
 # ######################################################################################
 # 全局变量
 class Topic(BaseModel):
-    id: int = Field(description="The id of the topic")
-    title: str = Field(description="The title of the topic")
-    description: str = Field(description="The description of the topic")
-    keywords: List[str] = Field(description="The keywords of the topic")
+    id: int = Field(
+        description="Unique integer ID for the topic (start from 1 and increment sequentially)",
+        gt=0,  # 确保ID为正整数
+    )
+    title: str = Field(
+        description="Concise, clear title of the research topic (5-20 words)",
+        min_length=5,
+        max_length=50,
+    )
+    description: str = Field(
+        description="Detailed research focus and content of the topic (50-200 words)",
+        min_length=50,
+        max_length=300,
+    )
+    keywords: List[str] = Field(
+        description="3-5 core keywords for the topic (lowercase, no special characters)",
+    )
 
 
-TOPIC_DESCRIPTION = "get topic"
+TOPIC_DESCRIPTION = "Split writing outline into 3-8 independent research topics, return structured topic data in JSON format"
 
 
 @tool("topic_slicer", description=TOPIC_DESCRIPTION)
@@ -53,12 +64,47 @@ async def topic_slicer_tool(
     tool_call_id: Annotated[str, InjectedToolCallId],
     runtime: ToolRuntime[SuperContext, SuperState],
     topics: List[Topic],
-) -> str:
+):
     try:
-        return json.dumps(topics)
+        # 核心校验：确保主题数量符合3-8的要求
+        if not 3 <= len(topics) <= 8:
+            raise ValueError(
+                f"Topic count must be between 3 and 8 (current: {len(topics)})"
+            )
+
+        # 校验每个Topic字段的合法性（Pydantic已自动校验，此处补充业务校验）
+        for idx, topic in enumerate(topics):
+            if len(topic.keywords) < 3 or len(topic.keywords) > 5:
+                raise ValueError(
+                    f"Topic {topic.id} has invalid keyword count (must be 3-5)"
+                )
+
+        tmp = [topic.model_dump() for topic in topics]
+
+        return Command(
+            update={
+                "messages": [
+                    ToolMessage(
+                        json.dumps({"topics": tmp}),
+                        tool_call_id=tool_call_id,
+                    )
+                ]
+            }
+        )
 
     except Exception as e:
-        return f"Error: Unexpected error: {type(e).__name__}: {e}"
+        return Command(
+            update={
+                "code": -1,
+                "messages": [
+                    ToolMessage(
+                        f"Error: Unexpected error: {type(e).__name__}: {e}",
+                        tool_call_id=tool_call_id,
+                    )
+                ],
+            }
+        )
+        # return f"Error: Unexpected error: {type(e).__name__}: {e}"
 
 
 # ######################################################################################
@@ -91,6 +137,10 @@ def create_theme_slicer_node(node_name, tools=None, structured_output=None):
     async def _after_model_hooks(
         state: SuperState, runtime: Runtime[SuperContext], response: AIMessage
     ):
+
+        # 去掉冗余信息
+        response.additional_kwargs = {}
+        response.response_metadata = {}
 
         return Command(
             update={"messages": [response]},
@@ -241,7 +291,7 @@ def create_route_theme_slicer_edges():
         if not _messages:
             return "__end__"
 
-        logger.info(f"[{_thread_id}]: _messages: {_messages}")
+        logger.info(f"[{_thread_id}]: _messages: {_messages[-1]}")
         if isinstance(_messages[-1], ToolMessage):
             return "human_feedback_node"
         if not isinstance(_messages[-1], AIMessage):
@@ -280,6 +330,8 @@ def compile_theme_slicer_agent():
     _agent.add_node("tools", tool_node)
 
     _agent.add_edge(START, "theme_slicer_node")
+    _agent.add_edge("tools", "theme_slicer_node")
+
     _agent.add_conditional_edges(
         source="theme_slicer_node",
         path=theme_slicer_route_edges,
@@ -299,4 +351,7 @@ def compile_theme_slicer_agent():
     )
 
     checkpointer = InMemorySaver()
-    return _agent.compile(checkpointer=checkpointer)
+    _agent = _agent.compile(checkpointer=checkpointer)
+    png_bytes = _agent.get_graph(xray=True).draw_mermaid()
+    logger.info(f"theme_slicer_agent: \n\n{png_bytes}")
+    return _agent
