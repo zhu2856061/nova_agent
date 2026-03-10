@@ -78,24 +78,25 @@ http://localhost:2021/docs#/
 
 🚀[todo] 文件操作能力：ls, read_file, write_file, edit_file, glob, and grep [重构 FilesystemMiddleware]
 
-⏳[todo] 设计一个通用型agent,其核心结构为：
+🚀[todo] 设计一个通用型super nova agent,其核心结构为：
     预置工具：
         1 网络搜索
         2 代码执行（依赖sandbox）
         3 文件操作
         4 询问澄清
-        5 子任务Agent创建
+        5 子任务Agent创建(TODO)
 
-    预置环境：sandbox
+    预置环境：sandbox(filesystem, daytona)
 
-
-
-⏳[todo] skill能力
+🚀[todo] skill能力
 分析deepagents 的源码，其中的中间件的能力是 before_agent, before_model, after_model, after_agent, wrap_model_call, wrap_tool_call
 其中间件的所有能力都可以转换成graph中的节点，其中 before_agent, before_model, after_model, after_agent 本质就是这样设计的
 而 wrap_model_call, wrap_tool_call 两个主要就是在model请求的时候和tool执行的时候在外层包装功能
 
-[todo]
-- skill能力，这里主要是去复用deepagent，将skill能力加入其中
+
+
+⏳[todo]
+- 代码结构修改，去掉models/agent 全面换成SuperAgent
+- subagent 能力
 - 新增代码分析/解决/生成 agent
 - 知乎检索

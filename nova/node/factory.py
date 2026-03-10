@@ -9,6 +9,7 @@ import uuid
 from typing import cast
 
 from langchain_core.messages import (
+    AIMessage,
     AnyMessage,
     HumanMessage,
     RemoveMessage,
@@ -24,21 +25,15 @@ from langgraph.runtime import Runtime
 from langgraph.types import Command
 
 from nova import CONF
-from nova.hooks import Agent_Hooks_Instance
+from nova.hooks import Agent_Hooks_Instance, Super_Agent_Hook_Instance
 from nova.llms import LLMS_Provider_Instance, Prompts_Provider_Instance
 from nova.model.agent import Context, Messages, State
-from nova.skills import Skill_Hooks_Instance
+from nova.model.super_agent import SuperContext, SuperState
 from nova.tools import (
-    filesystem_edit_file_tool,
-    filesystem_glob_tool,
-    filesystem_grep_tool,
-    filesystem_ls_tool,
-    filesystem_read_file_tool,
-    filesystem_write_file_tool,
     write_file_tool,
     write_todos,
 )
-from nova.utils.common import split_remove_message
+from nova.utils.common import truncate_if_too_long
 
 # ######################################################################################
 # 配置
@@ -49,6 +44,90 @@ logger = logging.getLogger(__name__)
 # 全局变量
 _DEFAULT_TRIM_TOKEN_LIMIT = 4000
 _DEFAULT_FALLBACK_MESSAGE_COUNT = 15
+
+
+# 创建节点
+def create_node(
+    node_name, *, prompt_dir=None, prompt_name=None, tools=None, structured_output=None
+):
+    # 核心：组装提示词
+    async def _before_model_hooks(state: SuperState, runtime: Runtime[SuperContext]):
+        # 当前messages
+        # 当前messages
+        _messages = cast(list[AnyMessage], state.get("messages"))
+
+        if not prompt_dir or not prompt_name:
+            return _messages
+
+        _system_prompt = Prompts_Provider_Instance.get_template(prompt_dir, prompt_name)
+
+        logger.info(f"prompt: {truncate_if_too_long(_system_prompt)}")
+
+        return [
+            SystemMessage(content=_system_prompt),
+        ] + _messages
+
+    async def _after_model_hooks(
+        state: SuperState, runtime: Runtime[SuperContext], response: AIMessage
+    ):
+
+        logger.info(f"result: {truncate_if_too_long(str(response))}")
+        if not isinstance(response, AIMessage):
+            return Command(
+                update={
+                    "code": 1,
+                    "err_message": "response type not AIMessage",
+                    "messages": [response],
+                },
+            )
+        # 去掉冗余信息
+        response.additional_kwargs = {}
+        response.response_metadata = {}
+
+        return Command(
+            update={"messages": [response], "data": {"result": response.content}},
+        )
+
+    @Super_Agent_Hook_Instance.node_with_hooks(node_name=node_name)
+    async def _node(state: SuperState, runtime: Runtime[SuperContext]):
+        # 获取运行时变量
+        _thread_id = runtime.context.get("thread_id", "default")
+        _model_name = runtime.context.get("model", "basic")
+        _config = runtime.context.get("config", {})
+        # 创建工作目录
+        # _task_dir = runtime.context.get("task_dir", CONF.SYSTEM.task_dir)
+        # _work_dir = os.path.join(cast(str, _task_dir), _thread_id)
+        # os.makedirs(_work_dir, exist_ok=True)
+
+        # 获取状态变量
+        _code = state.get("code", 0)
+        if _code != 0:
+            return Command(goto="__end__")
+
+        _messages = state.get("messages")
+        if not _messages:
+            return Command(
+                goto="__end__",
+                update={"code": -1, "messages": [AIMessage(content="No messages")]},
+            )
+
+        # 模型执行前
+        response = await _before_model_hooks(state, runtime)
+
+        # 模型执行中
+        response = await LLMS_Provider_Instance.llm_wrap_hooks(
+            _thread_id,
+            node_name,
+            response,
+            _model_name,
+            tools=tools,
+            structured_output=structured_output,
+            **_config,  # type: ignore
+        )
+        # 模型执行后
+        return await _after_model_hooks(state, runtime, response)
+
+    return _node
 
 
 def create_todos_list_node():
@@ -346,75 +425,3 @@ def create_summarization_node(trigger: int = -1):
         }
 
     return summarization
-
-
-def create_agent_with_todos_skills_tools_node(system_prompt_template: str = ""):
-    """
-    创建一个agent节点, 该agent具备如下功能：
-    1. 自身携带一个技能库
-    2. 内置一些工具：ls, read_file, write_file, edit_file, glob, and grep 主要是一些文件操作工具
-    """
-    tools = [
-        filesystem_edit_file_tool,
-        filesystem_glob_tool,
-        filesystem_grep_tool,
-        filesystem_ls_tool,
-        filesystem_read_file_tool,
-        filesystem_write_file_tool,
-        write_todos,
-    ]
-
-    @Agent_Hooks_Instance.node_with_hooks(node_name="agent_with_skills_tools")
-    async def agent_with_skills_tools(state: State, runtime: Runtime[Context]):
-        _NODE_NAME = "agent_with_skills_tools"
-
-        # 变量
-        _thread_id = runtime.context.thread_id
-        _task_dir = runtime.context.task_dir or CONF.SYSTEM.task_dir
-        _model_name = runtime.context.model
-        _messages = (
-            state.messages.value
-            if isinstance(state.messages, Messages)
-            else state.messages
-        )
-        _messages = split_remove_message(_messages)
-
-        _work_dir = os.path.join(_task_dir, _thread_id)
-        os.makedirs(_work_dir, exist_ok=True)
-
-        # 提示词
-        def _assemble_prompt():
-            _system_prompt = [system_prompt_template]
-
-            ## todo list
-            _system_prompt.append(
-                Prompts_Provider_Instance.get_template("node", "todo_list")
-            )
-
-            ## 技能
-            _system_prompt.append(Skill_Hooks_Instance.get_skill_prompt_template())
-
-            ## 文件系统操作工具
-            _system_prompt.append(
-                Prompts_Provider_Instance.prompt_apply_template(
-                    Prompts_Provider_Instance.get_template("node", "filesystem"),
-                    {"base_path": os.path.abspath(_work_dir)},
-                )
-            )
-
-            _system_prompt = "\n\n".join(_system_prompt)
-
-            return [
-                SystemMessage(content=_system_prompt),
-            ] + _messages
-
-        # 4 大模型
-        response = await LLMS_Provider_Instance.llm_wrap_hooks(
-            _thread_id, _NODE_NAME, _assemble_prompt(), _model_name, tools=tools
-        )
-
-        return Command(
-            update={"messages": [response]},
-        )
-
-    return agent_with_skills_tools, tools

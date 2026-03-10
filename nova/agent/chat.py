@@ -10,7 +10,7 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import START, StateGraph
 
 from nova.model.super_agent import SuperContext, SuperState
-from nova.node.common import create_node
+from nova.node.factory import create_node
 
 logger = logging.getLogger(__name__)
 # ######################################################################################
