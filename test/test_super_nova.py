@@ -11,13 +11,18 @@ import httpx
 async def agent_client(chat_router):
     request_data = {
         "trace_id": "123",
-        "context": {"thread_id": "Nova1", "model": "deepseek"},
+        "context": {
+            "thread_id": "Nova",
+            "model": "deepseek",
+            "models": {"summarize": "deepseek"},
+        },
         "state": {
             "messages": [
                 {
                     "type": "human",
-                    # "content": "帮忙开发客服系统, 千珏 职业赛场使用率 数据分析",
-                    "content": "使用skills 告诉我langgraph是什么?",
+                    "content": "帮忙开发客服系统, 千珏 职业赛场使用率 数据分析",
+                    # "content": "使用skills 告诉我langgraph是什么?",
+                    # "content": "你先按你的思路，实现一个电竞客服系统， 整体框架搭建，并进行开发",
                 },
             ],
         },
@@ -57,7 +62,7 @@ async def human_in_loop_client(chat_router):
         "context": {
             "thread_id": "Nova",
             "model": "basic",
-            "models": {"summarize": "basic"},
+            "models": {"summarize": "deepseek"},
         },
         "state": {
             "user_guidance": {
@@ -89,5 +94,5 @@ async def human_in_loop_client(chat_router):
 
 if __name__ == "__main__":
     chat_router = "super_nova"
-    asyncio.run(agent_client(chat_router))
-    # asyncio.run(human_in_loop_client(chat_router))
+    # asyncio.run(agent_client(chat_router))
+    asyncio.run(human_in_loop_client(chat_router))

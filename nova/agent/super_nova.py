@@ -8,7 +8,14 @@ import logging
 import os
 from typing import Literal, cast
 
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
+from langchain_core.messages.tool import ToolCall
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import START, StateGraph
 from langgraph.prebuilt.tool_node import ToolNode
@@ -29,6 +36,93 @@ logger = logging.getLogger(__name__)
 
 # ######################################################################################
 # 全局变量
+
+
+def _format_clarification_message(args: dict) -> str:
+    """Format the clarification arguments into a user-friendly message.
+
+    Args:
+        args: The tool call arguments containing clarification details
+
+    Returns:
+        Formatted message string
+    """
+    question = args.get("question", "")
+    clarification_type = args.get("clarification_type", "missing_info")
+    context = args.get("context")
+    options = args.get("options", [])
+
+    # Type-specific icons
+    type_icons = {
+        "missing_info": "❓",
+        "ambiguous_requirement": "🤔",
+        "approach_choice": "🔀",
+        "risk_confirmation": "⚠️",
+        "suggestion": "💡",
+    }
+
+    icon = type_icons.get(clarification_type, "❓")
+
+    # Build the message naturally
+    message_parts = []
+
+    # Add icon and question together for a more natural flow
+    if context:
+        # If there's context, present it first as background
+        message_parts.append(f"{icon} {context}")
+        message_parts.append(f"\n{question}")
+    else:
+        # Just the question with icon
+        message_parts.append(f"{icon} {question}")
+
+    # Add options in a cleaner format
+    if options and len(options) > 0:
+        message_parts.append("")  # blank line for spacing
+        for i, option in enumerate(options, 1):
+            message_parts.append(f"  {i}. {option}")
+
+    return "\n".join(message_parts)
+
+
+def _handle_clarification(request: ToolCall) -> ToolMessage:
+    """Handle clarification request and return command to interrupt execution.
+
+    Args:
+        request: Tool call request
+
+    Returns:
+        Command that interrupts execution with the formatted clarification message
+    """
+    # Extract clarification arguments
+    args = request["args"]
+
+    question = args.get("question", "")
+
+    print("[ClarificationMiddleware] Intercepted clarification request")
+    print(f"[ClarificationMiddleware] Question: {question}")
+
+    # Format the clarification message
+    formatted_message = _format_clarification_message(args)
+
+    # Get the tool call ID
+    tool_call_id = request.get("id", "")
+
+    # Create a ToolMessage with the formatted question
+    # This will be added to the message history
+    tool_message = ToolMessage(
+        content=formatted_message,
+        tool_call_id=tool_call_id,
+        name="ask_clarification",
+    )
+
+    # Return a Command that:
+    # 1. Adds the formatted tool message
+    # 2. Interrupts execution by going to __end__
+    # Note: We don't add an extra AIMessage here - the frontend will detect
+    # and display ask_clarification tool messages directly
+    return tool_message
+
+
 def ask_clarification(
     question: str,
     clarification_type: Literal[
@@ -64,29 +158,51 @@ def create_digital_human_node(node_name, tools=None, structured_output=None):
             "super_nova", "ask_clarification"
         )
 
+        # 加入todo list
+        todo_list_system_prompt = Prompts_Provider_Instance.get_template(
+            "super_nova", "write_todos"
+        )
+
         # 加入网络搜索
         web_search_system_prompt = Prompts_Provider_Instance.get_template(
             "super_nova", "web_search"
         )
 
         # 加入文件操作
-        filesystem_system_prompt = Prompts_Provider_Instance.get_template(
-            "super_nova", "filesystem"
+        _thread_id = runtime.context.get("thread_id", "default")
+        _task_dir = runtime.context.get("task_dir", CONF.SYSTEM.task_dir)
+        _work_dir = os.path.join(cast(str, _task_dir), _thread_id)
+
+        filesystem_system_prompt = Prompts_Provider_Instance.prompt_apply_template(
+            Prompts_Provider_Instance.get_template("super_nova", "filesystem"),
+            {"work_dir": _work_dir},
+        )
+
+        # 加入代码执行
+        execute_tool_system_prompt = Prompts_Provider_Instance.get_template(
+            "super_nova", "execute_tool"
         )
 
         # 加入Skills
         skill_system_prompt = Skill_Hooks_Instance.get_skill_prompt_template()
 
         # 重要提醒
-        critical_reminders_system_prompt = Prompts_Provider_Instance.get_template(
-            "super_nova", "critical_reminders"
+        critical_reminders_system_prompt = (
+            Prompts_Provider_Instance.prompt_apply_template(
+                Prompts_Provider_Instance.get_template(
+                    "super_nova", "critical_reminders"
+                ),
+                {"work_dir": _work_dir},
+            )
         )
 
         _system_instruction = [
             base_agent_system_prompt,
             ask_clarification_system_prompt,
+            todo_list_system_prompt,
             web_search_system_prompt,
             filesystem_system_prompt,
+            execute_tool_system_prompt,
             skill_system_prompt,
             critical_reminders_system_prompt,
         ]
@@ -103,19 +219,25 @@ def create_digital_human_node(node_name, tools=None, structured_output=None):
         state: SuperState, runtime: Runtime[SuperContext], response: AIMessage
     ):
 
+        tmp = response
         if (
             response.tool_calls
             and response.tool_calls[-1]["name"] == "ask_clarification"
         ):
-            res = ask_clarification(**response.tool_calls[-1]["args"])  # type: ignore
-            response.content = res
+            # res = ask_clarification(**response.tool_calls[-1]["args"])  # type: ignore
+            # response.content = res
+
+            tmp = _handle_clarification(response.tool_calls[-1])
 
         # 去掉冗余信息
-        response.additional_kwargs = {}
-        response.response_metadata = {}
+        tmp.additional_kwargs = {}
+        tmp.response_metadata = {}
 
         return Command(
-            update={"messages": [response], "data": {"result": response.content}},
+            update={
+                "messages": [tmp],
+                "data": {"result": tmp.content},
+            },
         )
 
     @Super_Agent_Hook_Instance.node_with_hooks(node_name=node_name)
@@ -231,19 +353,19 @@ def create_route_tools_edges():
         if not _messages:
             return "__end__"
 
-        if not isinstance(_messages[-1], AIMessage):
-            return "__end__"
+        last_message = _messages[-1]
 
-        last_message = cast(AIMessage, _messages[-1])
+        if isinstance(last_message, ToolMessage):
+            if last_message.name == "ask_clarification":
+                return "human_feedback_node"
 
         # 检查LLM是否生成了工具调用指令
-        if hasattr(last_message, "tool_calls") and last_message.tool_calls:
-            logger.info(
-                f"[{_thread_id}]: LLM 生成了工具调用指令: {last_message.tool_calls}"
-            )
-            if last_message.tool_calls[-1]["name"] == "ask_clarification":
-                return "human_feedback_node"
-            return "tools"
+        if isinstance(last_message, AIMessage):
+            if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+                logger.info(
+                    f"[{_thread_id}]: LLM 生成了工具调用指令: {last_message.tool_calls}"
+                )
+                return "tools"
 
         return "__end__"
 
@@ -266,6 +388,8 @@ def compile_super_nova_agent():
         tools["glob"],
         tools["grep"],
         tools["ls"],
+        tools["execute"],
+        tools["write_todos"],
     ]
 
     digital_human_node = create_digital_human_node(

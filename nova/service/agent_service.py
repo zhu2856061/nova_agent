@@ -204,7 +204,7 @@ async def agent_service(agent, request: SuperAgentRequest):
                 code=1, data={"err_message": "thread_id is required"}
             )
 
-        config = {"configurable": {"thread_id": thread_id}}
+        config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 100}
 
         if not stream:
             response = await agent.ainvoke(state, context=context, config=config)
