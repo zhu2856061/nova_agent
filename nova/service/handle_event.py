@@ -8,9 +8,11 @@ import ast
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, Optional, cast
 
 from langgraph.types import Command
+
+from nova.utils.common import truncate_if_too_long
 
 logger = logging.getLogger(__name__)
 
@@ -170,9 +172,14 @@ class ChainEndHandler(EventHandler):
             return None
 
         node_name = get_node_name(langgraph_node, name)
-        output = safe_get(event, "data.output", "")
+        output = safe_get(event, "data.output", {})
         if isinstance(output, Command):
             output = output.update
+
+        if isinstance(output, dict):
+            output = output.get("data", {})
+        elif isinstance(output, str):
+            output = truncate_if_too_long(output)
 
         return {
             "event_name": "on_chain_end",
@@ -211,13 +218,18 @@ class ToolEndHandler(EventHandler):
         langgraph_node = safe_get(event, "metadata.langgraph_node", "")
         name = safe_get(event, "name", "")
         node_name = get_node_name(langgraph_node, name)
+        tmp = safe_get(event, "data.output", "")
+        # if isinstance(tmp, ToolMessage):
+        #     tmp = truncate_if_too_long(str(tmp.content))
+        # else:
+        #     tmp = truncate_if_too_long(tmp["content"])
 
         return {
             "event_name": "on_tool_end",
             "event_info": {
                 "trace_id": trace_id,
                 "node_name": node_name,
-                "output": safe_get(event, "data.output", ""),
+                "output": tmp,
             },
         }
 

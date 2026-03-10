@@ -41,7 +41,8 @@ class SuperState(TypedDict):
     code: NotRequired[int | None]  # 判断状态 0 正常 1 异常
     err_message: NotRequired[str | None]  # 错误信息
 
-    messages: Annotated[list[AnyMessage], add_messages]  # 核心交互信息
+    # messages: Annotated[list[AnyMessage], add_messages]  # 核心交互信息
+    messages: NotRequired[Annotated[list[AnyMessage], add_messages]]  # 核心交互信息
 
     user_guidance: NotRequired[Dict | None]  # 用户反馈信息
     data: NotRequired[Dict | None]  # 核心结果信息存储

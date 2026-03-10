@@ -50,6 +50,7 @@ async def stream_agent_events(
     instance, trace_id, state, context, config: dict
 ) -> AsyncGenerator:
     """Generic streaming handler for all agents"""
+    state["code"] = 0
     try:
         async with aiohttp.ClientSession() as session:  # Auto-closing context manager
             async for event in instance.astream_events(

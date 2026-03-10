@@ -10,7 +10,7 @@ import uuid
 from typing import Annotated, cast
 
 from langchain.tools import InjectedToolCallId, ToolRuntime, tool
-from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, AnyMessage, SystemMessage, ToolMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import START, StateGraph
 from langgraph.prebuilt.tool_node import ToolNode
@@ -125,7 +125,7 @@ def create_memorizer_node(node_name, tools=None, structured_output=None):
 
         _user_id = _config.get("user_id")  # type: ignore
 
-        _messages = state.get("messages")
+        _messages = cast(list[AnyMessage], state.get("messages"))
 
         memories = await cast(BaseStore, SQLITESTORE).asearch(
             ("memories", cast(str, _user_id)),

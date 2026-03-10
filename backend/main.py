@@ -50,7 +50,9 @@ app = FastAPI(
     lifespan=lifespan,
     debug=CONF.SYSTEM.DEBUG,
 )
-
+# 启用压缩，减少传输字节数
+# from fastapi.middleware.gzip import GZipMiddleware
+# app.add_middleware(GZipMiddleware, minimum_size=1000)
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,

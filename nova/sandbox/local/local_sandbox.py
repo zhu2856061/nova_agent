@@ -5,14 +5,17 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import os
 import re
 import subprocess
 from pathlib import Path
-from typing import List, Literal
+from typing import Any, List, Literal, Optional
 
-from nova.model.agent import Todo
+from langchain_core.messages import HumanMessage
+
+from nova.llms import LLMS_Provider_Instance, Prompts_Provider_Instance
 from nova.sandbox.local.utils import (
     build_grep_results_dict,
     clean_markdown_links,
@@ -379,7 +382,9 @@ class LocalSandbox(Sandbox):
         # Reverse resolve local paths back to container paths in output
         return self._reverse_resolve_paths_in_output(final_output)
 
-    async def web_search(self, queries: List[str]) -> str:
+    async def web_search(
+        self, queries: List[str], summarize_model: Optional[str] = None
+    ) -> str:
         logger.info(f"开始网络检索：检索词: {queries}")
 
         serp_tool = SerpBaiduTool()
@@ -418,16 +423,115 @@ class LocalSandbox(Sandbox):
                 )
 
                 unique_results[url]["raw_content"] = text
+        if summarize_model is None:
+            # 汇总信息
+            all_info = []
+            for result in unique_results.values():
+                all_info.append(
+                    f"**query**: {result['query']}\n\n**title**: {result['title']}\n\n**abstract**: {result['abstract']}\n\n**content**: {result['raw_content'][:4096]}\n"
+                )
 
-        # 汇总信息
-        all_info = []
-        for result in unique_results.values():
-            all_info.append(
-                f"**query**: {result['query']}\n\n**title**: {result['title']}\n\n**abstract**: {result['abstract']}\n\n**content**: {result['raw_content']}\n"
+            logger.info(f"网络检索完成，检索结果数量: {len(all_info)}")
+            return "\n\n---\n\n".join(all_info)
+        else:
+            all_info = []
+
+            async def noop():
+                return None
+
+            summarization_tasks = [
+                noop()
+                if not result.get("raw_content")
+                else self.summarize(
+                    summarize_model,
+                    "**query**: "
+                    + result["query"]
+                    + "\n\n"
+                    + "**title**: "
+                    + result["title"]
+                    + "\n\n"
+                    + "**abstract**: "
+                    + result["abstract"]
+                    + "\n\n"
+                    + "**content**: "
+                    + result["raw_content"],
+                )
+                for result in unique_results.values()
+            ]
+            summaries = await asyncio.gather(*summarization_tasks)
+
+            for result, summary in zip(unique_results.values(), summaries):
+                all_info.append(
+                    f"**query**: {result['query']}\n\n**title**: {result['title']}\n\n**abstract**: {result['abstract']}\n\n**content**: {summary}\n"
+                )
+
+            logger.info(f"网络检索完成，检索结果数量: {len(all_info)}")
+            return "\n\n---\n\n".join(all_info)
+
+    def fetch_url(self, url: str, timeout: int = 30) -> str:
+        """Fetch content from a URL and convert HTML to markdown format.
+
+        This tool fetches web page content and converts it to clean markdown text,
+        making it easy to read and process HTML content. After receiving the markdown,
+        you MUST synthesize the information into a natural, helpful response for the user.
+
+        Args:
+            url: The URL to fetch (must be a valid HTTP/HTTPS URL)
+            timeout: Request timeout in seconds (default: 30)
+
+        Returns:
+            Dictionary containing:
+            - success: Whether the request succeeded
+            - url: The final URL after redirects
+            - markdown_content: The page content converted to markdown
+            - status_code: HTTP status code
+            - content_length: Length of the markdown content in characters
+
+        IMPORTANT: After using this tool:
+        1. Read through the markdown content
+        2. Extract relevant information that answers the user's question
+        3. Synthesize this into a clear, natural language response
+        4. NEVER show the raw markdown to the user unless specifically requested
+        """
+        try:
+            import requests
+            from markdownify import markdownify
+        except ImportError as exc:
+            return json.dumps(
+                {
+                    "error": f"Required package not installed: {exc.name}. "
+                    "Install with: pip install 'deepagents[cli]'",
+                    "url": url,
+                },
+                ensure_ascii=False,
             )
 
-        logger.info(f"网络检索完成，检索结果数量: {len(all_info)}")
-        return "\n\n---\n\n".join(all_info)
+        try:
+            response = requests.get(
+                url,
+                timeout=timeout,
+                headers={"User-Agent": "Mozilla/5.0 (compatible; DeepAgents/1.0)"},
+            )
+            response.raise_for_status()
+
+            # Convert HTML content to markdown
+            markdown_content = markdownify(response.text)
+
+            return json.dumps(
+                {
+                    "url": str(response.url),
+                    "markdown_content": markdown_content,
+                    "status_code": response.status_code,
+                    "content_length": len(markdown_content),
+                },
+                ensure_ascii=False,
+            )[:2048]
+
+        except requests.exceptions.RequestException as e:
+            return json.dumps(
+                {"error": f"Fetch URL error: {e!s}", "url": url},
+                ensure_ascii=False,
+            )
 
     def ask_clarification(
         self,
@@ -453,5 +557,43 @@ class LocalSandbox(Sandbox):
     ) -> str:
         return ""
 
-    def todo_list(self, todos: list[Todo]) -> str:
+    def todo_list(self, todos: list) -> str:
         return f"Updated todo list to {todos}"
+
+    async def summarize(self, model: str, content: str):
+        llm = LLMS_Provider_Instance.get_llm_by_type(model)
+        _webpage_content = content
+
+        def _assemble_prompt(content):
+            tmp = {
+                "messages": content,
+            }
+            _prompt_tamplate = Prompts_Provider_Instance.get_template(
+                "super_nova", "summarize"
+            )
+            return [
+                HumanMessage(
+                    content=Prompts_Provider_Instance.prompt_apply_template(
+                        _prompt_tamplate, tmp
+                    )
+                )
+            ]
+
+        max_retries = 3
+        current_retry = 0
+        while current_retry <= max_retries:
+            try:
+                result = await asyncio.wait_for(
+                    llm.ainvoke(_assemble_prompt(_webpage_content)),
+                    timeout=200.0,
+                )
+                return f"""<summary>\n{result.content}\n</summary>"""  # type: ignore
+            except Exception:
+                token_limit = int(len(_webpage_content) * 0.7)
+                logger.warning(
+                    f"current_retry: {current_retry}, summarize reducing the chars to: {token_limit}"
+                )
+                _webpage_content = _webpage_content[:token_limit]
+                current_retry += 1
+
+        return content

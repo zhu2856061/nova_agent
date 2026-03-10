@@ -8,11 +8,7 @@ import logging
 import os
 from typing import Literal, cast
 
-from langchain_core.messages import (
-    AIMessage,
-    HumanMessage,
-    SystemMessage,
-)
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, SystemMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import START, StateGraph
 from langgraph.prebuilt.tool_node import ToolNode
@@ -20,10 +16,11 @@ from langgraph.runtime import Runtime
 from langgraph.types import Command, interrupt
 
 from nova import CONF
-from nova.hooks import Super_Agent_Hook_Instance
+from nova.hooks import Skill_Hooks_Instance, Super_Agent_Hook_Instance
 from nova.llms import LLMS_Provider_Instance, Prompts_Provider_Instance
 from nova.model.super_agent import SuperContext, SuperState
 from nova.tools.digital_human_manager import Digital_Human_Manager
+from nova.utils.common import get_today_str
 
 logger = logging.getLogger(__name__)
 # ######################################################################################
@@ -56,21 +53,31 @@ def create_digital_human_node(node_name, tools=None, structured_output=None):
     async def _before_model_hooks(state: SuperState, runtime: Runtime[SuperContext]):
         # 核心：组装提示词
 
-        # 当前messages
-        _messages = state.get("messages")
-
-        base_agent_system_prompt = Prompts_Provider_Instance.get_template(
-            "super_nova", "base_agent"
+        # 基础提示
+        base_agent_system_prompt = Prompts_Provider_Instance.prompt_apply_template(
+            Prompts_Provider_Instance.get_template("super_nova", "base_agent"),
+            {"date": get_today_str()},
         )
 
+        # 加入澄清
         ask_clarification_system_prompt = Prompts_Provider_Instance.get_template(
             "super_nova", "ask_clarification"
         )
 
+        # 加入网络搜索
         web_search_system_prompt = Prompts_Provider_Instance.get_template(
             "super_nova", "web_search"
         )
 
+        # 加入文件操作
+        filesystem_system_prompt = Prompts_Provider_Instance.get_template(
+            "super_nova", "filesystem"
+        )
+
+        # 加入Skills
+        skill_system_prompt = Skill_Hooks_Instance.get_skill_prompt_template()
+
+        # 重要提醒
         critical_reminders_system_prompt = Prompts_Provider_Instance.get_template(
             "super_nova", "critical_reminders"
         )
@@ -79,8 +86,13 @@ def create_digital_human_node(node_name, tools=None, structured_output=None):
             base_agent_system_prompt,
             ask_clarification_system_prompt,
             web_search_system_prompt,
+            filesystem_system_prompt,
+            skill_system_prompt,
             critical_reminders_system_prompt,
         ]
+
+        # 当前messages
+        _messages = cast(list[AnyMessage], state.get("messages"))
 
         _system_instruction = "\n\n".join(_system_instruction)
         return [
@@ -91,7 +103,10 @@ def create_digital_human_node(node_name, tools=None, structured_output=None):
         state: SuperState, runtime: Runtime[SuperContext], response: AIMessage
     ):
 
-        if response.tool_calls[-1]["name"] == "ask_clarification":
+        if (
+            response.tool_calls
+            and response.tool_calls[-1]["name"] == "ask_clarification"
+        ):
             res = ask_clarification(**response.tool_calls[-1]["args"])  # type: ignore
             response.content = res
 
@@ -123,7 +138,7 @@ def create_digital_human_node(node_name, tools=None, structured_output=None):
         if not _messages:
             return Command(
                 goto="__end__",
-                update={"code": -1, "messages": [AIMessage(content="No messages")]},
+                update={"code": -1, "err_message": "No messages"},
             )
 
         # 模型执行前
@@ -163,7 +178,7 @@ def create_human_feedback_node(node_name):
         # 获取状态变量
         _code = state.get("code", 0)
         if _code != 0:
-            return Command(goto="__end__", update={"code": _code})
+            return Command(goto="__end__")
 
         _messages = state.get("messages")
         if not _messages:
@@ -241,7 +256,17 @@ def compile_super_nova_agent():
 
     # 节点和边
     tools = Digital_Human_Manager.copy()
-    tools = [tools["ask_clarification"], tools["web_search"]]
+    tools = [
+        tools["ask_clarification"],
+        tools["web_search"],
+        tools["fetch_url"],
+        tools["read_file"],
+        tools["write_file"],
+        tools["edit_file"],
+        tools["glob"],
+        tools["grep"],
+        tools["ls"],
+    ]
 
     digital_human_node = create_digital_human_node(
         node_name="digital_human_node", tools=tools

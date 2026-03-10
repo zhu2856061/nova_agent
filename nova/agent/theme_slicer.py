@@ -12,6 +12,7 @@ from typing import Annotated, List, cast
 from langchain.tools import InjectedToolCallId, ToolRuntime, tool
 from langchain_core.messages import (
     AIMessage,
+    AnyMessage,
     HumanMessage,
     ToolMessage,
     get_buffer_string,
@@ -117,7 +118,7 @@ def create_theme_slicer_node(node_name, tools=None, structured_output=None):
         _human_in_loop_value = (
             user_guidance.get("human_in_loop_value", "") if user_guidance else ""
         )
-        _messages = state.get("messages")
+        _messages = cast(list[AnyMessage], state.get("messages"))
         tmp = {
             "content": get_buffer_string(_messages),
             "user_guidance": _human_in_loop_value,

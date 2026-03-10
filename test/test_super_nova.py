@@ -11,12 +11,13 @@ import httpx
 async def agent_client(chat_router):
     request_data = {
         "trace_id": "123",
-        "context": {"thread_id": "Nova", "model": "basic"},
+        "context": {"thread_id": "Nova1", "model": "deepseek"},
         "state": {
             "messages": [
                 {
                     "type": "human",
-                    "content": "帮忙开发客服系统, 千珏 职业赛场使用率 数据分析",
+                    # "content": "帮忙开发客服系统, 千珏 职业赛场使用率 数据分析",
+                    "content": "使用skills 告诉我langgraph是什么?",
                 },
             ],
         },
@@ -53,10 +54,14 @@ async def agent_client(chat_router):
 async def human_in_loop_client(chat_router):
     request_data = {
         "trace_id": "123",
-        "context": {"thread_id": "Nova", "model": "basic", "recursion_limit": 100},
+        "context": {
+            "thread_id": "Nova",
+            "model": "basic",
+            "models": {"summarize": "basic"},
+        },
         "state": {
             "user_guidance": {
-                "human_in_loop": "同时开发，不需要关联",
+                "human_in_loop": "你自己规划，不用来问，多上网查查",
                 "agent_name": chat_router,
             },
         },
@@ -73,7 +78,7 @@ async def human_in_loop_client(chat_router):
         ) as response:
             # 检查响应状态码
             if response.status_code != 200:
-                print(f"Error: {response.text}")
+                print(f"Error: {response}")
                 return
 
             async for chunk in response.aiter_bytes():

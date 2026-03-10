@@ -5,9 +5,7 @@
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from typing import List, Literal
-
-from nova.model.agent import Todo
+from typing import List, Literal, Optional
 
 
 class Sandbox(ABC):
@@ -100,8 +98,15 @@ class Sandbox(ABC):
         pass
 
     @abstractmethod
-    async def web_search(self, queries: List[str]) -> str:
+    async def web_search(
+        self, queries: List[str], summarize_model: Optional[str] = None
+    ) -> str:
         """网络搜索功能"""
+        pass
+
+    @abstractmethod
+    async def fetch_url(self, url: str, timeout: int = 30) -> str:
+        """网络抓取功能"""
         pass
 
     @abstractmethod
@@ -131,7 +136,7 @@ class Sandbox(ABC):
         pass
 
     @abstractmethod
-    def todo_list(self, todos: list[Todo]) -> str:
+    def todo_list(self, todos: list) -> str:
         return f"Updated todo list to {todos}"
 
 

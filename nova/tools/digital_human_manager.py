@@ -4,7 +4,7 @@
 # @Moto   : Knowledge comes from decomposition
 from __future__ import annotations
 
-from typing import Annotated, List, Literal
+from typing import Annotated, List, Literal, cast
 
 from langchain.tools import InjectedToolCallId, ToolRuntime, tool
 
@@ -13,7 +13,8 @@ from nova.controller.sandbox_exceptions import (
     SandboxNotFoundError,
     SandboxRuntimeError,
 )
-from nova.model.agent import Context, State, Todo
+from nova.model.skill import Todo
+from nova.model.super_agent import SuperContext, SuperState
 from nova.sandbox.sandbox import Sandbox
 from nova.sandbox.sandbox_provider import get_sandbox_provider
 
@@ -21,7 +22,7 @@ from nova.sandbox.sandbox_provider import get_sandbox_provider
 # ======================================================================================
 # 通用函数
 def ensure_sandbox_initialized(
-    runtime: ToolRuntime[Context, State] | None = None,
+    runtime: ToolRuntime[SuperContext, SuperState] | None = None,
 ) -> Sandbox:
     """Ensure sandbox is initialized, acquiring lazily if needed.
 
@@ -47,16 +48,16 @@ def ensure_sandbox_initialized(
         raise SandboxRuntimeError("Tool runtime state not available")
 
     # Check if sandbox already exists in state
-    sandbox_id = runtime.state.sandbox_id
-    if sandbox_id is not None:
-        sandbox = get_sandbox_provider().get(sandbox_id)
+    sandbox_id = runtime.state.get("sandbox_id", "local")
 
-        if sandbox is not None:
-            return sandbox
-            # Sandbox was released, fall through to acquire new one
+    sandbox = get_sandbox_provider().get(cast(str, sandbox_id))
+
+    if sandbox is not None:
+        return sandbox
+        # Sandbox was released, fall through to acquire new one
 
     # Lazy acquisition: get thread_id and acquire sandbox
-    thread_id = runtime.context.thread_id
+    thread_id = runtime.context.get("thread_id")
     if thread_id is None:
         raise SandboxRuntimeError("Thread ID not available in runtime context")
 
@@ -66,7 +67,7 @@ def ensure_sandbox_initialized(
     sandbox_id = provider.acquire(thread_id)
 
     # Update runtime state - this persists across tool calls
-    runtime.state.sandbox_id = sandbox_id
+    runtime.state["sandbox_id"] = sandbox_id
 
     # Retrieve and return the sandbox
     sandbox = provider.get(sandbox_id)
@@ -93,12 +94,17 @@ Examples:
 @tool("web_search", description=WEB_SEARCH_TOOL_DESCRIPTION)
 async def sandbox_web_search_tool(
     tool_call_id: Annotated[str, InjectedToolCallId],
-    runtime: ToolRuntime[Context, State],
+    runtime: ToolRuntime[SuperContext, SuperState],
     query: List[str],
 ):
     try:
+        models = runtime.context.get("models")
+        model = None
+        if models and models.get("summarize"):
+            model = models.get("summarize")
+
         sandbox = ensure_sandbox_initialized(runtime)
-        result = sandbox.web_search(query)
+        result = await sandbox.web_search(query, summarize_model=model)
         return result
 
     except SandboxError as e:
@@ -110,6 +116,54 @@ async def sandbox_web_search_tool(
 # ======================================================================================
 
 # ======================================================================================
+# url 抓取数据
+FETCH_URL_TOOL_DESCRIPTION = """Fetch content from a URL and convert HTML to markdown format.
+
+    This tool fetches web page content and converts it to clean markdown text,
+    making it easy to read and process HTML content. After receiving the markdown,
+    you MUST synthesize the information into a natural, helpful response for the user.
+
+    Args:
+        url: The URL to fetch (must be a valid HTTP/HTTPS URL)
+        timeout: Request timeout in seconds (default: 30)
+
+    Returns:
+        Dictionary containing:
+        - success: Whether the request succeeded
+        - url: The final URL after redirects
+        - markdown_content: The page content converted to markdown
+        - status_code: HTTP status code
+        - content_length: Length of the markdown content in characters
+
+    IMPORTANT: After using this tool:
+    1. Read through the markdown content
+    2. Extract relevant information that answers the user's question
+    3. Synthesize this into a clear, natural language response
+    4. NEVER show the raw markdown to the user unless specifically requested
+"""
+
+
+@tool("fetch_url_tool", description=FETCH_URL_TOOL_DESCRIPTION)
+async def sandbox_fetch_url_tool(
+    tool_call_id: Annotated[str, InjectedToolCallId],
+    runtime: ToolRuntime[SuperContext, SuperState],
+    url: str,
+):
+    try:
+        sandbox = ensure_sandbox_initialized(runtime)
+        result = sandbox.fetch_url(url)
+        return result
+
+    except SandboxError as e:
+        return f"Error: {e}"
+    except Exception as e:
+        return f"Error: Unexpected error listing directory: {type(e).__name__}: {e}"
+
+
+# ======================================================================================
+
+
+# ======================================================================================
 # 子任务创建
 SUBAGENT_CREATION_DESCRIPTION = """\n"""
 
@@ -117,7 +171,7 @@ SUBAGENT_CREATION_DESCRIPTION = """\n"""
 @tool("create_subagent", description=SUBAGENT_CREATION_DESCRIPTION)
 async def create_subagent_tool(
     tool_call_id: Annotated[str, InjectedToolCallId],
-    runtime: ToolRuntime[Context, State],
+    runtime: ToolRuntime[SuperContext, SuperState],
     description: str,
     prompt: str,
     subagent_type: Literal["general-purpose", "bash"],
@@ -167,7 +221,7 @@ ASK_CLARIFICATION_DESCRIPTION = """Ask the user for clarification when you need 
 @tool("ask_clarification", description=ASK_CLARIFICATION_DESCRIPTION)
 async def ask_clarification_tool(
     tool_call_id: Annotated[str, InjectedToolCallId],
-    runtime: ToolRuntime[Context, State],
+    runtime: ToolRuntime[SuperContext, SuperState],
     question: str,
     clarification_type: Literal[
         "missing_info",
@@ -221,7 +275,7 @@ DEFAULT_READ_LIMIT = 500
 @tool("read_file", description=READ_FILE_DESCRIPTION)
 async def sandbox_read_file_tool(
     tool_call_id: Annotated[str, InjectedToolCallId],
-    runtime: ToolRuntime[Context, State],
+    runtime: ToolRuntime[SuperContext, SuperState],
     file_path: str,
     offset: int = DEFAULT_READ_OFFSET,
     limit: int = DEFAULT_READ_LIMIT,
@@ -254,7 +308,7 @@ Usage:
 @tool("write_file", description=WRITE_FILE_DESCRIPTION)
 async def sandbox_write_file_tool(
     tool_call_id: Annotated[str, InjectedToolCallId],
-    runtime: ToolRuntime[Context, State],
+    runtime: ToolRuntime[SuperContext, SuperState],
     file_path: str,
     content: str,
     append: bool = False,
@@ -289,7 +343,7 @@ Usage:
 @tool("edit_file", description=EDIT_FILE_DESCRIPTION)
 async def sandbox_edit_file_tool(
     tool_call_id: Annotated[str, InjectedToolCallId],
-    runtime: ToolRuntime[Context, State],
+    runtime: ToolRuntime[SuperContext, SuperState],
     file_path: str,
     old_string: str,
     new_string: str,
@@ -323,7 +377,7 @@ Usage:
 @tool("ls", description=SANDBOX_LS_DESCRIPTION)
 async def sandbox_ls_tool(
     tool_call_id: Annotated[str, InjectedToolCallId],
-    runtime: ToolRuntime[Context, State],
+    runtime: ToolRuntime[SuperContext, SuperState],
     path: str,
 ):
     try:
@@ -360,7 +414,7 @@ Examples:
 @tool("glob", description=GLOB_DESCRIPTION)
 async def sandbox_glob_tool(
     tool_call_id: Annotated[str, InjectedToolCallId],
-    runtime: ToolRuntime[Context, State],
+    runtime: ToolRuntime[SuperContext, SuperState],
     pattern: str,
     path: str = "/",
 ):
@@ -401,7 +455,7 @@ Examples:
 @tool("grep", description=GREP_DESCRIPTION)
 async def sandbox_grep_tool(
     tool_call_id: Annotated[str, InjectedToolCallId],
-    runtime: ToolRuntime[Context, State],
+    runtime: ToolRuntime[SuperContext, SuperState],
     pattern: str,
     path: str | None = None,
     glob: str | None = None,
@@ -473,7 +527,7 @@ If execution is not supported, the tool will return an error message."""
 @tool("execute", description=EXECUTE_DESCRIPTION)
 async def sandbox_execute_tool(
     tool_call_id: Annotated[str, InjectedToolCallId],
-    runtime: ToolRuntime[Context, State],
+    runtime: ToolRuntime[SuperContext, SuperState],
     command: str,
 ):
     try:
@@ -551,7 +605,7 @@ Remember: If you only need to make a few tool calls to complete a task, and it i
 @tool("write_todos", description=WRITE_TODOS_TOOL_DESCRIPTION)
 async def write_todos_tool(
     tool_call_id: Annotated[str, InjectedToolCallId],
-    runtime: ToolRuntime[Context, State],
+    runtime: ToolRuntime[SuperContext, SuperState],
     todos: list[Todo],
 ) -> str:
     try:
@@ -570,6 +624,7 @@ async def write_todos_tool(
 
 Digital_Human_Manager = {
     "web_search": sandbox_web_search_tool,
+    "fetch_url": sandbox_fetch_url_tool,
     # "create_subagent": create_subagent_tool,
     "ask_clarification": ask_clarification_tool,
     "read_file": sandbox_read_file_tool,

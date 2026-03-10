@@ -124,6 +124,7 @@ class LLMSProvider:
             tool_calls = (
                 len(response.tool_calls) if hasattr(response, "tool_calls") else 0
             )
+
         elif isinstance(response, BaseModel):
             _result = response.model_dump()
         else:

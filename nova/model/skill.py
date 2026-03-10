@@ -4,7 +4,14 @@
 # @Moto   : Knowledge comes from decomposition
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel
+
+
+class Todo(BaseModel):
+    content: str
+    status: Literal["pending", "in_progress", "completed"]
 
 
 class SkillMetadata(BaseModel):
