@@ -14,7 +14,6 @@ from fastapi.responses import JSONResponse
 from nova import CONF
 from nova.controller.exceptions import NOVAException, create_error_response
 from nova.service.agent_service import add_register_agent_endpoints, agent_router
-from nova.service.chat_service import chat_router
 
 # from .agent.analyze_intent_health import compile_analyze_intent_health_agent
 # from .agent.chat_sample import compile_chat_sample_agent

@@ -8,7 +8,7 @@ import ast
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, Optional, cast
+from typing import Any, Callable, Dict, Optional
 
 from langgraph.types import Command
 

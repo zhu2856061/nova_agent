@@ -61,6 +61,8 @@ class SuperContext(TypedDict):
     """
 
     thread_id: str
+    agent: str
+    human_in_loop: NotRequired[bool]
     task_dir: NotRequired[str | None]
     model: NotRequired[str | None]
     models: NotRequired[Dict | None]

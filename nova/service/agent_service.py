@@ -4,11 +4,12 @@
 # @Moto   : Knowledge comes from decomposition
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import AsyncGenerator
 
 import aiohttp
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from langchain_core.runnables.config import RunnableConfig
 from langgraph.types import Command
@@ -36,6 +37,12 @@ AGENT_REGISTRY = {
     "chat": chat_agent,
 }
 
+VALID_TOKENS = ["1234"]
+
+
+def add_register_agent_endpoints(name, agent_instance):
+    AGENT_REGISTRY[name] = agent_instance
+
 
 # Dependency for getting agent by name
 def get_agent(agent_name: str):
@@ -48,13 +55,17 @@ def get_agent(agent_name: str):
 # Shared streaming handler
 async def stream_agent_events(
     instance, trace_id, state, context, config: dict
-) -> AsyncGenerator:
+) -> AsyncGenerator[str]:
     """Generic streaming handler for all agents"""
     state["code"] = 0
     try:
         async with aiohttp.ClientSession() as session:  # Auto-closing context manager
+            if context.get("human_in_loop"):
+                req = Command(resume=context.get("human_in_loop"))
+            else:
+                req = state
             async for event in instance.astream_events(
-                state, config=config, context=context, version="v2"
+                req, config=config, context=context, version="v2"
             ):
                 response = handle_event(trace_id, event)  # type: ignore
                 if response:
@@ -89,106 +100,10 @@ async def stream_agent_events(
             await session.close()  # 确保会话关闭
 
 
-@agent_router.post("/human_in_loop")
-async def human_in_loop(request: SuperAgentRequest):
+@agent_router.post("/service")
+async def agent_service(request: SuperAgentRequest):
     if not request:
-        logger.error(
-            "human_in_loop error: Input instances cannot be empty", exc_info=True
-        )
-        raise HTTPException(status_code=400, detail="Input instances cannot be empty")
-
-    try:
-        trace_id = request.trace_id
-        context = request.context
-        stream = request.stream
-
-        thread_id = context.get("thread_id")
-        if not thread_id:
-            logger.error("human_in_loop error: thread_id is required", exc_info=True)
-            return SuperAgentResponse(
-                code=1, data={"err_message": "thread_id is required"}
-            )
-        config = RunnableConfig(configurable={"thread_id": thread_id})
-
-        user_guidance = request.state.get("user_guidance")
-        if not user_guidance:
-            logger.error(
-                "human_in_loop error: user_guidance is required", exc_info=True
-            )
-            raise HTTPException(status_code=400, detail="user_guidance is required")
-
-        agent_name = user_guidance.get("agent_name")
-        if not agent_name:
-            logger.error("human_in_loop error: agent_name is required", exc_info=True)
-            raise HTTPException(status_code=400, detail="agent_name is required")
-
-        agent = get_agent(agent_name)
-        if not stream:
-            response = await agent.ainvoke(
-                Command(resume=user_guidance), context=context, config=config
-            )
-            return SuperAgentResponse(code=0, data=response)
-
-        # Streaming handler for human-in-loop
-        async def stream_human_in_loop() -> AsyncGenerator:
-            try:
-                async with aiohttp.ClientSession() as session:
-                    async for event in agent.astream_events(
-                        Command(resume=user_guidance),
-                        config=config,
-                        context=context,
-                        version="v2",
-                    ):
-                        response = handle_event(trace_id, event)  # type: ignore
-                        if response:
-                            if response.get("event_name") == "error":
-                                res = SuperAgentResponse(
-                                    code=1,
-                                    data=response.get("event_info", {}),
-                                ).model_dump_json()
-
-                                yield res
-                                return
-
-                            try:
-                                res = SuperAgentResponse(
-                                    code=0, err_message="ok", data=response
-                                ).model_dump_json()
-                            except Exception:
-                                res = SuperAgentResponse(
-                                    code=1,
-                                    err_message="data is not json serializable",
-                                ).model_dump_json()
-
-                            yield res
-
-            except Exception as e:
-                logger.error(
-                    f"Human-in-loop error (trace_id={trace_id}): {str(e)}",
-                    exc_info=True,
-                )
-                error_response = SuperAgentResponse(
-                    code=500, err_message=f"Interaction failed: {str(e)}"
-                )
-                yield error_response.model_dump_json() + "\n"
-            finally:
-                if session is not None:
-                    await session.close()  # 确保会话关闭
-
-        return StreamingResponse(
-            stream_human_in_loop(),
-            media_type="application/json",  # 流式数据的 MIME 类型
-        )
-    except HTTPException:
-        # Re-raise HTTP exceptions without modification
-        raise
-    except Exception as e:
-        logger.error(f"Unexpected error in human-in-loop: {str(e)}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"Internal error: {str(e)}")
-
-
-async def agent_service(agent, request: SuperAgentRequest):
-    if not request:
+        logger.error("error: Input instances cannot be empty", exc_info=True)
         raise HTTPException(status_code=400, detail="Input instances cannot be empty")
 
     try:
@@ -197,76 +112,197 @@ async def agent_service(agent, request: SuperAgentRequest):
         state = request.state
         stream = request.stream
 
+        # 获取 thread_id
         thread_id = context.get("thread_id")
         if not thread_id:
-            logger.error("human_in_loop error: thread_id is required", exc_info=True)
+            logger.error("herror: thread_id is required", exc_info=True)
             return SuperAgentResponse(
                 code=1, data={"err_message": "thread_id is required"}
             )
 
-        config = {"configurable": {"thread_id": thread_id}, "recursion_limit": 100}
+        # 获取 agent
+        agent = get_agent(context.get("agent", ""))
+        if agent is None:
+            logger.error(
+                f"error: agent {context.get('agent')} not found", exc_info=True
+            )
+            return SuperAgentResponse(
+                code=1, data={"err_message": f"agent {context.get('agent')} not found"}
+            )
+
+        # 创建 config
+        config = context.get("config", {"recursion_limit": 100})
+        assert isinstance(config, dict)
+        config.update({"configurable": {"thread_id": thread_id}})
+
+        # 若是 human_in_loop 则需要判断 state.user_guidance 字段存在
+        user_guidance = request.state.get("user_guidance")
+        is_human_in_loop = context.get("human_in_loop", False)
+        if is_human_in_loop and not user_guidance:
+            logger.error(
+                "error: human_in_loop is True, user_guidance is required", exc_info=True
+            )
+            return SuperAgentResponse(
+                code=1,
+                data={
+                    "err_message": "human_in_loop is True, user_guidance is required"
+                },
+            )
 
         if not stream:
-            response = await agent.ainvoke(state, context=context, config=config)
+            if is_human_in_loop:
+                response = await agent.ainvoke(
+                    Command(resume=user_guidance),
+                    context=context,
+                    config=RunnableConfig(**config),
+                )
+            else:
+                response = await agent.ainvoke(
+                    state, context=context, config=RunnableConfig(**config)
+                )
             return SuperAgentResponse(code=0, data=response)
+
         else:
             return StreamingResponse(
                 stream_agent_events(agent, trace_id, state, context, config),
                 media_type="application/json",  # 流式数据的 MIME 类型
             )
+
     except Exception as e:
         logger.error(
-            f"Agent service error (trace_id={request.trace_id}): {str(e)}",
+            f"service error (trace_id={request.trace_id}): {str(e)}",
             exc_info=True,
         )
-        raise HTTPException(status_code=500, detail=f"Service error: {str(e)}")
+        return SuperAgentResponse(
+            code=1,
+            data={"err_message": f"Service error: {str(e)}"},
+        )
 
 
-# 动态注册函数
-def register_agent_endpoints():
-    """Dynamically register all agent endpoints from the registry"""
-    for agent_name, agent_instance in AGENT_REGISTRY.items():
-        # 增加一层闭包，固定当前的 agent_name
-        def create_endpoint_factory(current_agent_name):
-            async def endpoint(
-                request: SuperAgentRequest,
-                agent=Depends(
-                    lambda: get_agent(current_agent_name)
-                ),  # 使用固定的 current_agent_name
+# 存储活跃的 WebSocket 连接（可选，用于广播等场景）
+active_connections: list[WebSocket] = []
+
+
+async def agent_ws_message(request: SuperAgentRequest, websocket: WebSocket):
+    if not request:
+        logger.error("error: Input instances cannot be empty", exc_info=True)
+        raise HTTPException(status_code=400, detail="Input instances cannot be empty")
+    try:
+        trace_id = request.trace_id
+        context = request.context
+        state = request.state
+        stream = request.stream
+
+        # 获取 thread_id
+        thread_id = context.get("thread_id")
+        if not thread_id:
+            logger.error("herror: thread_id is required", exc_info=True)
+
+            await websocket.send_text(
+                SuperAgentResponse(
+                    code=0, data={"err_message": "thread_id is required"}
+                ).model_dump_json()
+            )
+            return
+
+        # 获取 agent
+        agent = get_agent(context.get("agent", ""))
+        if agent is None:
+            logger.error(
+                f"error: agent {context.get('agent')} not found", exc_info=True
+            )
+            await websocket.send_text(
+                SuperAgentResponse(
+                    code=0,
+                    data={"err_message": f"agent {context.get('agent')} not found"},
+                ).model_dump_json()
+            )
+            return
+
+        # 创建 config
+        config = context.get("config", {"recursion_limit": 100})
+        assert isinstance(config, dict)
+        config.update({"configurable": {"thread_id": thread_id}})
+
+        # 若是 human_in_loop 则需要判断 state.user_guidance 字段存在
+        user_guidance = request.state.get("user_guidance")
+        is_human_in_loop = context.get("human_in_loop", False)
+        if is_human_in_loop and not user_guidance:
+            logger.error(
+                "error: human_in_loop is True, user_guidance is required", exc_info=True
+            )
+            await websocket.send_text(
+                SuperAgentResponse(
+                    code=0,
+                    data={
+                        "err_message": "human_in_loop is True, user_guidance is required"
+                    },
+                ).model_dump_json()
+            )
+            return
+
+        if not stream:
+            if is_human_in_loop:
+                response = await agent.ainvoke(
+                    Command(resume=user_guidance),
+                    context=context,
+                    config=RunnableConfig(**config),
+                )
+            else:
+                response = await agent.ainvoke(
+                    state, context=context, config=RunnableConfig(**config)
+                )
+
+            await websocket.send_text(
+                SuperAgentResponse(code=0, data=response).model_dump_json()
+            )
+
+        else:
+            async for chunk in stream_agent_events(
+                agent, trace_id, state, context, config
             ):
-                return await agent_service(agent, request)
+                await websocket.send_text(chunk)
 
-            return endpoint
-
-        # 为每个 agent 生成独立的 endpoint
-        endpoint = create_endpoint_factory(agent_name)
-
-        # 注册端点
-        agent_router.post(f"/{agent_name}", name=f"{agent_name}_service")(endpoint)
-
-
-# 动态新增函数
-def add_register_agent_endpoints(agent_name, agent_instance):
-    """Dynamically register all agent endpoints from the registry"""
-
-    # 增加一层闭包，固定当前的 agent_name
-    def create_endpoint_factory():
-        async def endpoint(
-            request: SuperAgentRequest,
-            agent=Depends(lambda: agent_instance),  # 使用固定的 current_agent_name
-        ):
-            return await agent_service(agent, request)
-
-        return endpoint
-
-    # 为每个 agent 生成独立的 endpoint
-    endpoint = create_endpoint_factory()
-
-    # 注册端点
-    agent_router.post(f"/{agent_name}", name=f"{agent_name}_service")(endpoint)
-
-    AGENT_REGISTRY[agent_name] = agent_instance
+    except Exception as e:
+        logger.error(
+            f"service error (trace_id={request.trace_id}): {str(e)}",
+            exc_info=True,
+        )
+        await websocket.send_text(
+            SuperAgentResponse(
+                code=0,
+                data={"err_message": f"Service error: {str(e)}"},
+            ).model_dump_json()
+        )
+        return
 
 
-# Register all agent endpoints
-register_agent_endpoints()
+@agent_router.websocket("/ws")
+async def agent_websocket_stream(websocket: WebSocket):
+    token = websocket.query_params.get("token")
+    if not token or token not in VALID_TOKENS:
+        await websocket.close(code=1008)
+        raise WebSocketDisconnect(code=1008)
+
+    # 1. 接受客户端连接
+    await websocket.accept()
+    # 将连接加入活跃列表（可选）
+    active_connections.append(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            agent_request = SuperAgentRequest.model_validate_json(data)
+            logger.info(
+                f"收到请求 - trace_id: {agent_request.trace_id}, data: {agent_request}"
+            )
+            # 异步处理，不阻塞接收下一条消息
+            asyncio.create_task(agent_ws_message(agent_request, websocket))
+
+    # 捕获客户端断开连接的异常
+    except WebSocketDisconnect:
+        # 从活跃列表移除断开的连接
+        active_connections.remove(websocket)
+        logger.info("客户端断开连接")
+    # finally:
+    #     # 确保连接关闭（可选，FastAPI 会自动处理，但显式关闭更健壮）
+    #     await websocket.close()
