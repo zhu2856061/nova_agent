@@ -9,7 +9,7 @@ import logging
 from deepagents import create_deep_agent
 from langgraph.checkpoint.memory import InMemorySaver
 
-from nova.llms import LLMS_Provider_Instance
+from nova.provider import get_llms_provider
 
 logger = logging.getLogger(__name__)
 # ######################################################################################
@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 def compile_deepagent_sample_agent():
     # chat graph
-    model = LLMS_Provider_Instance.get_llm_by_type("basic")
+    model = get_llms_provider().get_llm_by_type("basic")
     checkpointer = InMemorySaver()
 
     tmp = create_deep_agent(

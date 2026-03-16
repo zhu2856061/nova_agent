@@ -23,13 +23,9 @@ from langgraph.runtime import Runtime
 from langgraph.types import Command, interrupt
 
 from nova import CONF
+from nova.hooks import Skill_Hooks_Instance, Super_Agent_Hook_Instance
+from nova.llms import LLMS_Provider_Instance, Prompts_Provider_Instance
 from nova.model.super_agent import SuperContext, SuperState
-from nova.provider import (
-    get_llms_provider,
-    get_prompts_provider,
-    get_skill_provider,
-    get_super_agent_hooks,
-)
 from nova.tools.digital_human_manager import Digital_Human_Manager
 from nova.utils.common import get_today_str
 
@@ -147,29 +143,28 @@ def ask_clarification(
 
 # 创建数字人节点
 def create_digital_human_node(node_name, tools=None, structured_output=None):
-    _hook = get_super_agent_hooks()
 
     async def _before_model_hooks(state: SuperState, runtime: Runtime[SuperContext]):
         # 核心：组装提示词
 
         # 基础提示
-        base_agent_system_prompt = get_prompts_provider().prompt_apply_template(
-            get_prompts_provider().get_template("super_nova", "base_agent"),
+        base_agent_system_prompt = Prompts_Provider_Instance.prompt_apply_template(
+            Prompts_Provider_Instance.get_template("super_nova", "base_agent"),
             {"date": get_today_str()},
         )
 
         # 加入澄清
-        ask_clarification_system_prompt = get_prompts_provider().get_template(
+        ask_clarification_system_prompt = Prompts_Provider_Instance.get_template(
             "super_nova", "ask_clarification"
         )
 
         # 加入todo list
-        todo_list_system_prompt = get_prompts_provider().get_template(
+        todo_list_system_prompt = Prompts_Provider_Instance.get_template(
             "super_nova", "write_todos"
         )
 
         # 加入网络搜索
-        web_search_system_prompt = get_prompts_provider().get_template(
+        web_search_system_prompt = Prompts_Provider_Instance.get_template(
             "super_nova", "web_search"
         )
 
@@ -178,23 +173,27 @@ def create_digital_human_node(node_name, tools=None, structured_output=None):
         _task_dir = runtime.context.get("task_dir", CONF.SYSTEM.task_dir)
         _work_dir = os.path.join(cast(str, _task_dir), _thread_id)
 
-        filesystem_system_prompt = get_prompts_provider().prompt_apply_template(
-            get_prompts_provider().get_template("super_nova", "filesystem"),
+        filesystem_system_prompt = Prompts_Provider_Instance.prompt_apply_template(
+            Prompts_Provider_Instance.get_template("super_nova", "filesystem"),
             {"work_dir": _work_dir},
         )
 
         # 加入代码执行
-        execute_tool_system_prompt = get_prompts_provider().get_template(
+        execute_tool_system_prompt = Prompts_Provider_Instance.get_template(
             "super_nova", "execute_tool"
         )
 
         # 加入Skills
-        skill_system_prompt = get_skill_provider().get_skill_prompt_template()
+        skill_system_prompt = Skill_Hooks_Instance.get_skill_prompt_template()
 
         # 重要提醒
-        critical_reminders_system_prompt = get_prompts_provider().prompt_apply_template(
-            get_prompts_provider().get_template("super_nova", "critical_reminders"),
-            {"work_dir": _work_dir},
+        critical_reminders_system_prompt = (
+            Prompts_Provider_Instance.prompt_apply_template(
+                Prompts_Provider_Instance.get_template(
+                    "super_nova", "critical_reminders"
+                ),
+                {"work_dir": _work_dir},
+            )
         )
 
         _system_instruction = [
@@ -241,7 +240,7 @@ def create_digital_human_node(node_name, tools=None, structured_output=None):
             },
         )
 
-    @_hook.node_with_hooks(node_name=node_name)
+    @Super_Agent_Hook_Instance.node_with_hooks(node_name=node_name)
     async def _node(state: SuperState, runtime: Runtime[SuperContext]):
         # 获取运行时变量
         _thread_id = runtime.context.get("thread_id", "default")
@@ -268,7 +267,7 @@ def create_digital_human_node(node_name, tools=None, structured_output=None):
         response = await _before_model_hooks(state, runtime)
 
         # 模型执行中
-        response = await get_llms_provider().llm_wrap_hooks(
+        response = await LLMS_Provider_Instance.llm_wrap_hooks(
             _thread_id,
             node_name,
             response,
@@ -285,9 +284,8 @@ def create_digital_human_node(node_name, tools=None, structured_output=None):
 
 # 人类反馈节点
 def create_human_feedback_node(node_name):
-    _hook = get_super_agent_hooks()
 
-    @_hook.node_with_hooks(node_name=node_name)
+    @Super_Agent_Hook_Instance.node_with_hooks(node_name=node_name)
     async def _node(state: SuperState, runtime: Runtime[SuperContext]):
         # 获取运行时变量
         _thread_id = runtime.context.get("thread_id", "default")

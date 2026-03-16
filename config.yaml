@@ -30,10 +30,10 @@ SYSTEM:
   cache_dir: "./cache"
 
   log_dir: "./logs"
-  task_dir: $TASK_DIR
+  task_dir: "../merlin"
 
-  prompt_template_dir: $PROMPT_PATH
-  skill_dir: $SKILL_PATH
+  prompt_template_dir: "../prompts"
+  skill_dir: "../skills"
 
 # ===============================================================
 # 2. 大模型API 配置

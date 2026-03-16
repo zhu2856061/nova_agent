@@ -23,9 +23,10 @@ from langgraph.runtime import Runtime
 from langgraph.types import Command, interrupt
 from pydantic import BaseModel, Field
 
+from nova.hooks import Super_Agent_Hook_Instance
+from nova.llms import LLMS_Provider_Instance, Prompts_Provider_Instance
 from nova.model.super_agent import SuperContext, SuperState
 from nova.node.factory import NodeFactory
-from nova.provider import get_llms_provider, get_prompts_provider, get_super_agent_hooks
 from nova.utils.log_utils import log_info_set_color
 
 logger = logging.getLogger(__name__)
@@ -109,7 +110,6 @@ async def topic_slicer_tool(
 # ######################################################################################
 # 创建主题挖掘节点
 def create_theme_slicer_node(node_name, tools=None, structured_output=None):
-    _hook = get_super_agent_hooks()
 
     async def _before_model_hooks(
         prompt_dir: str,
@@ -128,16 +128,18 @@ def create_theme_slicer_node(node_name, tools=None, structured_output=None):
             "user_guidance": _human_in_loop_value,
         }
 
-        _prompt_tamplate = get_prompts_provider().get_template(prompt_dir, prompt_name)
+        _prompt_tamplate = Prompts_Provider_Instance.get_template(
+            prompt_dir, prompt_name
+        )
         return [
             HumanMessage(
-                content=get_prompts_provider().prompt_apply_template(
+                content=Prompts_Provider_Instance.prompt_apply_template(
                     _prompt_tamplate, tmp
                 )
             )
         ]
 
-    @_hook.node_with_hooks(node_name="theme_slicer")
+    @Super_Agent_Hook_Instance.node_with_hooks(node_name="theme_slicer")
     async def _node(state: SuperState, runtime: Runtime[SuperContext]):
         # 获取运行时变量
         _thread_id = runtime.context.get("thread_id", "default")
@@ -164,7 +166,7 @@ def create_theme_slicer_node(node_name, tools=None, structured_output=None):
         response = await _before_model_hooks("theme", "theme_slicer", state, runtime)
 
         # 模型执行中
-        response = await get_llms_provider().llm_wrap_hooks(
+        response = await LLMS_Provider_Instance.llm_wrap_hooks(
             _thread_id,
             node_name,
             response,
@@ -182,9 +184,8 @@ def create_theme_slicer_node(node_name, tools=None, structured_output=None):
 
 # 人类反馈节点
 def create_human_feedback_node(node_name):
-    _hook = get_super_agent_hooks()
 
-    @_hook.node_with_hooks(node_name=node_name)
+    @Super_Agent_Hook_Instance.node_with_hooks(node_name=node_name)
     async def _node(state: SuperState, runtime: Runtime[SuperContext]):
         # 获取运行时变量
         _thread_id = runtime.context.get("thread_id", "default")

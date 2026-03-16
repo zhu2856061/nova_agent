@@ -11,11 +11,11 @@ import os
 import re
 import subprocess
 from pathlib import Path
-from typing import Any, List, Literal, Optional
+from typing import List, Literal, Optional
 
 from langchain_core.messages import HumanMessage
 
-from nova.llms import LLMS_Provider_Instance, Prompts_Provider_Instance
+from nova.provider import get_llms_provider, get_prompts_provider
 from nova.sandbox.local.utils import (
     build_grep_results_dict,
     clean_markdown_links,
@@ -561,19 +561,19 @@ class LocalSandbox(Sandbox):
         return f"Updated todo list to {todos}"
 
     async def summarize(self, model: str, content: str):
-        llm = LLMS_Provider_Instance.get_llm_by_type(model)
+        llm = get_llms_provider().get_llm_by_type(model)
         _webpage_content = content
 
         def _assemble_prompt(content):
             tmp = {
                 "messages": content,
             }
-            _prompt_tamplate = Prompts_Provider_Instance.get_template(
+            _prompt_tamplate = get_prompts_provider().get_template(
                 "super_nova", "summarize"
             )
             return [
                 HumanMessage(
-                    content=Prompts_Provider_Instance.prompt_apply_template(
+                    content=get_prompts_provider().prompt_apply_template(
                         _prompt_tamplate, tmp
                     )
                 )

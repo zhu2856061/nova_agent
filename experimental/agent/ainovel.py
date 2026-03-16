@@ -20,8 +20,9 @@ from nova.agent.ainovel_chapter import (
     compile_first_chapter_draft_agent,
     compile_next_chapter_draft_agent,
 )
+from nova.hooks import Agent_Hooks_Instance
+from nova.llms import LLMS_Provider_Instance, Prompts_Provider_Instance
 from nova.model.agent import Context, Messages, State
-from nova.provider import get_llms_provider, get_prompts_provider, get_super_agent_hooks
 
 # ######################################################################################
 # 配置

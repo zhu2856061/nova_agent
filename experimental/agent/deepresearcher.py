@@ -21,8 +21,9 @@ from pydantic import BaseModel, Field
 
 from nova import CONF
 from nova.agent.researcher import compile_researcher_agent
+from nova.hooks import Agent_Hooks_Instance
+from nova.llms import LLMS_Provider_Instance, Prompts_Provider_Instance
 from nova.model.agent import Context, Messages, State
-from nova.provider import get_llms_provider, get_prompts_provider, get_super_agent_hooks
 from nova.tools import markdown_to_html_tool
 from nova.utils.common import get_today_str, override_reducer
 from nova.utils.log_utils import log_info_set_color

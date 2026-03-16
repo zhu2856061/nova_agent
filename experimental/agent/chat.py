@@ -10,9 +10,9 @@ from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import START, StateGraph
 from langgraph.runtime import Runtime
 
+from nova.hooks import Super_Agent_Hook_Instance
 from nova.model.super_agent import SuperContext, SuperState
 from nova.node.factory import NodeFactory
-from nova.provider import get_super_agent_hooks
 
 logger = logging.getLogger(__name__)
 # ######################################################################################
@@ -27,9 +27,8 @@ logger = logging.getLogger(__name__)
 
 
 def create_chat_node(node_name="chat"):
-    _hook = get_super_agent_hooks()
 
-    @_hook.node_with_hooks(node_name=node_name)
+    @Super_Agent_Hook_Instance.node_with_hooks(node_name=node_name)
     async def _node(state: SuperState, runtime: Runtime[SuperContext]):
         return await NodeFactory.create_node(node_name, state=state, runtime=runtime)
 

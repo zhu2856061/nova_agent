@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 DEFAULT_THREAD_POOL = ThreadPoolExecutor(max_workers=8)
 
 
-class Qwen3Embeddings(Embeddings):
+class Qwen3EmbeddingsProvider(Embeddings):
     """基于API的嵌入模型实现"""
 
     # Pydantic字段：支持配置校验和序列化

@@ -25,10 +25,9 @@ from langgraph.runtime import Runtime
 from langgraph.types import Command
 
 from nova import CONF
-from nova.hooks import Agent_Hooks_Instance, Super_Agent_Hook_Instance
-from nova.llms import LLMS_Provider_Instance, Prompts_Provider_Instance
 from nova.model.agent import Context, Messages, State
 from nova.model.super_agent import SuperContext, SuperState
+from nova.provider import get_llms_provider, get_prompts_provider, get_super_agent_hooks
 from nova.tools import (
     write_file_tool,
     write_todos,
@@ -46,10 +45,120 @@ _DEFAULT_TRIM_TOKEN_LIMIT = 4000
 _DEFAULT_FALLBACK_MESSAGE_COUNT = 15
 
 
+class NodeFactory:
+    @staticmethod
+    async def create_node(
+        node_name,
+        *,
+        state: SuperState,
+        runtime: Runtime[SuperContext],
+        is_create_work_dir=False,
+        tools=None,
+        structured_output=None,
+        _before_model_hooks=None,
+        _after_model_hooks=None,
+    ):
+        # 获取运行时变量
+        _thread_id = runtime.context.get("thread_id", "default")
+        _model_name = runtime.context.get("model", "basic")
+        _config = runtime.context.get("config", {})
+
+        # 创建工作目录
+        if is_create_work_dir:
+            _task_dir = runtime.context.get("task_dir", CONF.SYSTEM.task_dir)
+            _work_dir = os.path.join(cast(str, _task_dir), _thread_id)
+            os.makedirs(_work_dir, exist_ok=True)
+        # 获取状态变量
+        _code = state.get("code", 0)
+        if _code != 0:
+            return Command(goto="__end__")
+
+        _messages = state.get("messages")
+        if not _messages:
+            return Command(
+                goto="__end__",
+                update={"code": -1, "messages": [AIMessage(content="No messages")]},
+            )
+
+        # 模型执行前
+        if _before_model_hooks is not None:
+            response = await _before_model_hooks(state, runtime)
+        else:
+            response = _messages
+        # 模型执行中
+        response = await get_llms_provider().llm_wrap_hooks(
+            _thread_id,
+            node_name,
+            response,
+            _model_name,
+            tools=tools,
+            structured_output=structured_output,
+            **_config,  # type: ignore
+        )
+        # 模型执行后
+        if _after_model_hooks is not None:
+            response = await _after_model_hooks(response, state, runtime)
+        else:
+            response = await NodeFactory.after_model_hooks(response, state, runtime)
+
+        return response
+
+    # 核心：组装提示词
+    @staticmethod
+    async def before_model_hooks(
+        prompt_dir: str,
+        prompt_name: str,
+        state: SuperState,
+        runtime: Runtime[SuperContext],
+    ):
+        # 当前messages
+        _messages = cast(list[AnyMessage], state.get("messages"))
+
+        _system_prompt = get_prompts_provider().get_template(prompt_dir, prompt_name)
+
+        logger.info(f"prompt: {truncate_if_too_long(_system_prompt)}")
+
+        return [
+            SystemMessage(content=_system_prompt),
+        ] + _messages
+
+    @staticmethod
+    async def after_model_hooks(
+        response: AIMessage, state: SuperState, runtime: Runtime[SuperContext]
+    ):
+        _thread_id = runtime.context.get("thread_id", "default")
+        logger.info(
+            f"_thread_id={_thread_id}, result: {truncate_if_too_long(str(response))}"
+        )
+        if not isinstance(response, AIMessage):
+            return Command(
+                update={
+                    "code": 1,
+                    "err_message": "response type not AIMessage",
+                    "messages": [response],
+                },
+            )
+        # 去掉冗余信息
+        response.additional_kwargs = {}
+        response.response_metadata = {}
+
+        return Command(
+            update={"messages": [response], "data": {"result": response.content}},
+        )
+
+
 # 创建节点
 def create_node(
-    node_name, *, prompt_dir=None, prompt_name=None, tools=None, structured_output=None
+    node_name,
+    *,
+    prompt_dir=None,
+    prompt_name=None,
+    tools=None,
+    structured_output=None,
+    is_create_work_dir=False,
 ):
+    _hook = get_super_agent_hooks()
+
     # 核心：组装提示词
     async def _before_model_hooks(state: SuperState, runtime: Runtime[SuperContext]):
         # 当前messages
@@ -59,7 +168,7 @@ def create_node(
         if not prompt_dir or not prompt_name:
             return _messages
 
-        _system_prompt = Prompts_Provider_Instance.get_template(prompt_dir, prompt_name)
+        _system_prompt = get_prompts_provider().get_template(prompt_dir, prompt_name)
 
         logger.info(f"prompt: {truncate_if_too_long(_system_prompt)}")
 
@@ -88,16 +197,18 @@ def create_node(
             update={"messages": [response], "data": {"result": response.content}},
         )
 
-    @Super_Agent_Hook_Instance.node_with_hooks(node_name=node_name)
+    @_hook.node_with_hooks(node_name=node_name)
     async def _node(state: SuperState, runtime: Runtime[SuperContext]):
         # 获取运行时变量
         _thread_id = runtime.context.get("thread_id", "default")
         _model_name = runtime.context.get("model", "basic")
         _config = runtime.context.get("config", {})
+
         # 创建工作目录
-        # _task_dir = runtime.context.get("task_dir", CONF.SYSTEM.task_dir)
-        # _work_dir = os.path.join(cast(str, _task_dir), _thread_id)
-        # os.makedirs(_work_dir, exist_ok=True)
+        if is_create_work_dir:
+            _task_dir = runtime.context.get("task_dir", CONF.SYSTEM.task_dir)
+            _work_dir = os.path.join(cast(str, _task_dir), _thread_id)
+            os.makedirs(_work_dir, exist_ok=True)
 
         # 获取状态变量
         _code = state.get("code", 0)
@@ -115,7 +226,7 @@ def create_node(
         response = await _before_model_hooks(state, runtime)
 
         # 模型执行中
-        response = await LLMS_Provider_Instance.llm_wrap_hooks(
+        response = await get_llms_provider().llm_wrap_hooks(
             _thread_id,
             node_name,
             response,
@@ -132,8 +243,9 @@ def create_node(
 
 def create_todos_list_node():
     """创建一个todos_list节点"""
+    _hook = get_super_agent_hooks()
 
-    @Agent_Hooks_Instance.node_with_hooks(node_name="todos_list")
+    @_hook.node_with_hooks(node_name="todos_list")
     async def todos_list(state: State, runtime: Runtime[Context]):
         _NODE_NAME = "todos_list"
 
@@ -153,7 +265,7 @@ def create_todos_list_node():
         # 提示词
         async def _assemble_prompt():
 
-            _system_instruction = Prompts_Provider_Instance.get_template(
+            _system_instruction = get_prompts_provider().get_template(
                 "node", "todo_list"
             )
 
@@ -162,7 +274,7 @@ def create_todos_list_node():
             ] + _messages
 
         # 4 大模型
-        response = await LLMS_Provider_Instance.llm_wrap_hooks(
+        response = await get_llms_provider().llm_wrap_hooks(
             _thread_id,
             _NODE_NAME,
             await _assemble_prompt(),
@@ -198,8 +310,9 @@ def create_todos_list_node():
 
 def create_patch_tools_node():
     """创建补丁工具节点"""
+    _hook = get_super_agent_hooks()
 
-    @Agent_Hooks_Instance.node_with_hooks(node_name="patch_tools")
+    @_hook.node_with_hooks(node_name="patch_tools")
     async def patch_tools(state: State, runtime: Runtime[Context]):
         _NODE_NAME = "patch_tools"
         # 变量
@@ -256,6 +369,7 @@ def create_patch_tools_node():
 
 def create_summarization_node(trigger: int = -1):
     """创建总结节点"""
+    _hook = get_super_agent_hooks()
 
     def _ensure_message_ids(messages: list[AnyMessage]) -> None:
         """Ensure all messages have unique IDs for the add_messages reducer."""
@@ -292,7 +406,7 @@ def create_summarization_node(trigger: int = -1):
                 break
 
             mid = (left + right) // 2
-            if count_tokens_approximately(messages[mid:]) <= trigger:
+            if count_tokens_approximately(messages[mid:]) <= trigger:  # type: ignore
                 cutoff_candidate = mid
                 right = mid
             else:
@@ -343,7 +457,7 @@ def create_summarization_node(trigger: int = -1):
             )
         ]
 
-    @Agent_Hooks_Instance.node_with_hooks(node_name="summarization")
+    @_hook.node_with_hooks(node_name="summarization")
     async def summarization(state: State, runtime: Runtime[Context]):
         _NODE_NAME = "summarization"
 
@@ -376,13 +490,11 @@ def create_summarization_node(trigger: int = -1):
         # 提示词
         def _assemble_prompt(trimmed_messages):
 
-            _prompt_tamplate = Prompts_Provider_Instance.get_template(
-                "node", _NODE_NAME
-            )
+            _prompt_tamplate = get_prompts_provider().get_template("node", _NODE_NAME)
 
             return [
                 HumanMessage(
-                    content=Prompts_Provider_Instance.prompt_apply_template(
+                    content=get_prompts_provider().prompt_apply_template(
                         _prompt_tamplate, {"messages": trimmed_messages}
                     )
                 )
@@ -394,7 +506,7 @@ def create_summarization_node(trigger: int = -1):
         if not trimmed_messages:
             return "Previous conversation was too long to summarize."
 
-        response = await LLMS_Provider_Instance.llm_wrap_hooks(
+        response = await get_llms_provider().llm_wrap_hooks(
             _thread_id,
             _NODE_NAME,
             _assemble_prompt(trimmed_messages),

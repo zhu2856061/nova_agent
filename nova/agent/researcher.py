@@ -2,26 +2,31 @@
 # @Time   : 2025/09/16 10:24
 # @Author : zip
 # @Moto   : Knowledge comes from decomposition
-import asyncio
 import logging
-from typing import Literal, cast
+from typing import cast
 
 from langchain_core.messages import (
     AIMessage,
+    AnyMessage,
     HumanMessage,
     SystemMessage,
     ToolMessage,
 )
+from langgraph.checkpoint.memory import InMemorySaver
 from langgraph.graph import START, StateGraph
+from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.runtime import Runtime
-from langgraph.types import Command
+from langgraph.types import Command, Overwrite
 from pydantic import BaseModel
 
-from nova.hooks import Agent_Hooks_Instance
-from nova.llms import LLMS_Provider_Instance, Prompts_Provider_Instance
-from nova.model.agent import Context, Messages, State
+from nova.model.super_agent import SuperContext, SuperState
+from nova.provider import get_llms_provider, get_prompts_provider, get_super_agent_hooks
 from nova.tools import llm_searcher_tool, wechat_searcher_tool
-from nova.utils.common import get_today_str, remove_up_to_last_ai_message
+from nova.utils.common import (
+    get_today_str,
+    remove_up_to_last_ai_message,
+    truncate_if_too_long,
+)
 from nova.utils.log_utils import log_info_set_color
 
 # ######################################################################################
@@ -39,288 +44,281 @@ class ResearchComplete(BaseModel):
 # 函数
 
 
-# 研究员
-@Agent_Hooks_Instance.node_with_hooks(node_name="researcher")
-async def researcher(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["researcher_tools", "__end__"]]:
-    _NODE_NAME = "researcher"
+def create_researcher_node(
+    node_name="researcher",
+    *,
+    prompt_dir="researcher",
+    prompt_name="researcher",
+    tools=None,
+    structured_output=None,
+):
+    _hook = get_super_agent_hooks()
 
-    # 变量
-    _thread_id = runtime.context.thread_id
-    _model_name = runtime.context.model
-    _messages = (
-        state.messages.value if isinstance(state.messages, Messages) else state.messages
-    )
-    _tool_call_iterations = state.user_guidance.get("tool_call_iterations", 0)
+    async def _before_model_hooks(state: SuperState, runtime: Runtime[SuperContext]):
+        # 核心：组装提示词
+        _messages = cast(list[AnyMessage], state.get("messages"))
 
-    # 提示词
-    def _assemble_prompt(messages):
         tmp = {
             "date": get_today_str(),
         }
-        _prompt_tamplate = Prompts_Provider_Instance.get_template(
-            "researcher", _NODE_NAME
-        )
+        _prompt_tamplate = get_prompts_provider().get_template(prompt_dir, prompt_name)
+
         return [
             SystemMessage(
-                content=Prompts_Provider_Instance.prompt_apply_template(
+                content=get_prompts_provider().prompt_apply_template(
                     _prompt_tamplate, tmp
                 )
             )
-        ] + messages
+        ] + _messages
 
-    # 4 大模型
-    response = await LLMS_Provider_Instance.llm_wrap_hooks(
-        _thread_id,
-        _NODE_NAME,
-        _assemble_prompt(_messages),
-        _model_name,
-        tools=[llm_searcher_tool, ResearchComplete],
-    )
-    Agent_Hooks_Instance.extract_valid_info(response)
-
-    state.user_guidance["tool_call_iterations"] = _tool_call_iterations + 1
-
-    return Command(
-        goto="researcher_tools",
-        update={
-            "code": 0,
-            "err_message": "ok",
-            "messages": Messages(type="add", value=[response]),
-            "user_guidance": state.user_guidance,
-            "data": {_NODE_NAME: response},
-        },
-    )
-
-
-# 研究员工具
-@Agent_Hooks_Instance.node_with_hooks(node_name="researcher_tools")
-async def researcher_tools(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["compress_research", "researcher", "__end__"]]:
-    _NODE_NAME = "researcher_tools"
-
-    # 变量
-    _thread_id = runtime.context.thread_id
-    _model_name = runtime.context.model
-    _tool_call_iterations = state.user_guidance.get("tool_call_iterations", 1)
-    _max_react_tool_calls = state.user_guidance.get("max_react_tool_calls", 1)
-    _most_recent_message = state.data.get("researcher")
-
-    # 执行
-    if not cast(AIMessage, _most_recent_message).tool_calls or any(
-        tool_call["name"] == "ResearchComplete"
-        for tool_call in cast(AIMessage, _most_recent_message).tool_calls
+    @staticmethod
+    async def _after_model_hooks(
+        response: AIMessage, state: SuperState, runtime: Runtime[SuperContext]
     ):
-        return Command(
-            goto="compress_research",
+        _thread_id = runtime.context.get("thread_id", "default")
+        logger.info(
+            f"_thread_id={_thread_id}, result: {truncate_if_too_long(str(response))}"
         )
+        if not isinstance(response, AIMessage):
+            return Command(
+                update={
+                    "code": 1,
+                    "err_message": "response type not AIMessage",
+                    "messages": [response],
+                },
+            )
+        # 去掉冗余信息
+        response.additional_kwargs = {}
+        response.response_metadata = {}
+        return response
 
-    async def execute_tool_safely(tool, args):
-        try:
-            return await tool.ainvoke(args)
-        except Exception as e:
-            return f"Error executing tool: {str(e)}"
+    @_hook.node_with_hooks(node_name="researcher")
+    async def _node(state: SuperState, runtime: Runtime[SuperContext]):
+        # 获取运行时变量
+        _thread_id = runtime.context.get("thread_id", "default")
+        _model_name = runtime.context.get("model", "basic")
+        _config = runtime.context.get("config", {})
 
-    # Otherwise, execute tools and gather results.
-    tool_calls = cast(AIMessage, _most_recent_message).tool_calls  # type: ignore
-    coros = []
-    for tool_call in tool_calls:
-        tmp = {**tool_call["args"], "summarize_model": _model_name}
-        coros.append(execute_tool_safely(llm_searcher_tool, tmp))
-    observations = await asyncio.gather(*coros)
+        # 获取状态变量
+        _code = state.get("code", 0)
+        if _code != 0:
+            return Command(goto="__end__")
 
-    log_info_set_color(
-        _thread_id,
-        _NODE_NAME,
-        f"use execute_tool_safely: \n {str(observations)[:400]} ",
-    )
+        _messages = state.get("messages")
+        if not _messages:
+            return Command(
+                goto="__end__",
+                update={"code": -1, "messages": [AIMessage(content="No messages")]},
+            )
 
-    tool_outputs = [
-        ToolMessage(
-            content=observation,
-            name=tool_call["name"],
-            tool_call_id=tool_call["id"],
+        if isinstance(_messages[-1], ToolMessage):
+            return Command(
+                goto="__end__",
+            )
+        if state.get("data") is None:
+            _tool_call_iterations = 0
+            _max_react_tool_calls = 3
+        else:
+            _tool_call_iterations = cast(dict, state.get("data")).get(
+                "tool_call_iterations", 0
+            )
+            _max_react_tool_calls = cast(dict, state.get("data")).get(
+                "max_react_tool_calls", 3
+            )
+        if _tool_call_iterations + 1 >= _max_react_tool_calls:
+            return Command(goto="__end__")
+
+        # 模型执行前
+        response = await _before_model_hooks(state, runtime)
+
+        # 模型执行中
+        response = await get_llms_provider().llm_wrap_hooks(
+            _thread_id,
+            node_name,
+            response,
+            _model_name,
+            tools=tools,
+            structured_output=structured_output,
+            **_config,  # type: ignore
         )
-        for observation, tool_call in zip(observations, tool_calls)
-    ]
-
-    if _tool_call_iterations >= _max_react_tool_calls:
+        # 模型执行后
+        response = await _after_model_hooks(response, state, runtime)
         return Command(
-            goto="compress_research",
             update={
-                "messages": tool_outputs,
+                "messages": [response],
+                "data": {
+                    "result": response.content,
+                    "tool_call_iterations": _tool_call_iterations + 1,
+                },
             },
         )
 
-    return Command(
-        goto="researcher",
-        update={
-            "messages": tool_outputs,
-        },
-    )
+    return _node
 
 
-# 研究员工具
-@Agent_Hooks_Instance.node_with_hooks(node_name="wechat_researcher_tools")
-async def wechat_researcher_tools(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["compress_research", "researcher", "__end__"]]:
-    _NODE_NAME = "researcher_tools"
+def create_compress_node(
+    node_name="compress",
+    *,
+    tools=None,
+    structured_output=None,
+):
+    _hook = get_super_agent_hooks()
 
-    # 变量
-    _thread_id = runtime.context.thread_id
-    _model_name = runtime.context.model
-    _tool_call_iterations = state.user_guidance.get("tool_call_iterations", 1)
-    _max_react_tool_calls = state.user_guidance.get("max_react_tool_calls", 1)
-    _most_recent_message = state.data.get("researcher")
+    async def _before_model_hooks(_messages):
+        # 核心：组装提示词
 
-    # 执行
-    if not cast(AIMessage, _most_recent_message).tool_calls or any(
-        tool_call["name"] == "ResearchComplete"
-        for tool_call in cast(AIMessage, _most_recent_message).tool_calls
-    ):
-        return Command(
-            goto="compress_research",
-        )
-
-    async def execute_tool_safely(tool, args):
-        try:
-            return await tool.ainvoke(args)
-        except Exception as e:
-            return f"Error executing tool: {str(e)}"
-
-    # Otherwise, execute tools and gather results.
-    tool_calls = cast(AIMessage, _most_recent_message).tool_calls  # type: ignore
-    coros = []
-    for tool_call in tool_calls:
-        tmp = {**tool_call["args"], "summarize_model": _model_name}
-        coros.append(execute_tool_safely(wechat_searcher_tool, tmp))
-    observations = await asyncio.gather(*coros)
-
-    log_info_set_color(
-        _thread_id,
-        _NODE_NAME,
-        f"use execute_tool_safely: \n {str(observations)[:400]} ",
-    )
-
-    tool_outputs = [
-        ToolMessage(
-            content=observation,
-            name=tool_call["name"],
-            tool_call_id=tool_call["id"],
-        )
-        for observation, tool_call in zip(observations, tool_calls)
-    ]
-
-    if _tool_call_iterations >= _max_react_tool_calls:
-        return Command(
-            goto="compress_research",
-            update={
-                "messages": tool_outputs,
-            },
-        )
-
-    return Command(
-        goto="researcher",
-        update={
-            "messages": tool_outputs,
-        },
-    )
-
-
-# 精炼结果
-@Agent_Hooks_Instance.node_with_hooks(node_name="compress_research")
-async def compress_research(
-    state: State, runtime: Runtime[Context]
-) -> Command[Literal["__end__"]]:
-    _NODE_NAME = "compress_research"
-    # 变量
-    _thread_id = runtime.context.thread_id
-    _model_name = runtime.context.model
-    _messages = (
-        state.messages.value if isinstance(state.messages, Messages) else state.messages
-    )
-
-    # 提示词
-    def _assemble_prompt(messages):
-        _compress_research_system = Prompts_Provider_Instance.get_template(
+        _compress_research_system = get_prompts_provider().get_template(
             "researcher", "compress_research_system"
         )
         messages = [
             SystemMessage(
-                content=Prompts_Provider_Instance.prompt_apply_template(
+                content=get_prompts_provider().prompt_apply_template(
                     _compress_research_system, {"date": get_today_str()}
                 )
             )
-        ] + messages
+        ] + _messages
 
-        _compress_research_human = Prompts_Provider_Instance.get_template(
+        _compress_research_human = get_prompts_provider().get_template(
             "researcher", "compress_research_human"
         )
         messages.append(
             HumanMessage(
-                content=Prompts_Provider_Instance.prompt_apply_template(
+                content=get_prompts_provider().prompt_apply_template(
                     _compress_research_human
                 )
             )
         )
         return messages
 
-    max_retries = 3
-    current_retry = 0
-    while current_retry <= max_retries:  # 尝试3次, 防止因为上下文过长，导致失败
-        try:
-            # 4 大模型
-            response = await LLMS_Provider_Instance.llm_wrap_hooks(
-                _thread_id,
-                _NODE_NAME,
-                _assemble_prompt(_messages),
-                _model_name,
-            )
+    @_hook.node_with_hooks(node_name="compress")
+    async def _node(state: SuperState, runtime: Runtime[SuperContext]):
+        # 获取运行时变量
+        _thread_id = runtime.context.get("thread_id", "default")
+        _model_name = runtime.context.get("model", "basic")
+        _config = runtime.context.get("config", {})
 
-            Agent_Hooks_Instance.extract_valid_info(response)
-            log_info_set_color(_thread_id, _NODE_NAME, response.content)
+        # 获取状态变量
+        _code = state.get("code", 0)
+        if _code != 0:
+            return Command(goto="__end__")
 
+        _messages = state.get("messages")
+        if not _messages:
             return Command(
                 goto="__end__",
-                update={
-                    "code": 0,
-                    "messages": Messages(type="end"),
-                    "data": {_NODE_NAME: response.content},
-                },
+                update={"code": -1, "messages": [AIMessage(content="No messages")]},
             )
-        except Exception as e:
-            _messages = remove_up_to_last_ai_message(_messages)
-            logger.warning(f"remove_up_to_last_ai_message: {e}")
-            current_retry += 1
 
-    return Command(
-        goto="__end__",
-        update={
-            "code": 1,
-            "messages": Messages(type="end"),
-            "data": {
-                _NODE_NAME: "Error synthesizing research report: Maximum retries exceeded"
-            },
-        },
-    )
+        if isinstance(_messages[-1], ToolMessage):
+            return Command(
+                goto="__end__",
+            )
+
+        # 模型执行前
+        response = await _before_model_hooks(_messages)
+
+        max_retries = 3
+        current_retry = 0
+        while current_retry <= max_retries:  # 尝试3次, 防止因为上下文过长，导致失败
+            try:
+                # 4 大模型
+                response = await get_llms_provider().llm_wrap_hooks(
+                    _thread_id,
+                    node_name,
+                    response,
+                    _model_name,
+                    tools=tools,
+                    structured_output=structured_output,
+                    **_config,  # type: ignore
+                )
+                log_info_set_color(_thread_id, node_name, response.content)
+
+                return Command(
+                    goto="__end__",
+                    update={
+                        "messages": Overwrite([response]),
+                        "data": {"result": response.content},
+                    },
+                )
+            except Exception as e:
+                _messages = remove_up_to_last_ai_message(_messages)  # type: ignore
+                logger.warning(f"remove_up_to_last_ai_message: {e}")
+                current_retry += 1
+
+    return _node
+
+
+# 创建路由[ researcher ···> compress_node | tools | end]条件边
+def create_researcher_route_edges():
+    """创建路由[ researcher ···> compress | tools | end ]条件边"""
+
+    # 4. 定义路由逻辑：判断是否需要调用工具
+    def route_edges(state: SuperState, runtime: Runtime[SuperContext]):
+        """
+        路由规则：
+        - 如果最后一条消息包含 tool_calls → 跳转到 tools 节点
+        -
+        - 否则 → compress
+        """
+        # 变量
+        _thread_id = runtime.context.get("thread_id", "default")
+
+        _code = state.get("code", 0)
+        if _code != 0:
+            return "__end__"
+
+        _messages = state.get("messages")
+        if not _messages:
+            return "__end__"
+
+        logger.info(f"[{_thread_id}]: _messages: {_messages[-1]}")
+
+        if not isinstance(_messages[-1], AIMessage):
+            return "compress_node"
+
+        last_message = cast(AIMessage, _messages[-1])
+
+        # 检查LLM是否生成了工具调用指令
+        if hasattr(last_message, "tool_calls") and last_message.tool_calls:
+            logger.info(
+                f"[{_thread_id}]: LLM 生成了工具调用指令: {last_message.tool_calls}"
+            )
+            return "tools"
+
+        return "compress_node"
+
+    return route_edges
 
 
 def compile_researcher_agent():
-    _agent = StateGraph(State, context_schema=Context)
-    _agent.add_node("researcher", researcher)
-    _agent.add_node("researcher_tools", researcher_tools)
-    _agent.add_node("compress_research", compress_research)
-    _agent.add_edge(START, "researcher")
-    return _agent.compile()
+    tools = [llm_searcher_tool]
 
+    researcher_node = create_researcher_node()
+    tool_node = ToolNode(tools=tools)
+    compress_node = create_compress_node()
 
-def compile_wechat_researcher_agent():
-    _agent = StateGraph(State, context_schema=Context)
-    _agent.add_node("researcher", researcher)
-    _agent.add_node("researcher_tools", wechat_researcher_tools)
-    _agent.add_node("compress_research", compress_research)
-    _agent.add_edge(START, "researcher")
-    return _agent.compile()
+    researcher_route_edges = create_researcher_route_edges()
+
+    _agent = StateGraph(SuperContext, context_schema=SuperContext)
+    _agent.add_node("researcher_node", researcher_node)
+    _agent.add_node("compress_node", compress_node)
+
+    _agent.add_node("tools", tool_node)
+
+    _agent.add_edge(START, "researcher_node")
+
+    _agent.add_conditional_edges(
+        source="researcher_node",
+        path=researcher_route_edges,
+        path_map={
+            "tools": "tools",
+            "compress_node": "compress_node",
+            "__end__": "__end__",  # 结束流程
+        },
+    )
+
+    checkpointer = InMemorySaver()
+    _agent = _agent.compile(checkpointer=checkpointer)
+    png_bytes = _agent.get_graph(xray=True).draw_mermaid()
+    logger.info(f"researcher_agent: \n\n{png_bytes}")
+    return _agent

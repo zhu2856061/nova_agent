@@ -7,30 +7,28 @@ import json
 
 import httpx
 
+request_data = {
+    "trace_id": "123",
+    "context": {"thread_id": "Nova", "model": "basic", "agent": "themeslicer"},
+    "state": {
+        "messages": [
+            {
+                "type": "human",
+                "content": "我是小明，很喜欢足球啊",  #
+            },
+        ],
+    },
+    "stream": True,
+}
+
 
 async def agent_client():
-    request_data = {
-        "trace_id": "123",
-        "context": {
-            "thread_id": "Nova",
-            "model": "basic",
-        },
-        "state": {
-            "messages": [
-                {
-                    "type": "human",
-                    "content": "我是小明，很喜欢足球啊",  #
-                },
-            ],
-        },
-        "stream": True,
-    }
     # 使用 httpx 异步客户端发送请求
     async with httpx.AsyncClient(timeout=600.0) as client:
         # 发送 POST 请求到 /stream_llm 路由
         async with client.stream(
             "POST",
-            "http://0.0.0.0:2021/agent/themeslicer",
+            "http://0.0.0.0:2021/agent/service",
             json=request_data,
             timeout=600.0,
         ) as response:
@@ -50,30 +48,32 @@ async def agent_client():
                         print("==>", tmp)
 
 
+human_feedback_request_data = {
+    "trace_id": "123",
+    "context": {
+        "thread_id": "Nova",
+        "model": "basic",
+        "agent": "themeslicer",
+        "is_human_in_loop": True,
+    },
+    "state": {
+        "user_guidance": {
+            "human_in_loop": "确定",  # 主题数量为1个
+        },
+    },
+    "stream": True,
+}
+
+
 async def human_in_loop_client():
-    request_data = {
-        "trace_id": "123",
-        "context": {
-            "thread_id": "Nova",
-            "task_dir": "merlin",
-            "model": "basic",
-        },
-        "state": {
-            "user_guidance": {
-                "human_in_loop": "确定",  # 主题数量为1个
-                "agent_name": "themeslicer",
-            },
-        },
-        "stream": True,
-    }
 
     # 使用 httpx 异步客户端发送请求
     async with httpx.AsyncClient(timeout=600.0) as client:
         # 发送 POST 请求到 /stream_llm 路由
         async with client.stream(
             "POST",
-            "http://0.0.0.0:2021/agent/human_in_loop",
-            json=request_data,
+            "http://0.0.0.0:2021/agent/service",
+            json=human_feedback_request_data,
             timeout=600.0,
         ) as response:
             # 检查响应状态码
@@ -88,5 +88,5 @@ async def human_in_loop_client():
 
 
 if __name__ == "__main__":
-    asyncio.run(agent_client())
-    # asyncio.run(human_in_loop_client())
+    # asyncio.run(agent_client())
+    asyncio.run(human_in_loop_client())

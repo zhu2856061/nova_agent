@@ -37,6 +37,7 @@ AGENT_REGISTRY = {
     "chat": chat_agent,
 }
 
+
 VALID_TOKENS = ["1234"]
 
 
@@ -60,8 +61,8 @@ async def stream_agent_events(
     state["code"] = 0
     try:
         async with aiohttp.ClientSession() as session:  # Auto-closing context manager
-            if context.get("human_in_loop"):
-                req = Command(resume=context.get("human_in_loop"))
+            if context.get("is_human_in_loop"):
+                req = Command(resume=state.get("user_guidance"))
             else:
                 req = state
             async for event in instance.astream_events(
@@ -135,17 +136,18 @@ async def agent_service(request: SuperAgentRequest):
         assert isinstance(config, dict)
         config.update({"configurable": {"thread_id": thread_id}})
 
-        # 若是 human_in_loop 则需要判断 state.user_guidance 字段存在
+        # 若是 is_human_in_loop 则需要判断 state.user_guidance 字段存在
         user_guidance = request.state.get("user_guidance")
-        is_human_in_loop = context.get("human_in_loop", False)
+        is_human_in_loop = context.get("is_human_in_loop", False)
         if is_human_in_loop and not user_guidance:
             logger.error(
-                "error: human_in_loop is True, user_guidance is required", exc_info=True
+                "error: is_human_in_loop is True, user_guidance is required",
+                exc_info=True,
             )
             return SuperAgentResponse(
                 code=1,
                 data={
-                    "err_message": "human_in_loop is True, user_guidance is required"
+                    "err_message": "is_human_in_loop is True, user_guidance is required"
                 },
             )
 

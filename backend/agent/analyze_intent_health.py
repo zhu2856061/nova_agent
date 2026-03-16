@@ -16,10 +16,12 @@ from langgraph.runtime import Runtime
 from langgraph.types import Command
 from sklearn.metrics.pairwise import cosine_similarity
 
-from nova.embeddings import Embeddings_Instances
-from nova.hooks import Agent_Hooks_Instance
-from nova.llms import Prompts_Provider_Instance
 from nova.model.agent import Context, State
+from nova.provider import (
+    get_prompts_provider,
+    get_qwen3_embeddings_provider,
+    get_super_agent_hooks,
+)
 
 logger = logging.getLogger(__name__)
 # ######################################################################################
@@ -33,102 +35,110 @@ logger = logging.getLogger(__name__)
 # ######################################################################################
 
 
-# 函数
-@Agent_Hooks_Instance.node_with_hooks(node_name="analyze_intent_health")
-async def analyze_intent_health(state: State, runtime: Runtime[Context]):
-    """
-    检查意图健康，其中输入列必须为： 标准问，相似问
+def create_ananlyze_intent_health_agent(node_name="analyze_intent_health"):
+    _hook = get_super_agent_hooks()
 
-    """
-    # 变量
-    _thread_id = runtime.context.thread_id
-    _input_path = state.data["input_path"]
-    _output_dir = state.data["output_path"]
+    # 函数
+    @_hook.node_with_hooks(node_name=node_name)
+    async def _node(state: State, runtime: Runtime[Context]):
+        """
+        检查意图健康，其中输入列必须为： 标准问，相似问
 
-    # 提示词
-    _prompt_tamplate = Prompts_Provider_Instance.get_template(
-        "embeddings", "chatbot_qwen3_embedding_8b"
-    )
+        """
+        # 变量
+        _thread_id = runtime.context.thread_id
+        _input_path = state.data["input_path"]
+        _output_dir = state.data["output_path"]
 
-    #
-    _df = pd.read_csv(_input_path)
-    _intent_map = defaultdict(list)
-
-    for _, row in _df.iterrows():
-        _intent_map[row["标准问"]].append(row["相似问"])
-
-    _intent_names = list(_intent_map.keys())
-    _intent_centroids = []  # 存储每个意图的中心向量
-    _report = []
-
-    logger.info(f"正在处理 {len(_intent_names)} 个意图...")
-
-    # 2. 计算内聚度 (Intra-intent Cohesion)
-    for intent in _intent_names:
-        queries = _intent_map[intent]
-        embeddings = Embeddings_Instances.embed_documents(
-            queries, prompt=_prompt_tamplate
+        # 提示词
+        _prompt_tamplate = get_prompts_provider().get_template(
+            "embeddings", "chatbot_qwen3_embedding_8b"
         )
 
-        # 计算该意图的中心点（质心）
-        centroid = np.mean(embeddings, axis=0)
-        _intent_centroids.append(centroid)
+        #
+        _df = pd.read_csv(_input_path)
+        _intent_map = defaultdict(list)
 
-        # 计算所有相似问到中心点的平均相似度
-        cohesion = np.mean(cosine_similarity([centroid], embeddings))  # type: ignore
+        for _, row in _df.iterrows():
+            _intent_map[row["标准问"]].append(row["相似问"])
 
-        _report.append(
-            {
-                "意图名称": intent,
-                "相似问数量": len(queries),
-                "内聚度得分": round(cohesion, 4),
-            }
+        _intent_names = list(_intent_map.keys())
+        _intent_centroids = []  # 存储每个意图的中心向量
+        _report = []
+
+        logger.info(f"正在处理 {len(_intent_names)} 个意图...")
+
+        # 2. 计算内聚度 (Intra-intent Cohesion)
+        for intent in _intent_names:
+            queries = _intent_map[intent]
+            embeddings = get_qwen3_embeddings_provider().embed_documents(
+                queries, prompt=_prompt_tamplate
+            )
+
+            # 计算该意图的中心点（质心）
+            centroid = np.mean(embeddings, axis=0)
+            _intent_centroids.append(centroid)
+
+            # 计算所有相似问到中心点的平均相似度
+            cohesion = np.mean(cosine_similarity([centroid], embeddings))  # type: ignore
+
+            _report.append(
+                {
+                    "意图名称": intent,
+                    "相似问数量": len(queries),
+                    "内聚度得分": round(cohesion, 4),
+                }
+            )
+
+        # 3. 计算耦合度 (Inter-intent Coupling / Conflict)
+        # 计算意图中心点之间的两两相似度矩阵
+        dist_matrix = cosine_similarity(_intent_centroids)  # type: ignore
+
+        conflicts = []
+        for i in range(len(_intent_names)):
+            for j in range(i + 1, len(_intent_names)):
+                similarity = dist_matrix[i][j]
+                if similarity > 0.85:  # 高风险阈值
+                    conflicts.append(
+                        {
+                            "意图A": _intent_names[i],
+                            "意图B": _intent_names[j],
+                            "语义相似度": round(similarity, 4),
+                            "建议": "建议合并或重新定义边界",
+                        }
+                    )
+
+        # 4. 输出结果
+        report_df = pd.DataFrame(_report)
+        conflict_df = pd.DataFrame(conflicts).sort_values(
+            by="语义相似度", ascending=False
+        )
+        report_df.to_csv(os.path.join(_output_dir, "report.csv"), index=False)
+        conflict_df.to_csv(os.path.join(_output_dir, "conflict.csv"), index=False)
+
+        logger.info("\n--- 意图内聚度扫描 (得分越低越乱) ---")
+        logger.info(report_df.sort_values(by="内聚度得分").head(10))  # 打印最乱的10个
+
+        logger.info("\n--- 高风险冲突对扫描 (相似度越高越危险) ---")
+        logger.info(conflict_df.head(10))
+
+        return Command(
+            goto="__end__",
+            update={
+                "code": 0,
+                "err_message": "ok",
+                # "data": {"report_df": report_df, "conflict_df": conflict_df},
+            },
         )
 
-    # 3. 计算耦合度 (Inter-intent Coupling / Conflict)
-    # 计算意图中心点之间的两两相似度矩阵
-    dist_matrix = cosine_similarity(_intent_centroids)  # type: ignore
-
-    conflicts = []
-    for i in range(len(_intent_names)):
-        for j in range(i + 1, len(_intent_names)):
-            similarity = dist_matrix[i][j]
-            if similarity > 0.85:  # 高风险阈值
-                conflicts.append(
-                    {
-                        "意图A": _intent_names[i],
-                        "意图B": _intent_names[j],
-                        "语义相似度": round(similarity, 4),
-                        "建议": "建议合并或重新定义边界",
-                    }
-                )
-
-    # 4. 输出结果
-    report_df = pd.DataFrame(_report)
-    conflict_df = pd.DataFrame(conflicts).sort_values(by="语义相似度", ascending=False)
-    report_df.to_csv(os.path.join(_output_dir, "report.csv"), index=False)
-    conflict_df.to_csv(os.path.join(_output_dir, "conflict.csv"), index=False)
-
-    logger.info("\n--- 意图内聚度扫描 (得分越低越乱) ---")
-    logger.info(report_df.sort_values(by="内聚度得分").head(10))  # 打印最乱的10个
-
-    logger.info("\n--- 高风险冲突对扫描 (相似度越高越危险) ---")
-    logger.info(conflict_df.head(10))
-
-    return Command(
-        goto="__end__",
-        update={
-            "code": 0,
-            "err_message": "ok",
-            # "data": {"report_df": report_df, "conflict_df": conflict_df},
-        },
-    )
+    return _node
 
 
 def compile_analyze_intent_health_agent():
     # graph
+    _node = create_ananlyze_intent_health_agent()
     _agent = StateGraph(State, context_schema=Context)
-    _agent.add_node("analyze_intent_health", analyze_intent_health)
+    _agent.add_node("analyze_intent_health", _node)
     _agent.add_edge(START, "analyze_intent_health")
 
     checkpointer = InMemorySaver()

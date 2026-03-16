@@ -19,10 +19,10 @@ from langgraph.store.base import BaseStore
 from langgraph.types import Command
 
 from nova import CONF
+from nova.hooks import Super_Agent_Hook_Instance
+from nova.llms import LLMS_Provider_Instance, Prompts_Provider_Instance
 from nova.memory import SQLITESTORE
 from nova.model.super_agent import SuperContext, SuperState
-from nova.node.factory import NodeFactory
-from nova.provider import get_llms_provider, get_prompts_provider, get_super_agent_hooks
 from nova.utils.common import get_today_str
 
 logger = logging.getLogger(__name__)
@@ -77,7 +77,6 @@ async def upsert_memory_tool(
 # ######################################################################################
 # 创建记忆节点
 def create_memorizer_node(node_name, tools=None, structured_output=None):
-    _hook = get_super_agent_hooks()
 
     async def _before_model_hooks(state: SuperState, runtime: Runtime[SuperContext]):
         # 核心：组装提示词
@@ -99,16 +98,30 @@ def create_memorizer_node(node_name, tools=None, structured_output=None):
             "date": get_today_str(),
         }
 
-        _prompt_tamplate = get_prompts_provider().get_template("memorizer", "memorizer")
+        _prompt_tamplate = Prompts_Provider_Instance.get_template(
+            "memorizer", "memorizer"
+        )
         return [
             SystemMessage(
-                content=get_prompts_provider().prompt_apply_template(
+                content=Prompts_Provider_Instance.prompt_apply_template(
                     _prompt_tamplate, tmp
                 )
             )
         ] + _messages
 
-    @_hook.node_with_hooks(node_name="memorizer")
+    async def _after_model_hooks(
+        state: SuperState, runtime: Runtime[SuperContext], response: AIMessage
+    ):
+
+        # 去掉冗余信息
+        response.additional_kwargs = {}
+        response.response_metadata = {}
+
+        return Command(
+            update={"messages": [response]},
+        )
+
+    @Super_Agent_Hook_Instance.node_with_hooks(node_name="memorizer")
     async def _node(state: SuperState, runtime: Runtime[SuperContext]):
         # 获取运行时变量
         _thread_id = runtime.context.get("thread_id", "default")
@@ -140,7 +153,7 @@ def create_memorizer_node(node_name, tools=None, structured_output=None):
         response = await _before_model_hooks(state, runtime)
 
         # 模型执行中
-        response = await get_llms_provider().llm_wrap_hooks(
+        response = await LLMS_Provider_Instance.llm_wrap_hooks(
             _thread_id,
             node_name,
             response,
@@ -151,7 +164,7 @@ def create_memorizer_node(node_name, tools=None, structured_output=None):
         )
 
         # 模型执行后
-        return await NodeFactory.after_model_hooks(response, state, runtime)
+        return await _after_model_hooks(state, runtime, response)
 
     return _node
 
