@@ -23,7 +23,7 @@ from .ainovel_chapter import (
 from .chat import compile_chat_agent
 from .deepresearcher import compile_deepresearcher_agent
 from .memorizer import compile_memorizer_agent
-from .researcher import compile_researcher_agent, compile_wechat_researcher_agent
+from .researcher import compile_researcher_agent
 from .super_nova import compile_super_nova_agent
 from .theme_slicer import compile_theme_slicer_agent
 
@@ -69,12 +69,8 @@ memorizer_agent = compile_memorizer_agent()
 # 基于网站研究
 researcher_agent = compile_researcher_agent()
 
-# 基于微信研究
-wechat_researcher_agent = compile_wechat_researcher_agent()
-
 # 主题挖掘
 theme_slicer_agent = compile_theme_slicer_agent()
-
 
 # 超星
 super_nova_agent = compile_super_nova_agent()

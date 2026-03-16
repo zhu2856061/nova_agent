@@ -19,9 +19,9 @@ from langgraph.runtime import Runtime
 from langgraph.types import Command
 
 from nova.model.super_agent import SuperContext, SuperState
-from nova.node.factory import NodeFactory
 from nova.provider import get_llms_provider, get_prompts_provider, get_super_agent_hooks
 from nova.utils.common import truncate_if_too_long
+from nova.utils.log_utils import log_info_set_color
 
 logger = logging.getLogger(__name__)
 # ######################################################################################
@@ -29,29 +29,46 @@ logger = logging.getLogger(__name__)
 
 
 # ######################################################################################
-# 创建节点
-def create_summarize_node(node_name="summarize", *, tools=None, structured_output=None):
+# 创建节点: 对上下文进行总结， 目的是缩小上下文的长度，防止token溢出
+def create_context_summarize_node(
+    node_name="context_summarize", *, tools=None, structured_output=None
+):
+    """对上下文进行总结， 目的是缩小上下文的长度，防止token溢出"""
     _hook = get_super_agent_hooks()
 
-    async def _before_model_hooks(
-        prompt_dir: str,
-        prompt_name: str,
-        state: SuperState,
-        runtime: Runtime[SuperContext],
-    ):
+    async def _before_model_hooks(state: SuperState, runtime: Runtime[SuperContext]):
         # 核心：组装提示词
         _messages = cast(list[AnyMessage], state.get("messages"))
         tmp = {
             "messages": get_buffer_string(_messages),
         }
         _prompt = get_prompts_provider().prompt_apply_template(
-            get_prompts_provider().get_template(prompt_dir, prompt_name), tmp
+            get_prompts_provider().get_template("node", "context_summarize"), tmp
         )
 
-        logger.info(f"prompt: {truncate_if_too_long(_prompt)}")
         return [HumanMessage(content=_prompt)]
 
-    @_hook.node_with_hooks(node_name="memorizer")
+    async def _after_model_hooks(
+        response: AIMessage, state: SuperState, runtime: Runtime[SuperContext]
+    ):
+
+        if not isinstance(response, AIMessage):
+            return Command(
+                update={
+                    "code": 1,
+                    "err_message": "response type not AIMessage",
+                    "messages": [response],
+                },
+            )
+        # 去掉冗余信息
+        response.additional_kwargs = {}
+        response.response_metadata = {}
+
+        return Command(
+            update={"data": {"result": response.content}},
+        )
+
+    @_hook.node_with_hooks(node_name=node_name)
     async def _node(state: SuperState, runtime: Runtime[SuperContext]):
         # 获取运行时变量
         _thread_id = runtime.context.get("thread_id", "default")
@@ -79,7 +96,7 @@ def create_summarize_node(node_name="summarize", *, tools=None, structured_outpu
                 goto="__end__",
             )
         # 模型执行前
-        response = await _before_model_hooks("node", "summarize", state, runtime)
+        response = await _before_model_hooks(state, runtime)
 
         # 模型执行中
         response = await get_llms_provider().llm_wrap_hooks(
@@ -92,17 +109,18 @@ def create_summarize_node(node_name="summarize", *, tools=None, structured_outpu
             **_config,  # type: ignore
         )
 
+        log_info_set_color(
+            _thread_id, node_name, truncate_if_too_long(response.content)
+        )
+
         # 模型执行后
-        return await NodeFactory.after_model_hooks(response, state, runtime)
+        return await _after_model_hooks(response, state, runtime)
 
     return _node
 
 
-def compile_summarize_agent():
+def compile_context_summarize_agent():
     _agent = StateGraph(SuperState, context_schema=SuperContext)
-    _agent.add_node("summarize", create_summarize_node())
-    _agent.add_edge(START, "summarize")
+    _agent.add_node("context_summarize", create_context_summarize_node())
+    _agent.add_edge(START, "context_summarize")
     return _agent.compile()
-
-
-summarize = compile_summarize_agent()

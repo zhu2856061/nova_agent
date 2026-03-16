@@ -58,7 +58,7 @@ class SuperAgentHooks:
 
         message = f"[ENTER] -> {node_name}: code={code} | err_message={err_message} | message={message}... "
 
-        log_info_set_color(thread_id, node_name, message)
+        log_info_set_color(thread_id, node_name, message, "blue")
         # 可扩展：限流、权限、发送 typing 信号、注入全局上下文等
 
     async def after_node(
@@ -72,7 +72,7 @@ class SuperAgentHooks:
         thread_id = runtime.context.get("thread_id", "default")
         message = f"[EXIT: {elapsed:.3f}s] <- {node_name}: result: {result}..."
 
-        log_info_set_color(thread_id, node_name, message)
+        log_info_set_color(thread_id, node_name, message, "blue")
         # 可扩展：埋点、prometheus 指标、审计日志等
 
     async def on_error(

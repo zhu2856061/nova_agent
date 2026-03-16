@@ -14,7 +14,13 @@ from fastapi.responses import StreamingResponse
 from langchain_core.runnables.config import RunnableConfig
 from langgraph.types import Command
 
-from nova.agent import chat_agent, memorizer_agent, super_nova_agent, theme_slicer_agent
+from nova.agent import (
+    chat_agent,
+    memorizer_agent,
+    researcher_agent,
+    super_nova_agent,
+    theme_slicer_agent,
+)
 from nova.model.service import SuperAgentRequest, SuperAgentResponse
 from nova.service.handle_event import handle_event
 
@@ -35,6 +41,7 @@ AGENT_REGISTRY = {
     "themeslicer": theme_slicer_agent,
     "memorizer": memorizer_agent,
     "chat": chat_agent,
+    "researcher": researcher_agent,
 }
 
 
