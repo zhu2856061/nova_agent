@@ -7,34 +7,35 @@ import json
 
 import httpx
 
+request_data = {
+    "trace_id": "123",
+    "context": {
+        "thread_id": "Nova",
+        "model": "basic",
+        "agent": "researcher",
+        "models": {"summarize": "basic"},
+    },
+    "state": {
+        "messages": [
+            {
+                "type": "human",
+                "content": "请查询网络上的信息，深圳的最近一周内的经济新闻",  #
+            },
+        ],
+        "data": {"123": "123"},
+    },
+    "stream": True,
+}
+
 
 async def agent_client():
-    request_data = {
-        "trace_id": "123",
-        "context": {
-            "thread_id": "Nova",
-            "task_dir": "merlin",
-            "model": "basic",
-        },
-        "state": {
-            "messages": {
-                "type": "override",
-                "value": [
-                    {
-                        "role": "user",
-                        "content": "请查询网络上的信息，深圳的最近一周内的经济新闻",
-                    },
-                ],
-            },
-        },
-        "stream": True,
-    }
+
     # 使用 httpx 异步客户端发送请求
     async with httpx.AsyncClient(timeout=600.0) as client:
         # 发送 POST 请求到 /stream_llm 路由
         async with client.stream(
             "POST",
-            "http://0.0.0.0:2021/agent/researcher",
+            "http://0.0.0.0:2021/agent/service",
             json=request_data,
             timeout=600.0,
         ) as response:
@@ -45,13 +46,13 @@ async def agent_client():
 
             async for chunk in response.aiter_bytes():
                 if chunk:
-                    # try:
-                    tmp = json.loads(chunk)
-                    if tmp["data"]["event_name"] == "on_chat_model_stream":
-                        continue
-                    print(tmp)
-                    # except:
-                    #     print(chunk)
+                    tmp = json.loads(chunk.decode("utf-8"))
+                    try:
+                        if tmp["data"]["event_name"] == "on_chat_model_stream":
+                            continue
+                        print(tmp)
+                    except Exception:
+                        print("==>", tmp)
 
 
 if __name__ == "__main__":

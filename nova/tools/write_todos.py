@@ -5,16 +5,20 @@
 from __future__ import annotations
 
 import logging
-from typing import Annotated
+from typing import Annotated, Literal
 
 from langchain.tools import InjectedToolCallId
 from langchain_core.messages import ToolMessage
 from langchain_core.tools import tool
 from langgraph.types import Command
-
-from nova.model.agent import Todo
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
+
+
+class Todo(BaseModel):
+    content: str
+    status: Literal["pending", "in_progress", "completed"]
 
 
 WRITE_TODOS_TOOL_DESCRIPTION = """Use this tool to create and manage a structured task list for your current work session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.
@@ -78,9 +82,10 @@ Being proactive with task management demonstrates attentiveness and ensures you 
 Remember: If you only need to make a few tool calls to complete a task, and it is clear what you need to do, it is better to just do the task directly and NOT call this tool at all."""
 
 
-@tool(description=WRITE_TODOS_TOOL_DESCRIPTION)
-def write_todos(
-    todos: list[Todo], tool_call_id: Annotated[str, InjectedToolCallId]
+@tool("write_todos", description=WRITE_TODOS_TOOL_DESCRIPTION)
+def write_todos_tool(
+    todos: list[Todo],
+    tool_call_id: Annotated[str, InjectedToolCallId],
 ) -> Command:
     """Create and manage a structured task list for your current work session."""
     return Command(

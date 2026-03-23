@@ -47,6 +47,7 @@ class SuperAgentHooks:
         code = state.get("code", 0)
         err_message = state.get("err_message", "ok")
         message = state.get("messages", [])
+
         data = self.truncate_text(str(state.get("data", {})))
         thread_id = runtime.context.get("thread_id", "default")
         # 截断数据
@@ -134,7 +135,6 @@ class SuperAgentHooks:
 
                     # 执行原节点函数
                     result = await node_func(state, runtime, **kwargs)
-
                     # 计算耗时并执行后置钩子
                     elapsed = (
                         time.perf_counter() - start_time

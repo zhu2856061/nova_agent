@@ -72,6 +72,7 @@ async def stream_agent_events(
                 req = Command(resume=state.get("user_guidance"))
             else:
                 req = state
+
             async for event in instance.astream_events(
                 req, config=config, context=context, version="v2"
             ):

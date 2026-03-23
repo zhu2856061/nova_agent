@@ -30,7 +30,7 @@ from nova.provider import (
     get_skill_provider,
     get_super_agent_hooks,
 )
-from nova.tools.digital_human_manager import Digital_Human_Manager
+from nova.tools import Digital_Human_Manager
 from nova.utils.common import get_today_str
 
 logger = logging.getLogger(__name__)

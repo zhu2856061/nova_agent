@@ -88,5 +88,5 @@ async def human_in_loop_client():
 
 
 if __name__ == "__main__":
-    # asyncio.run(agent_client())
-    asyncio.run(human_in_loop_client())
+    asyncio.run(agent_client())
+    # asyncio.run(human_in_loop_client())

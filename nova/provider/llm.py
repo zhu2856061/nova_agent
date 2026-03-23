@@ -9,9 +9,14 @@ from typing import Any
 
 from langchain_core.messages import AIMessage, BaseMessage
 from langchain_litellm import ChatLiteLLM, ChatLiteLLMRouter
-from litellm import Router  # type: ignore
+from litellm import BadRequestError, ContextWindowExceededError, Router  # type: ignore
 from pydantic import BaseModel
 
+from nova.controller.llm_exceptions import (
+    LLMBadRequestError,
+    LLMContextExceededError,
+    LLMExceptionError,
+)
 from nova.memory import SQLITECACHE
 from nova.model.config import LLMConfig
 from nova.utils.log_utils import log_error_set_color, log_info_set_color
@@ -102,9 +107,17 @@ class LLMSProvider:
             # 可选：在这里记录总耗时、token 等
             return response
 
+        except ContextWindowExceededError as e:
+            await self.on_error(thread_id, node_name, e)
+            raise LLMContextExceededError(e.message)
+
+        except BadRequestError as e:
+            await self.on_error(thread_id, node_name, e)
+            raise LLMBadRequestError(e.message)
+
         except Exception as e:
             await self.on_error(thread_id, node_name, e)
-            raise  # 或返回错误 AIMessage
+            raise LLMExceptionError(str(e))
 
     @staticmethod
     async def before_llm(thread_id: str, node_name: str, messages: list[BaseMessage]):

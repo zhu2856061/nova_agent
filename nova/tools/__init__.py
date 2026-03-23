@@ -4,81 +4,34 @@
 # @Moto   : Knowledge comes from decomposition
 from __future__ import annotations
 
-from langchain_community.tools.file_management import (
-    CopyFileTool,
-    DeleteFileTool,
-    FileSearchTool,
-    ListDirectoryTool,
-    MoveFileTool,
-    ReadFileTool,
-    WriteFileTool,
+from .ask_clarification import ask_clarification_tool
+from .digital_human_manager import (
+    sandbox_edit_file_tool,
+    sandbox_execute_tool,
+    sandbox_glob_tool,
+    sandbox_grep_tool,
+    sandbox_ls_tool,
+    sandbox_read_file_tool,
+    sandbox_write_file_tool,
 )
-
-from .baidu_serper import SerpBaiduTool
-from .file_manager import (
-    CreateDirectoryTool,
-    ReadJsonTool,
-    WriteJsonTool,
+from .web_wechat_search import (
+    web_crawl,
+    web_search,
 )
-from .filesystem_manager import (
-    filesystem_edit_file_tool,
-    filesystem_glob_tool,
-    filesystem_grep_tool,
-    filesystem_ls_tool,
-    filesystem_read_file_tool,
-    filesystem_write_file_tool,
-)
-from .format_result import MarkdownToHtmlTool
-from .llm_searcher import LLMSearchTool
-from .todo_list import write_todos
-from .web_crawler import CrawlTool
-from .wechat_crawler import CrawlWechatTool
-from .wechat_searcher import WechatSearchTool
-from .wechat_serper import SerpWechatTool
+from .write_todos import write_todos_tool
 
-# Create an instance
-# 文件操作类工具
-read_file_tool = ReadFileTool()
-write_file_tool = WriteFileTool()
-delete_file_tool = DeleteFileTool()
-list_directory_tool = ListDirectoryTool()
-copy_file_tool = CopyFileTool()
-move_file_tool = MoveFileTool()
-search_file_tool = FileSearchTool()
-
-# 自定义工具实例化（可选指定 root_dir 限制操作范围）
-create_directory_tool = CreateDirectoryTool()
-write_json_tool = WriteJsonTool()
-read_json_tool = ReadJsonTool()
-
-# 百度搜索工具
-serp_baidu_tool = SerpBaiduTool()
-
-# 形式化结果工具
-markdown_to_html_tool = MarkdownToHtmlTool()
-
-# 网页爬取工具
-web_crawler_tool = CrawlTool()
-
-# 爬取微信公众号工具
-crawl_wechat_tool = CrawlWechatTool()
-
-# 微信公众号搜索工具
-serp_wechat_tool = SerpWechatTool()
-
-# 微信知识检索工具
-wechat_searcher_tool = WechatSearchTool()
-
-# 带有总结的网络搜索工具
-llm_searcher_tool = LLMSearchTool()
-
-
-__all__ = [
-    "write_todos",
-    "filesystem_edit_file_tool",
-    "filesystem_glob_tool",
-    "filesystem_grep_tool",
-    "filesystem_ls_tool",
-    "filesystem_read_file_tool",
-    "filesystem_write_file_tool",
-]
+# 数字人核心工具
+Digital_Human_Manager = {
+    # "create_subagent": create_subagent_tool,
+    "read_file": sandbox_read_file_tool,
+    "write_file": sandbox_write_file_tool,
+    "edit_file": sandbox_edit_file_tool,
+    "ls": sandbox_ls_tool,
+    "glob": sandbox_glob_tool,
+    "grep": sandbox_grep_tool,
+    "execute": sandbox_execute_tool,
+    "ask_clarification": ask_clarification_tool,
+    "write_todos": write_todos_tool,
+    "web_search": web_search,
+    "fetch_url": web_crawl,
+}

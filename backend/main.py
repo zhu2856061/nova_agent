@@ -7,27 +7,13 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 
 from nova import CONF
-from nova.controller.exceptions import NOVAException, create_error_response
-from nova.service.agent_service import add_register_agent_endpoints, agent_router
-
-# from .agent.analyze_intent_health import compile_analyze_intent_health_agent
-# from .agent.chat_sample import compile_chat_sample_agent
-# from .agent.deepagent_sample import compile_deepagent_sample_agent
+from nova.service.agent_service import agent_router
 
 logger = logging.getLogger(__name__)
-
-
-# 用户自定义的agent 在这里注册进服务
-# add_register_agent_endpoints("chat_sample", compile_chat_sample_agent())
-# add_register_agent_endpoints(
-#     "analyze_intent_health", compile_analyze_intent_health_agent()
-# )
-# add_register_agent_endpoints("deepagent_sample", compile_deepagent_sample_agent())
 
 
 # --- FastAPI App Initialization ---
@@ -62,7 +48,7 @@ app.add_middleware(
 )
 
 
-@app.get("/health")
+@app.get("/health", tags=["health"])
 async def health_check():
     return {"status": "healthy"}
 
@@ -80,14 +66,14 @@ async def root():
 app.include_router(agent_router)
 
 
-# 添加全局异常处理器
-@app.exception_handler(NOVAException)
-async def nova_exception_handler(request: Request, exc: NOVAException):
-    """
-    处理自定义NOVA异常
-    """
-    logger.error(f"处理NOVA异常: {exc.error_code} - {exc.message}", exc_info=True)
-    return JSONResponse(status_code=exc.status_code, content=create_error_response(exc))
+# # 添加全局异常处理器
+# @app.exception_handler(NOVAException)
+# async def nova_exception_handler(request: Request, exc: NOVAException):
+#     """
+#     处理自定义NOVA异常
+#     """
+#     logger.error(f"处理NOVA异常: {exc.error_code} - {exc.message}", exc_info=True)
+#     return JSONResponse(status_code=exc.status_code, content=create_error_response(exc))
 
 
 if __name__ == "__main__":

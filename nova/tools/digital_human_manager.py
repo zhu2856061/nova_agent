@@ -4,16 +4,15 @@
 # @Moto   : Knowledge comes from decomposition
 from __future__ import annotations
 
-from typing import Annotated, List, Literal, cast
+from typing import Literal, cast
 
-from langchain.tools import InjectedToolCallId, ToolRuntime, tool
+from langchain.tools import ToolRuntime, tool
 
 from nova.controller.sandbox_exceptions import (
     SandboxError,
     SandboxNotFoundError,
     SandboxRuntimeError,
 )
-from nova.model.skill import Todo
 from nova.model.super_agent import SuperContext, SuperState
 from nova.sandbox.sandbox import Sandbox
 from nova.sandbox.sandbox_provider import get_sandbox_provider
@@ -81,96 +80,12 @@ def ensure_sandbox_initialized(
 
 # builtin tools
 # ======================================================================================
-# 网络搜索
-WEB_SEARCH_TOOL_DESCRIPTION = """A search engine optimized for comprehensive, accurate, and trusted results.
-Usage:
-- The query parameter is the search query
-
-Examples:
-- Search for "Python" on the web: `web_search(query="Python")`
-"""
-
-
-@tool("web_search", description=WEB_SEARCH_TOOL_DESCRIPTION)
-async def sandbox_web_search_tool(
-    tool_call_id: Annotated[str, InjectedToolCallId],
-    runtime: ToolRuntime[SuperContext, SuperState],
-    query: List[str],
-):
-    try:
-        models = runtime.context.get("models")
-        model = None
-        if models and models.get("summarize"):
-            model = models.get("summarize")
-
-        sandbox = ensure_sandbox_initialized(runtime)
-        result = await sandbox.web_search(query, summarize_model=model)
-        return result
-
-    except SandboxError as e:
-        return f"Error: {e}"
-    except Exception as e:
-        return f"Error: Unexpected error listing directory: {type(e).__name__}: {e}"
-
-
-# ======================================================================================
-
-# ======================================================================================
-# url 抓取数据
-FETCH_URL_TOOL_DESCRIPTION = """Fetch content from a URL and convert HTML to markdown format.
-
-    This tool fetches web page content and converts it to clean markdown text,
-    making it easy to read and process HTML content. After receiving the markdown,
-    you MUST synthesize the information into a natural, helpful response for the user.
-
-    Args:
-        url: The URL to fetch (must be a valid HTTP/HTTPS URL)
-        timeout: Request timeout in seconds (default: 30)
-
-    Returns:
-        Dictionary containing:
-        - success: Whether the request succeeded
-        - url: The final URL after redirects
-        - markdown_content: The page content converted to markdown
-        - status_code: HTTP status code
-        - content_length: Length of the markdown content in characters
-
-    IMPORTANT: After using this tool:
-    1. Read through the markdown content
-    2. Extract relevant information that answers the user's question
-    3. Synthesize this into a clear, natural language response
-    4. NEVER show the raw markdown to the user unless specifically requested
-"""
-
-
-@tool("fetch_url_tool", description=FETCH_URL_TOOL_DESCRIPTION)
-async def sandbox_fetch_url_tool(
-    tool_call_id: Annotated[str, InjectedToolCallId],
-    runtime: ToolRuntime[SuperContext, SuperState],
-    url: str,
-):
-    try:
-        sandbox = ensure_sandbox_initialized(runtime)
-        result = sandbox.fetch_url(url)
-        return result
-
-    except SandboxError as e:
-        return f"Error: {e}"
-    except Exception as e:
-        return f"Error: Unexpected error listing directory: {type(e).__name__}: {e}"
-
-
-# ======================================================================================
-
-
-# ======================================================================================
 # 子任务创建
 SUBAGENT_CREATION_DESCRIPTION = """\n"""
 
 
 @tool("create_subagent", description=SUBAGENT_CREATION_DESCRIPTION)
 async def create_subagent_tool(
-    tool_call_id: Annotated[str, InjectedToolCallId],
     runtime: ToolRuntime[SuperContext, SuperState],
     description: str,
     prompt: str,
@@ -179,74 +94,6 @@ async def create_subagent_tool(
 ):
 
     pass
-
-
-# ======================================================================================
-# 询问澄清
-ASK_CLARIFICATION_DESCRIPTION = """Ask the user for clarification when you need more information to proceed.
-
-    Use this tool when you encounter situations where you cannot proceed without user input:
-
-    - **Missing information**: Required details not provided (e.g., file paths, URLs, specific requirements)
-    - **Ambiguous requirements**: Multiple valid interpretations exist
-    - **Approach choices**: Several valid approaches exist and you need user preference
-    - **Risky operations**: Destructive actions that need explicit confirmation (e.g., deleting files, modifying production)
-    - **Suggestions**: You have a recommendation but want user approval before proceeding
-
-    The execution will be interrupted and the question will be presented to the user.
-    Wait for the user's response before continuing.
-
-    When to use ask_clarification:
-    - You need information that wasn't provided in the user's request
-    - The requirement can be interpreted in multiple ways
-    - Multiple valid implementation approaches exist
-    - You're about to perform a potentially dangerous operation
-    - You have a recommendation but need user approval
-
-    Best practices:
-    - Ask ONE clarification at a time for clarity
-    - Be specific and clear in your question
-    - Don't make assumptions when clarification is needed
-    - For risky operations, ALWAYS ask for confirmation
-    - After calling this tool, execution will be interrupted automatically
-
-    Args:
-        question: The clarification question to ask the user. Be specific and clear.
-        clarification_type: The type of clarification needed (missing_info, ambiguous_requirement, approach_choice, risk_confirmation, suggestion).
-        context: Optional context explaining why clarification is needed. Helps the user understand the situation.
-        options: Optional list of choices (for approach_choice or suggestion types). Present clear options for the user to choose from.
-"""
-
-
-@tool("ask_clarification", description=ASK_CLARIFICATION_DESCRIPTION)
-async def ask_clarification_tool(
-    tool_call_id: Annotated[str, InjectedToolCallId],
-    runtime: ToolRuntime[SuperContext, SuperState],
-    question: str,
-    clarification_type: Literal[
-        "missing_info",
-        "ambiguous_requirement",
-        "approach_choice",
-        "risk_confirmation",
-        "suggestion",
-    ],
-    context: str | None = None,
-    options: list[str] | None = None,
-) -> str:
-    try:
-        sandbox = ensure_sandbox_initialized(runtime)
-        result = sandbox.ask_clarification(
-            question, clarification_type, context, options
-        )
-        return result
-
-    except SandboxError as e:
-        return f"Error: {e}"
-    except Exception as e:
-        return f"Error: Unexpected error: {type(e).__name__}: {e}"
-
-
-# ======================================================================================
 
 
 # ======================================================================================
@@ -274,7 +121,6 @@ DEFAULT_READ_LIMIT = 500
 
 @tool("read_file", description=READ_FILE_DESCRIPTION)
 async def sandbox_read_file_tool(
-    tool_call_id: Annotated[str, InjectedToolCallId],
     runtime: ToolRuntime[SuperContext, SuperState],
     file_path: str,
     offset: int = DEFAULT_READ_OFFSET,
@@ -307,7 +153,6 @@ Usage:
 
 @tool("write_file", description=WRITE_FILE_DESCRIPTION)
 async def sandbox_write_file_tool(
-    tool_call_id: Annotated[str, InjectedToolCallId],
     runtime: ToolRuntime[SuperContext, SuperState],
     file_path: str,
     content: str,
@@ -342,7 +187,6 @@ Usage:
 
 @tool("edit_file", description=EDIT_FILE_DESCRIPTION)
 async def sandbox_edit_file_tool(
-    tool_call_id: Annotated[str, InjectedToolCallId],
     runtime: ToolRuntime[SuperContext, SuperState],
     file_path: str,
     old_string: str,
@@ -376,7 +220,6 @@ Usage:
 
 @tool("ls", description=SANDBOX_LS_DESCRIPTION)
 async def sandbox_ls_tool(
-    tool_call_id: Annotated[str, InjectedToolCallId],
     runtime: ToolRuntime[SuperContext, SuperState],
     path: str,
 ):
@@ -413,7 +256,6 @@ Examples:
 
 @tool("glob", description=GLOB_DESCRIPTION)
 async def sandbox_glob_tool(
-    tool_call_id: Annotated[str, InjectedToolCallId],
     runtime: ToolRuntime[SuperContext, SuperState],
     pattern: str,
     path: str = "/",
@@ -454,7 +296,6 @@ Examples:
 
 @tool("grep", description=GREP_DESCRIPTION)
 async def sandbox_grep_tool(
-    tool_call_id: Annotated[str, InjectedToolCallId],
     runtime: ToolRuntime[SuperContext, SuperState],
     pattern: str,
     path: str | None = None,
@@ -526,7 +367,6 @@ If execution is not supported, the tool will return an error message."""
 
 @tool("execute", description=EXECUTE_DESCRIPTION)
 async def sandbox_execute_tool(
-    tool_call_id: Annotated[str, InjectedToolCallId],
     runtime: ToolRuntime[SuperContext, SuperState],
     command: str,
 ):
@@ -541,99 +381,7 @@ async def sandbox_execute_tool(
         return f"Error: Unexpected error: {type(e).__name__}: {e}"
 
 
-WRITE_TODOS_TOOL_DESCRIPTION = """Use this tool to create and manage a structured task list for your current work session. This helps you track progress, organize complex tasks, and demonstrate thoroughness to the user.
-
-Only use this tool if you think it will be helpful in staying organized. If the user's request is trivial and takes less than 3 steps, it is better to NOT use this tool and just do the task directly.
-
-## When to Use This Tool
-Use this tool in these scenarios:
-
-1. Complex multi-step tasks - When a task requires 3 or more distinct steps or actions
-2. Non-trivial and complex tasks - Tasks that require careful planning or multiple operations
-3. User explicitly requests todo list - When the user directly asks you to use the todo list
-4. User provides multiple tasks - When users provide a list of things to be done (numbered or comma-separated)
-5. The plan may need future revisions or updates based on results from the first few steps
-
-## How to Use This Tool
-1. When you start working on a task - Mark it as in_progress BEFORE beginning work.
-2. After completing a task - Mark it as completed and add any new follow-up tasks discovered during implementation.
-3. You can also update future tasks, such as deleting them if they are no longer necessary, or adding new tasks that are necessary. Don't change previously completed tasks.
-4. You can make several updates to the todo list at once. For example, when you complete a task, you can mark the next task you need to start as in_progress.
-
-## When NOT to Use This Tool
-It is important to skip using this tool when:
-1. There is only a single, straightforward task
-2. The task is trivial and tracking it provides no benefit
-3. The task can be completed in less than 3 trivial steps
-4. The task is purely conversational or informational
-
-## Task States and Management
-
-1. **Task States**: Use these states to track progress:
-   - pending: Task not yet started
-   - in_progress: Currently working on (you can have multiple tasks in_progress at a time if they are not related to each other and can be run in parallel)
-   - completed: Task finished successfully
-
-2. **Task Management**:
-   - Update task status in real-time as you work
-   - Mark tasks complete IMMEDIATELY after finishing (don't batch completions)
-   - Complete current tasks before starting new ones
-   - Remove tasks that are no longer relevant from the list entirely
-   - IMPORTANT: When you write this todo list, you should mark your first task (or tasks) as in_progress immediately!.
-   - IMPORTANT: Unless all tasks are completed, you should always have at least one task in_progress to show the user that you are working on something.
-
-3. **Task Completion Requirements**:
-   - ONLY mark a task as completed when you have FULLY accomplished it
-   - If you encounter errors, blockers, or cannot finish, keep the task as in_progress
-   - When blocked, create a new task describing what needs to be resolved
-   - Never mark a task as completed if:
-     - There are unresolved issues or errors
-     - Work is partial or incomplete
-     - You encountered blockers that prevent completion
-     - You couldn't find necessary resources or dependencies
-     - Quality standards haven't been met
-
-4. **Task Breakdown**:
-   - Create specific, actionable items
-   - Break complex tasks into smaller, manageable steps
-   - Use clear, descriptive task names
-
-Being proactive with task management demonstrates attentiveness and ensures you complete all requirements successfully
-Remember: If you only need to make a few tool calls to complete a task, and it is clear what you need to do, it is better to just do the task directly and NOT call this tool at all."""
-
-
-@tool("write_todos", description=WRITE_TODOS_TOOL_DESCRIPTION)
-async def write_todos_tool(
-    tool_call_id: Annotated[str, InjectedToolCallId],
-    runtime: ToolRuntime[SuperContext, SuperState],
-    todos: list[Todo],
-) -> str:
-    try:
-        sandbox = ensure_sandbox_initialized(runtime)
-        result = sandbox.todo_list(todos)
-        return result
-
-    except SandboxError as e:
-        return f"Error: {e}"
-    except Exception as e:
-        return f"Error: Unexpected error: {type(e).__name__}: {e}"
-
-
 # ===========================
-# 数字人核心工具
-Digital_Human_Manager = {
-    "web_search": sandbox_web_search_tool,
-    "fetch_url": sandbox_fetch_url_tool,
-    # "create_subagent": create_subagent_tool,
-    "ask_clarification": ask_clarification_tool,
-    "read_file": sandbox_read_file_tool,
-    "write_file": sandbox_write_file_tool,
-    "edit_file": sandbox_edit_file_tool,
-    "ls": sandbox_ls_tool,
-    "glob": sandbox_glob_tool,
-    "grep": sandbox_grep_tool,
-    "execute": sandbox_execute_tool,
-    "write_todos": write_todos_tool,
-}
+
 
 # ===========================

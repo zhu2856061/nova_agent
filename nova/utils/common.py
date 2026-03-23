@@ -419,10 +419,8 @@ def perform_string_replacement(
 
 
 def truncate_if_too_long(result: list[str] | str) -> list[str] | str:
-    TOOL_RESULT_TOKEN_LIMIT = 200
-    TRUNCATION_GUIDANCE = (
-        "... [results truncated, try being more specific with your parameters]"
-    )
+    TOOL_RESULT_TOKEN_LIMIT = 400
+    TRUNCATION_GUIDANCE = "... [结果太长被截断]"
 
     """Truncate list or string result if it exceeds token limit (rough estimate: 4 chars/token)."""
     if isinstance(result, list):

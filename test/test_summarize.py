@@ -6,7 +6,7 @@ import os
 
 os.environ["CONFIG_PATH"] = "../config.yaml"
 
-from nova.node import context_summarize, webpage_summarize
+from nova.node import context_summarize_agent, webpage_summarize_agent
 
 input = {
     "messages": [
@@ -30,6 +30,6 @@ context = {
     "model": "deepseek",
 }
 # 同步调用
-result = asyncio.run(webpage_summarize.ainvoke(input, context=context))
+result = asyncio.run(webpage_summarize_agent.ainvoke(input, context=context))
 
 print(result)

@@ -152,11 +152,10 @@ class ChainStartHandler(EventHandler):
 
         node_name = get_node_name(langgraph_node, name)
         return {
+            "code": 0,
             "event_name": "on_chain_start",
-            "event_info": {
-                "trace_id": trace_id,
-                "node_name": node_name,
-            },
+            "trace_id": trace_id,
+            "node_name": node_name,
         }
 
 
@@ -176,18 +175,19 @@ class ChainEndHandler(EventHandler):
         if isinstance(output, Command):
             output = output.update
 
+        code = 0
         if isinstance(output, dict):
+            code = output.get("code", 0)
             output = output.get("data", {})
         elif isinstance(output, str):
             output = truncate_if_too_long(output)
 
         return {
+            "code": code,
             "event_name": "on_chain_end",
-            "event_info": {
-                "trace_id": trace_id,
-                "node_name": node_name,
-                "output": output,
-            },
+            "trace_id": trace_id,
+            "node_name": node_name,
+            "output": output,
         }
 
 
@@ -200,13 +200,15 @@ class ToolStartHandler(EventHandler):
         name = safe_get(event, "name", "")
         node_name = get_node_name(langgraph_node, name)
 
+        input = safe_get(event, "data.input", "")
+        input = truncate_if_too_long(str(input))
+
         return {
+            "code": 0,
             "event_name": "on_tool_start",
-            "event_info": {
-                "trace_id": trace_id,
-                "node_name": node_name,
-                "input": safe_get(event, "data.input", ""),
-            },
+            "trace_id": trace_id,
+            "node_name": node_name,
+            "input": input,
         }
 
 
@@ -218,19 +220,23 @@ class ToolEndHandler(EventHandler):
         langgraph_node = safe_get(event, "metadata.langgraph_node", "")
         name = safe_get(event, "name", "")
         node_name = get_node_name(langgraph_node, name)
-        tmp = safe_get(event, "data.output", "")
-        # if isinstance(tmp, ToolMessage):
-        #     tmp = truncate_if_too_long(str(tmp.content))
-        # else:
-        #     tmp = truncate_if_too_long(tmp["content"])
+        output = safe_get(event, "data.output", "")
+        if isinstance(output, Command):
+            output = output.update
+
+        code = 0
+        if isinstance(output, dict):
+            code = output.get("code", 0)
+            output = output.get("data", {})
+
+        output = truncate_if_too_long(str(output))
 
         return {
+            "code": code,
             "event_name": "on_tool_end",
-            "event_info": {
-                "trace_id": trace_id,
-                "node_name": node_name,
-                "output": tmp,
-            },
+            "trace_id": trace_id,
+            "node_name": node_name,
+            "output": output,
         }
 
 
@@ -248,10 +254,8 @@ class ChatModelStartHandler(EventHandler):
         node_name = get_node_name(langgraph_node, name)
         return {
             "event_name": "on_chat_model_start",
-            "event_info": {
-                "trace_id": trace_id,
-                "node_name": node_name,
-            },
+            "trace_id": trace_id,
+            "node_name": node_name,
         }
 
 
@@ -267,18 +271,26 @@ class ChatModelEndHandler(EventHandler):
             return None
 
         node_name = get_node_name(langgraph_node, name)
+
+        content = safe_get(event, "data.output.content", "")
+        content = truncate_if_too_long(str(content))
+
+        reasoning_content = safe_get(
+            event, "data.output.additional_kwargs.reasoning_content", ""
+        )
+        reasoning_content = truncate_if_too_long(str(reasoning_content))
+
+        tool_calls = safe_get(event, "data.output.tool_calls", [])
+        tool_calls = truncate_if_too_long(str(tool_calls))
+
         return {
             "event_name": "on_chat_model_end",
-            "event_info": {
-                "trace_id": trace_id,
-                "node_name": node_name,
-                "output": {
-                    "content": safe_get(event, "data.output.content", ""),
-                    # "reasoning_content": safe_get(
-                    #     event, "data.output.additional_kwargs.reasoning_content", ""
-                    # ),
-                    "tool_calls": safe_get(event, "data.output.tool_calls", []),
-                },
+            "trace_id": trace_id,
+            "node_name": node_name,
+            "output": {
+                "content": content,
+                "reasoning_content": reasoning_content,
+                "tool_calls": tool_calls,
             },
         }
 
@@ -303,24 +315,20 @@ class ChatModelStreamHandler(EventHandler):
         if reasoning_content:
             return {
                 "event_name": "on_chat_model_stream",
-                "event_info": {
-                    "trace_id": trace_id,
-                    "node_name": node_name,
-                    "output": {
-                        "message_id": message_id,
-                        "reasoning_content": reasoning_content,
-                    },
+                "trace_id": trace_id,
+                "node_name": node_name,
+                "output": {
+                    "message_id": message_id,
+                    "reasoning_content": reasoning_content,
                 },
             }
         elif content:
             return {
                 "event_name": "on_chat_model_stream",
-                "event_info": {
-                    "node_name": node_name,
-                    "output": {
-                        "message_id": message_id,
-                        "content": content,
-                    },
+                "node_name": node_name,
+                "output": {
+                    "message_id": message_id,
+                    "content": content,
                 },
             }
         return None
@@ -342,11 +350,9 @@ class ChainStreamHandler(EventHandler):
             chunk = extract_interrupt_data_from_exc(chunk.get("__interrupt__"))
             return {
                 "event_name": "human_in_loop",
-                "event_info": {
-                    "trace_id": trace_id,
-                    "node_name": node_name,
-                    "output": chunk,
-                },
+                "trace_id": trace_id,
+                "node_name": node_name,
+                "output": chunk,
             }
         return None
 
@@ -362,11 +368,9 @@ class ParserEndHandler(EventHandler):
 
         return {
             "event_name": "on_parser_end",
-            "event_info": {
-                "trace_id": trace_id,
-                "node_name": node_name,
-                "output": safe_get(event, "data.output", ""),
-            },
+            "trace_id": trace_id,
+            "node_name": node_name,
+            "output": safe_get(event, "data.output", ""),
         }
 
 

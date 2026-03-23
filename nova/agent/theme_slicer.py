@@ -137,7 +137,7 @@ def create_theme_slicer_node(node_name, tools=None, structured_output=None):
             )
         ]
 
-    @_hook.node_with_hooks(node_name="theme_slicer")
+    @_hook.node_with_hooks(node_name=node_name)
     async def _node(state: SuperState, runtime: Runtime[SuperContext]):
         # 获取运行时变量
         _thread_id = runtime.context.get("thread_id", "default")
@@ -152,8 +152,7 @@ def create_theme_slicer_node(node_name, tools=None, structured_output=None):
         _messages = state.get("messages")
         if not _messages:
             return Command(
-                goto="__end__",
-                update={"code": -1, "messages": [AIMessage(content="No messages")]},
+                update={"code": -1, "data": {"result": "No messages"}},
             )
 
         if isinstance(_messages[-1], ToolMessage):
@@ -197,8 +196,7 @@ def create_human_feedback_node(node_name):
         _messages = state.get("messages")
         if not _messages:
             return Command(
-                goto="__end__",
-                update={"code": -1, "messages": [AIMessage(content="No messages")]},
+                update={"code": -1, "data": {"result": "No messages"}},
             )
         # 断点
         value = interrupt(

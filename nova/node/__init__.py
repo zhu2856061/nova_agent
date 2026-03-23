@@ -7,5 +7,5 @@ from __future__ import annotations
 from .context_summarize import compile_context_summarize_agent
 from .webpage_summarize import compile_webpage_summarize_agent
 
-context_summarize = compile_context_summarize_agent()
-webpage_summarize = compile_webpage_summarize_agent()
+context_summarize_agent = compile_context_summarize_agent()
+webpage_summarize_agent = compile_webpage_summarize_agent()

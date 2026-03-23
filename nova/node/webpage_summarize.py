@@ -9,7 +9,6 @@ import logging
 from langchain_core.messages import (
     AIMessage,
     HumanMessage,
-    ToolMessage,
 )
 from langgraph.graph import START, StateGraph
 from langgraph.runtime import Runtime
@@ -87,10 +86,10 @@ def create_webpage_summarize_node(
                 update={"code": -1, "messages": [AIMessage(content="No messages")]},
             )
 
-        if isinstance(_messages[-1], ToolMessage):
-            return Command(
-                goto="__end__",
-            )
+        # if isinstance(_messages[-1], ToolMessage):
+        #     return Command(
+        #         goto="__end__",
+        #     )
 
         _context = _messages[-1].content
 

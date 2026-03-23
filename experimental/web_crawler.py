@@ -73,32 +73,6 @@ class CrawlTool(BaseTool):
     )
     args_schema: Type[BaseModel] = CrawlToolInput
 
-    @staticmethod
-    def remove_hyperlinks(html_content: str) -> str:
-        """
-        移除HTML内容中的超链接标签，只保留链接文本
-
-        正则说明:
-        - <a\\s+[^>]*?> : 匹配<a>标签的开始部分（包含所有属性）
-        - (.*?) : 非贪婪匹配链接文本内容
-        - </a> : 匹配</a>标签的结束部分
-        - re.IGNORECASE : 忽略大小写
-        - re.DOTALL : 让.匹配包括换行符在内的所有字符
-        """
-        if not html_content:
-            return ""
-        # 替换<a>标签为其内部文本
-        cleaned_content = re.sub(
-            r"<a\s+[^>]*?>(.*?)</a>",
-            r"\1",  # 保留链接文本
-            html_content,
-            flags=re.IGNORECASE | re.DOTALL,
-        )
-        # 可选：进一步清理可能残留的空标签或多余空格
-        cleaned_content = re.sub(r"<[^>]+>\s*<[^>]+>", " ", cleaned_content)
-        cleaned_content = re.sub(r"\s+", " ", cleaned_content).strip()
-        return cleaned_content
-
     async def _arun(self, url: str):
         # 验证输入参数
         try:

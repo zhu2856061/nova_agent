@@ -11,7 +11,6 @@ from langchain_core.messages import (
     AIMessage,
     AnyMessage,
     HumanMessage,
-    ToolMessage,
     get_buffer_string,
 )
 from langgraph.graph import START, StateGraph
@@ -91,10 +90,10 @@ def create_context_summarize_node(
                 update={"code": -1, "messages": [AIMessage(content="No messages")]},
             )
 
-        if isinstance(_messages[-1], ToolMessage):
-            return Command(
-                goto="__end__",
-            )
+        # if isinstance(_messages[-1], ToolMessage):
+        #     return Command(
+        #         goto="__end__",
+        #     )
         # 模型执行前
         response = await _before_model_hooks(state, runtime)
 

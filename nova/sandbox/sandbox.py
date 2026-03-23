@@ -98,34 +98,6 @@ class Sandbox(ABC):
         pass
 
     @abstractmethod
-    async def web_search(
-        self, queries: List[str], summarize_model: Optional[str] = None
-    ) -> str:
-        """网络搜索功能"""
-        pass
-
-    @abstractmethod
-    async def fetch_url(self, url: str, timeout: int = 30) -> str:
-        """网络抓取功能"""
-        pass
-
-    @abstractmethod
-    def ask_clarification(
-        self,
-        question: str,
-        clarification_type: Literal[
-            "missing_info",
-            "ambiguous_requirement",
-            "approach_choice",
-            "risk_confirmation",
-            "suggestion",
-        ],
-        context: str | None = None,
-        options: list[str] | None = None,
-    ) -> str:
-        return f"Clarification:\n\nquestion: {question}\n\nclarification_type: {clarification_type}\n\nreason: {context}\n\noptions: {options}"
-
-    @abstractmethod
     def create_subtask(
         self,
         description: str,
