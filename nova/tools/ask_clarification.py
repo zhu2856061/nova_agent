@@ -62,3 +62,64 @@ async def ask_clarification_tool(
 
     except Exception as e:
         return f"Error: Unexpected error: {type(e).__name__}: {e}"
+
+
+def format_clarification_message(args: dict) -> str:
+    """Format the clarification arguments into a user-friendly message.
+
+    Args:
+        args: The tool call arguments containing clarification details
+
+    Returns:
+        Formatted message string
+    """
+    question = args.get("question", "")
+    clarification_type = args.get("clarification_type", "missing_info")
+    context = args.get("context")
+    options = args.get("options", [])
+
+    # Type-specific icons
+    type_icons = {
+        "missing_info": "❓",
+        "ambiguous_requirement": "🤔",
+        "approach_choice": "🔀",
+        "risk_confirmation": "⚠️",
+        "suggestion": "💡",
+    }
+
+    icon = type_icons.get(clarification_type, "❓")
+
+    # Build the message naturally
+    message_parts = []
+
+    # Add icon and question together for a more natural flow
+    if context:
+        # If there's context, present it first as background
+        message_parts.append(f"{icon} {context}")
+        message_parts.append(f"\n{question}")
+    else:
+        # Just the question with icon
+        message_parts.append(f"{icon} {question}")
+
+    # Add options in a cleaner format
+    if options and len(options) > 0:
+        message_parts.append("")  # blank line for spacing
+        for i, option in enumerate(options, 1):
+            message_parts.append(f"  {i}. {option}")
+
+    return "\n".join(message_parts)
+
+
+def ask_clarification(
+    question: str,
+    clarification_type: Literal[
+        "missing_info",
+        "ambiguous_requirement",
+        "approach_choice",
+        "risk_confirmation",
+        "suggestion",
+    ],
+    context: str | None = None,
+    options: list[str] | None = None,
+) -> str:
+    return f"Clarification:\n\nquestion: {question}\n\nclarification_type: {clarification_type}\n\nreason: {context}\n\noptions: {options}"

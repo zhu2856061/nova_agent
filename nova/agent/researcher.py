@@ -21,7 +21,7 @@ from nova.controller.llm_exceptions import (
     LLMContextExceededError,
 )
 from nova.model.super_agent import SuperContext, SuperState
-from nova.node import context_summarize_agent
+from nova.node import context_summarize_agent, final_report_generation_agent
 from nova.provider import get_llms_provider, get_prompts_provider, get_super_agent_hooks
 from nova.tools.complete import complete_tool
 from nova.tools.web_wechat_search import web_crawl, web_search
@@ -129,43 +129,6 @@ def create_researcher_node(
                     "data": {"result": "tool_call_iterations >= max_react_tool_calls"},
                 },
             )
-        # 这里是如果最后一条消息是工具调用后的返回结果，需要对其长度进行判断，因为网络检索回的信息过长，会导致模型超出token限制
-        # if isinstance(_messages[-1], ToolMessage):
-        #     _last_message = _messages[-1].content
-        #     tool_call_id = _messages[-1].tool_call_id
-        #     id = _messages[-1].id
-
-        #     web_search_result = json.loads(cast(str, _last_message))
-        #     _summarize_tasks = []
-        #     for res in web_search_result:
-        #         _summarize_input = SuperState(messages=[HumanMessage(res["text"])])
-        #         _summarize_context = SuperContext(**runtime.context)
-        #         _summarize_tasks.append(
-        #             await webpage_summarize_agent.ainvoke(
-        #                 _summarize_input, context=_summarize_context
-        #             )
-        #         )
-
-        #     _summarize_tasks_output = await asyncio.gather(*_summarize_tasks)
-
-        #     for i, _out in enumerate(_summarize_tasks_output):
-        #         _data = _out.get("data")
-        #         _summarize_output = ""
-        #         if _data:
-        #             _summarize_output = _data.get("result")
-        #         if _summarize_output:
-        #             web_search_result[i]["text"] = _summarize_output
-        #         else:
-        #             web_search_result[i]["text"] = truncate_if_too_long(
-        #                 web_search_result[i]["text"]
-        #             )
-
-        #     _messages[-1] = ToolMessage(
-        #         json.dumps(web_search_result, ensure_ascii=False),
-        #         tool_call_id=tool_call_id,
-        #         id=id,
-        #     )
-        #     state.update({"messages": _messages})
 
         # 模型执行中
         try:
@@ -194,15 +157,18 @@ def create_researcher_node(
 
         # 如果最后返回的是工具，且工具名字为 complete_tool ，则结束
         response = cast(AIMessage, response)
-        if hasattr(response, "tool_calls") and response.tool_calls:
-            if response.tool_calls[-1]["name"] == "complete_tool":
-                return Command(
-                    update={
-                        "data": {
-                            "result": "the last message is complete_tool",
-                        },
+        if (
+            hasattr(response, "tool_calls")
+            and response.tool_calls
+            and response.tool_calls[-1]["name"] == "complete_tool"
+        ):
+            return Command(
+                update={
+                    "data": {
+                        "result": "the last message is complete_tool",
                     },
-                )
+                },
+            )
 
         # 模型执行后
         response = await _after_model_hooks(response, state, runtime)
@@ -271,7 +237,7 @@ def compile_researcher_agent():
 
     _agent = StateGraph(SuperState, context_schema=SuperContext)
     _agent.add_node("researcher_node", researcher_node)
-    _agent.add_node("report_node", context_summarize_agent)
+    _agent.add_node("report_node", final_report_generation_agent)
     _agent.add_node("tools", tool_node)
 
     _agent.add_edge(START, "researcher_node")

@@ -21,11 +21,13 @@ from crawl4ai.markdown_generation_strategy import DefaultMarkdownGenerator
 from crawl4ai.types import CrawlResult  # 关键：导入单结果类型
 from langchain.tools import ToolRuntime, tool
 from langchain_core.messages import HumanMessage
+from langgraph.types import Command
 from markdownify import markdownify as md
 from playwright.async_api import Browser, BrowserContext, async_playwright
 
 from nova.model.super_agent import SuperContext, SuperState
-from nova.node import webpage_summarize_agent
+
+# from nova.node import webpage_summarize_agent
 from nova.utils.common import (
     truncate_if_too_long,
 )
@@ -588,6 +590,8 @@ Examples:
 
 
 async def summary(results, context, model_name):
+    from nova.node import webpage_summarize_agent
+
     logger.info("===>开始压缩网页内容<===")
     _summarize_tasks = []
     for res in results:
@@ -595,15 +599,18 @@ async def summary(results, context, model_name):
         tmp = {**context, "model": model_name}
         _summarize_context = SuperContext(**tmp)
         _summarize_tasks.append(
-            await webpage_summarize_agent.ainvoke(
+            webpage_summarize_agent.ainvoke(
                 _summarize_input, context=_summarize_context
             )
         )
 
     _summarize_tasks_output = await asyncio.gather(*_summarize_tasks)
+    logger.info("===>完成压缩网页内容<===")
 
     for i, _out in enumerate(_summarize_tasks_output):
-        _data = _out.get("data")
+        if isinstance(_out, Command):
+            _out = _out.update
+        _data = _out.get("data") if _out else {}
         _summarize_output = ""
         if _data:
             _summarize_output = _data.get("result")

@@ -5,7 +5,9 @@
 from __future__ import annotations
 
 from .context_summarize import compile_context_summarize_agent
+from .factory import final_report_generation
 from .webpage_summarize import compile_webpage_summarize_agent
 
 context_summarize_agent = compile_context_summarize_agent()
 webpage_summarize_agent = compile_webpage_summarize_agent()
+final_report_generation_agent = final_report_generation()

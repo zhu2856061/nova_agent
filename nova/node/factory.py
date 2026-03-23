@@ -9,9 +9,11 @@ from typing import cast
 from langchain_core.messages import (
     AIMessage,
     AnyMessage,
+    HumanMessage,
     SystemMessage,
     ToolMessage,
     convert_to_messages,
+    get_buffer_string,
 )
 from langgraph.runtime import Runtime
 from langgraph.types import Command, Overwrite
@@ -19,7 +21,9 @@ from langgraph.types import Command, Overwrite
 from nova import CONF
 from nova.model.super_agent import SuperContext, SuperState
 from nova.provider import get_llms_provider, get_prompts_provider, get_super_agent_hooks
-from nova.utils.common import truncate_if_too_long
+from nova.tools.ask_clarification import ask_clarification
+from nova.tools.format_result import markdown_to_html_tool
+from nova.utils.common import get_today_str, truncate_if_too_long
 
 # ######################################################################################
 # 配置
@@ -287,3 +291,269 @@ def create_patch_tools_node(node_name="patch_tools"):
         return Command(update={"messages": Overwrite(patched_messages)})
 
     return patch_tools
+
+
+def create_ask_clarification_node(
+    node_name="ask_clarification",
+    *,
+    tools=[ask_clarification],
+    structured_output=None,
+):
+    _hook = get_super_agent_hooks()
+
+    async def _before_model_hooks(state: SuperState, runtime: Runtime[SuperContext]):
+        # 核心：组装提示词
+        _messages = cast(list[AnyMessage], state.get("messages"))
+
+        _prompt_tamplate = get_prompts_provider().get_template(
+            "node", "ask_clarification"
+        )
+
+        return [SystemMessage(content=_prompt_tamplate)] + _messages
+
+    async def _after_model_hooks(
+        response: AIMessage, state: SuperState, runtime: Runtime[SuperContext]
+    ):
+        _thread_id = runtime.context.get("thread_id", "default")
+        logger.info(
+            f"_thread_id={_thread_id}, result: {truncate_if_too_long(str(response))}"
+        )
+        if not isinstance(response, AIMessage):
+            return Command(
+                update={
+                    "code": 1,
+                    "err_message": "response type not AIMessage",
+                    "messages": [response],
+                },
+            )
+        if hasattr(response, "tool_calls") and response.tool_calls:
+            logger.info(
+                f"[{_thread_id}]: LLM 生成了工具调用指令: {response.tool_calls}"
+            )
+
+            result = ask_clarification(**response.tool_calls[-1].get("args"))
+            return AIMessage(id=response.id, content=result)
+
+        # 去掉冗余信息
+        response.additional_kwargs = {}
+        response.response_metadata = {}
+        return response
+
+    @_hook.node_with_hooks(node_name=node_name)
+    async def _node(state: SuperState, runtime: Runtime[SuperContext]):
+        # 获取运行时变量
+        _thread_id = runtime.context.get("thread_id", "default")
+        _model_name = runtime.context.get("model", "basic")
+        _config = runtime.context.get("config", {})
+
+        # 获取状态变量
+        _code = state.get("code", 0)
+        if _code != 0:
+            return Command(goto="__end__")
+
+        _messages = state.get("messages")
+        if not _messages:
+            return Command(
+                update={"code": -1, "data": {"result": "No messages"}},
+            )
+
+        # 模型执行前
+        response = await _before_model_hooks(state, runtime)
+
+        # 模型执行中
+        response = await get_llms_provider().llm_wrap_hooks(
+            _thread_id,
+            node_name,
+            response,
+            _model_name,
+            tools=tools,
+            structured_output=structured_output,
+            **_config,  # type: ignore
+        )
+
+        # 模型执行后
+        response = await _after_model_hooks(response, state, runtime)
+
+        return Command(
+            update={"messages": [response], "data": {"result": response.content}}
+        )
+
+    return _node
+
+
+def create_write_brief_node(
+    node_name="write_brief",
+    *,
+    tools=[ask_clarification],
+    structured_output=None,
+):
+    _hook = get_super_agent_hooks()
+
+    async def _before_model_hooks(state: SuperState, runtime: Runtime[SuperContext]):
+        # 核心：组装提示词
+        _messages = cast(list[AnyMessage], state.get("messages"))
+
+        tmp = {"messages": get_buffer_string(_messages)}
+
+        _prompt_tamplate = get_prompts_provider().prompt_apply_template(
+            get_prompts_provider().get_template("node", "write_brief"), tmp
+        )
+
+        return [HumanMessage(content=_prompt_tamplate)]
+
+    async def _after_model_hooks(
+        response: AIMessage, state: SuperState, runtime: Runtime[SuperContext]
+    ):
+        _thread_id = runtime.context.get("thread_id", "default")
+        logger.info(
+            f"_thread_id={_thread_id}, result: {truncate_if_too_long(str(response))}"
+        )
+        if not isinstance(response, AIMessage):
+            return Command(
+                update={
+                    "code": 1,
+                    "err_message": "response type not AIMessage",
+                    "messages": [response],
+                },
+            )
+
+        # 去掉冗余信息
+        response.additional_kwargs = {}
+        response.response_metadata = {}
+        return response
+
+    @_hook.node_with_hooks(node_name=node_name)
+    async def _node(state: SuperState, runtime: Runtime[SuperContext]):
+        # 获取运行时变量
+        _thread_id = runtime.context.get("thread_id", "default")
+        _model_name = runtime.context.get("model", "basic")
+        _config = runtime.context.get("config", {})
+
+        # 获取状态变量
+        _code = state.get("code", 0)
+        if _code != 0:
+            return Command(goto="__end__")
+
+        _messages = state.get("messages")
+        if not _messages:
+            return Command(
+                update={"code": -1, "data": {"result": "No messages"}},
+            )
+
+        # 模型执行前
+        response = await _before_model_hooks(state, runtime)
+
+        # 模型执行中
+        response = await get_llms_provider().llm_wrap_hooks(
+            _thread_id,
+            node_name,
+            response,
+            _model_name,
+            tools=tools,
+            structured_output=structured_output,
+            **_config,  # type: ignore
+        )
+
+        # 模型执行后
+        response = await _after_model_hooks(response, state, runtime)
+
+        return Command(
+            update={"messages": [response], "data": {"result": response.content}}
+        )
+
+    return _node
+
+
+def final_report_generation(
+    node_name="report_generation",
+    *,
+    tools=None,
+    structured_output=None,
+):
+    _hook = get_super_agent_hooks()
+
+    async def _before_model_hooks(state: SuperState, runtime: Runtime[SuperContext]):
+        # 核心：组装提示词
+        _messages = cast(list[AnyMessage], state.get("messages"))
+
+        tmp = {
+            "date": get_today_str(),
+            "research_brief": _messages[0].content,
+            "findings": get_buffer_string(_messages),
+        }
+
+        _prompt_tamplate = get_prompts_provider().prompt_apply_template(
+            get_prompts_provider().get_template("node", "reporter"), tmp
+        )
+
+        return [HumanMessage(content=_prompt_tamplate)]
+
+    async def _after_model_hooks(
+        response: AIMessage, state: SuperState, runtime: Runtime[SuperContext]
+    ):
+        _thread_id = runtime.context.get("thread_id", "default")
+        logger.info(
+            f"_thread_id={_thread_id}, result: {truncate_if_too_long(str(response))}"
+        )
+        if not isinstance(response, AIMessage):
+            return Command(
+                update={
+                    "code": 1,
+                    "err_message": "response type not AIMessage",
+                    "messages": [response],
+                },
+            )
+
+        # 去掉冗余信息
+        response.additional_kwargs = {}
+        response.response_metadata = {}
+        return response
+
+    @_hook.node_with_hooks(node_name=node_name)
+    async def _node(state: SuperState, runtime: Runtime[SuperContext]):
+        # 获取运行时变量
+        _thread_id = runtime.context.get("thread_id", "default")
+        _model_name = runtime.context.get("model", "basic")
+        _config = runtime.context.get("config", {})
+
+        _task_dir = runtime.context.get("task_dir") or CONF.SYSTEM.task_dir
+        _work_dir = os.path.join(_task_dir, _thread_id)
+        os.makedirs(_work_dir, exist_ok=True)
+
+        # 获取状态变量
+        _code = state.get("code", 0)
+        if _code != 0:
+            return Command(goto="__end__")
+
+        _messages = state.get("messages")
+        if not _messages:
+            return Command(
+                update={"code": -1, "data": {"result": "No messages"}},
+            )
+
+        # 模型执行前
+        response = await _before_model_hooks(state, runtime)
+
+        # 模型执行中
+        response = await get_llms_provider().llm_wrap_hooks(
+            _thread_id,
+            node_name,
+            response,
+            _model_name,
+            tools=tools,
+            structured_output=structured_output,
+            **_config,  # type: ignore
+        )
+        markdown_to_html_tool(
+            md_content=response.content,
+            output_file=os.path.join(_work_dir, "final_report.html"),
+        )
+
+        # 模型执行后
+        response = await _after_model_hooks(response, state, runtime)
+
+        return Command(
+            update={"messages": [response], "data": {"result": response.content}}
+        )
+
+    return _node
