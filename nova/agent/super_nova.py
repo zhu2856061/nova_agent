@@ -64,13 +64,14 @@ def _handle_clarification(request: ToolCall) -> ToolMessage:
     formatted_message = format_clarification_message(args)
 
     # Get the tool call ID
-    tool_call_id = request.get("id", "")
+    id = request.get("id", "")
+    print("===>", id)
 
     # Create a ToolMessage with the formatted question
     # This will be added to the message history
     tool_message = ToolMessage(
+        id=id,
         content=formatted_message,
-        tool_call_id=tool_call_id,
         name="ask_clarification",
     )
 
@@ -224,7 +225,7 @@ def create_super_nova_node(node_name="super_nova", tools=None, structured_output
 
 
 # 人类反馈节点
-def create_human_feedback_node(node_name):
+def create_human_feedback_node(node_name="human_feedback"):
     _hook = get_super_agent_hooks()
 
     @_hook.node_with_hooks(node_name=node_name)
@@ -335,7 +336,7 @@ def compile_super_nova_agent():
     ]
 
     super_nova_node = create_super_nova_node(tools=tools)
-    human_feedback_node = create_human_feedback_node(node_name="human_feedback_node")
+    human_feedback_node = create_human_feedback_node()
     tool_node = ToolNode(tools=tools)
     route_edges = create_route_tools_edges()
 

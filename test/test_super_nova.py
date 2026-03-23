@@ -12,7 +12,7 @@ async def agent_client(chat_router):
     request_data = {
         "trace_id": "123",
         "context": {
-            "thread_id": "Nova",
+            "thread_id": "Nova3",
             "model": "deepseek",
             "agent": chat_router,
             "models": {"summarize": "basic"},
@@ -61,15 +61,15 @@ async def human_in_loop_client(chat_router):
     request_data = {
         "trace_id": "123",
         "context": {
-            "thread_id": "Nova",
+            "thread_id": "Nova3",
             "model": "deepseek",
-            "models": {"summarize": "deepseek"},
+            "models": {"summarize": "basic"},
             "agent": chat_router,
             "is_human_in_loop": True,
         },
         "state": {
             "user_guidance": {
-                "human_in_loop": "技术架构设计指南",
+                "human_in_loop": "你自己决定，不懂的话可以上网查",
                 "agent_name": chat_router,
             },
         },
