@@ -23,10 +23,14 @@ from langgraph.runtime import Runtime
 from langgraph.types import Command, interrupt
 
 from nova import CONF
-from nova.hooks import Skill_Hooks_Instance, Super_Agent_Hook_Instance
-from nova.llms import LLMS_Provider_Instance, Prompts_Provider_Instance
 from nova.model.super_agent import SuperContext, SuperState
-from nova.tools.digital_human_manager import Digital_Human_Manager
+from nova.provider import (
+    get_llms_provider,
+    get_prompts_provider,
+    get_skill_provider,
+    get_super_agent_hooks,
+)
+from nova.tools import Digital_Human_Manager
 from nova.utils.common import get_today_str
 
 logger = logging.getLogger(__name__)
@@ -121,21 +125,6 @@ def _handle_clarification(request: ToolCall) -> ToolMessage:
     # Note: We don't add an extra AIMessage here - the frontend will detect
     # and display ask_clarification tool messages directly
     return tool_message
-
-
-def ask_clarification(
-    question: str,
-    clarification_type: Literal[
-        "missing_info",
-        "ambiguous_requirement",
-        "approach_choice",
-        "risk_confirmation",
-        "suggestion",
-    ],
-    context: str | None = None,
-    options: list[str] | None = None,
-) -> str:
-    return f"Clarification:\n\nquestion: {question}\n\nclarification_type: {clarification_type}\n\nreason: {context}\n\noptions: {options}"
 
 
 # ######################################################################################

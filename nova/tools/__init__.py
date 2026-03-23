@@ -5,7 +5,7 @@
 from __future__ import annotations
 
 from .ask_clarification import ask_clarification_tool
-from .digital_human_manager import (
+from .sandbox_manager import (
     sandbox_edit_file_tool,
     sandbox_execute_tool,
     sandbox_glob_tool,
@@ -33,5 +33,5 @@ Digital_Human_Manager = {
     "ask_clarification": ask_clarification_tool,
     "write_todos": write_todos_tool,
     "web_search": web_search,
-    "fetch_url": web_crawl,
+    "web_crawl": web_crawl,
 }

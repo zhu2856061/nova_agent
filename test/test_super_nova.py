@@ -14,13 +14,14 @@ async def agent_client(chat_router):
         "context": {
             "thread_id": "Nova",
             "model": "deepseek",
-            "models": {"summarize": "deepseek"},
+            "agent": chat_router,
+            "models": {"summarize": "basic"},
         },
         "state": {
             "messages": [
                 {
                     "type": "human",
-                    "content": "帮忙开发客服系统, 千珏 职业赛场使用率 数据分析",
+                    "content": "帮忙编写一个客服系统开发的skill",
                     # "content": "使用skills 告诉我langgraph是什么?",
                     # "content": "你先按你的思路，实现一个电竞客服系统， 整体框架搭建，并进行开发",
                 },
@@ -34,7 +35,7 @@ async def agent_client(chat_router):
         # 发送 POST 请求到 /stream_llm 路由
         async with client.stream(
             "POST",
-            f"http://0.0.0.0:2021/agent/{chat_router}",
+            "http://0.0.0.0:2021/agent/service",
             json=request_data,
         ) as response:
             # 检查响应状态码
@@ -61,12 +62,14 @@ async def human_in_loop_client(chat_router):
         "trace_id": "123",
         "context": {
             "thread_id": "Nova",
-            "model": "basic",
+            "model": "deepseek",
             "models": {"summarize": "deepseek"},
+            "agent": chat_router,
+            "is_human_in_loop": True,
         },
         "state": {
             "user_guidance": {
-                "human_in_loop": "你自己规划，不用来问，多上网查查",
+                "human_in_loop": "技术架构设计指南",
                 "agent_name": chat_router,
             },
         },
@@ -78,7 +81,7 @@ async def human_in_loop_client(chat_router):
         # 发送 POST 请求到 /stream_llm 路由
         async with client.stream(
             "POST",
-            "http://0.0.0.0:2021/agent/human_in_loop",
+            "http://0.0.0.0:2021/agent/service",
             json=request_data,
         ) as response:
             # 检查响应状态码
@@ -94,5 +97,5 @@ async def human_in_loop_client(chat_router):
 
 if __name__ == "__main__":
     chat_router = "super_nova"
-    # asyncio.run(agent_client(chat_router))
-    asyncio.run(human_in_loop_client(chat_router))
+    asyncio.run(agent_client(chat_router))
+    # asyncio.run(human_in_loop_client(chat_router))

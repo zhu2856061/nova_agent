@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Literal, cast
+from typing import cast
 
 from langchain_core.messages import (
     AIMessage,
@@ -31,6 +31,7 @@ from nova.provider import (
     get_super_agent_hooks,
 )
 from nova.tools import Digital_Human_Manager
+from nova.tools.ask_clarification import format_clarification_message
 from nova.utils.common import get_today_str
 
 logger = logging.getLogger(__name__)
@@ -40,52 +41,6 @@ logger = logging.getLogger(__name__)
 
 # ######################################################################################
 # 全局变量
-
-
-def _format_clarification_message(args: dict) -> str:
-    """Format the clarification arguments into a user-friendly message.
-
-    Args:
-        args: The tool call arguments containing clarification details
-
-    Returns:
-        Formatted message string
-    """
-    question = args.get("question", "")
-    clarification_type = args.get("clarification_type", "missing_info")
-    context = args.get("context")
-    options = args.get("options", [])
-
-    # Type-specific icons
-    type_icons = {
-        "missing_info": "❓",
-        "ambiguous_requirement": "🤔",
-        "approach_choice": "🔀",
-        "risk_confirmation": "⚠️",
-        "suggestion": "💡",
-    }
-
-    icon = type_icons.get(clarification_type, "❓")
-
-    # Build the message naturally
-    message_parts = []
-
-    # Add icon and question together for a more natural flow
-    if context:
-        # If there's context, present it first as background
-        message_parts.append(f"{icon} {context}")
-        message_parts.append(f"\n{question}")
-    else:
-        # Just the question with icon
-        message_parts.append(f"{icon} {question}")
-
-    # Add options in a cleaner format
-    if options and len(options) > 0:
-        message_parts.append("")  # blank line for spacing
-        for i, option in enumerate(options, 1):
-            message_parts.append(f"  {i}. {option}")
-
-    return "\n".join(message_parts)
 
 
 def _handle_clarification(request: ToolCall) -> ToolMessage:
@@ -102,11 +57,11 @@ def _handle_clarification(request: ToolCall) -> ToolMessage:
 
     question = args.get("question", "")
 
-    print("[ClarificationMiddleware] Intercepted clarification request")
-    print(f"[ClarificationMiddleware] Question: {question}")
+    logger.info("[ClarificationMiddleware] Intercepted clarification request")
+    logger.info(f"[ClarificationMiddleware] Question: {question}")
 
     # Format the clarification message
-    formatted_message = _format_clarification_message(args)
+    formatted_message = format_clarification_message(args)
 
     # Get the tool call ID
     tool_call_id = request.get("id", "")
@@ -127,26 +82,11 @@ def _handle_clarification(request: ToolCall) -> ToolMessage:
     return tool_message
 
 
-def ask_clarification(
-    question: str,
-    clarification_type: Literal[
-        "missing_info",
-        "ambiguous_requirement",
-        "approach_choice",
-        "risk_confirmation",
-        "suggestion",
-    ],
-    context: str | None = None,
-    options: list[str] | None = None,
-) -> str:
-    return f"Clarification:\n\nquestion: {question}\n\nclarification_type: {clarification_type}\n\nreason: {context}\n\noptions: {options}"
-
-
 # ######################################################################################
 
 
 # 创建数字人节点
-def create_digital_human_node(node_name, tools=None, structured_output=None):
+def create_super_nova_node(node_name="super_nova", tools=None, structured_output=None):
     _hook = get_super_agent_hooks()
 
     async def _before_model_hooks(state: SuperState, runtime: Runtime[SuperContext]):
@@ -160,17 +100,17 @@ def create_digital_human_node(node_name, tools=None, structured_output=None):
 
         # 加入澄清
         ask_clarification_system_prompt = get_prompts_provider().get_template(
-            "super_nova", "ask_clarification"
+            "tools", "ask_clarification"
         )
 
         # 加入todo list
         todo_list_system_prompt = get_prompts_provider().get_template(
-            "super_nova", "write_todos"
+            "tools", "write_todos"
         )
 
         # 加入网络搜索
         web_search_system_prompt = get_prompts_provider().get_template(
-            "super_nova", "web_search"
+            "tools", "web_search"
         )
 
         # 加入文件操作
@@ -179,7 +119,7 @@ def create_digital_human_node(node_name, tools=None, structured_output=None):
         _work_dir = os.path.join(cast(str, _task_dir), _thread_id)
 
         filesystem_system_prompt = get_prompts_provider().prompt_apply_template(
-            get_prompts_provider().get_template("super_nova", "filesystem"),
+            get_prompts_provider().get_template("tools", "filesystem"),
             {"work_dir": _work_dir},
         )
 
@@ -383,7 +323,7 @@ def compile_super_nova_agent():
     tools = [
         tools["ask_clarification"],
         tools["web_search"],
-        tools["fetch_url"],
+        tools["web_crawl"],
         tools["read_file"],
         tools["write_file"],
         tools["edit_file"],
@@ -394,23 +334,21 @@ def compile_super_nova_agent():
         tools["write_todos"],
     ]
 
-    digital_human_node = create_digital_human_node(
-        node_name="digital_human_node", tools=tools
-    )
+    super_nova_node = create_super_nova_node(tools=tools)
     human_feedback_node = create_human_feedback_node(node_name="human_feedback_node")
     tool_node = ToolNode(tools=tools)
     route_edges = create_route_tools_edges()
 
     # 构建图
     _agent = StateGraph(SuperState, context_schema=SuperContext)
-    _agent.add_node("digital_human_node", digital_human_node)
+    _agent.add_node("super_nova_node", super_nova_node)
     _agent.add_node("human_feedback_node", human_feedback_node)
     _agent.add_node("tools", tool_node)
-    _agent.add_edge(START, "digital_human_node")
-    _agent.add_edge("tools", "digital_human_node")
-    _agent.add_edge("human_feedback_node", "digital_human_node")
+    _agent.add_edge(START, "super_nova_node")
+    _agent.add_edge("tools", "super_nova_node")
+    _agent.add_edge("human_feedback_node", "super_nova_node")
     _agent.add_conditional_edges(
-        source="digital_human_node",
+        source="super_nova_node",
         path=route_edges,
         path_map={
             "tools": "tools",  # 路由到 tools 节点
